@@ -1,0 +1,26 @@
+# Unreal Engine — dossiers régénérés automatiquement
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+Build/
+
+# Fichiers projet IDE régénérés (Generate Visual Studio project files)
+.vs/
+*.sln
+*.slnx
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.xcodeproj
+*.xcworkspace
+
+# JetBrains Rider
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
