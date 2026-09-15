@@ -1,6 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "PlotBuilderCharacter.h"
+#include "PlayerCharacter.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -10,11 +10,13 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "PlotBuilder.h"
 
-APlotBuilderCharacter::APlotBuilderCharacter()
+DEFINE_LOG_CATEGORY(LogPlayerCharacter);
+
+APlayerCharacter::APlayerCharacter()
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(55.f, 96.0f);
-	
+
 	// Create the first person mesh that will be viewed only by this character's owner
 	FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("First Person Mesh"));
 
@@ -23,7 +25,7 @@ APlotBuilderCharacter::APlotBuilderCharacter()
 	FirstPersonMesh->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
 	FirstPersonMesh->SetCollisionProfileName(FName("NoCollision"));
 
-	// Create the Camera Component	
+	// Create the Camera Component
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("First Person Camera"));
 	FirstPersonCameraComponent->SetupAttachment(FirstPersonMesh, FName("head"));
 	FirstPersonCameraComponent->SetRelativeLocationAndRotation(FVector(-2.8f, 5.89f, 0.0f), FRotator(0.0f, 90.0f, -90.0f));
@@ -44,30 +46,30 @@ APlotBuilderCharacter::APlotBuilderCharacter()
 	GetCharacterMovement()->AirControl = 0.5f;
 }
 
-void APlotBuilderCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{	
+void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
 		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlotBuilderCharacter::DoJumpStart);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlotBuilderCharacter::DoJumpEnd);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::DoJumpStart);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoJumpEnd);
 
 		// Moving
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlotBuilderCharacter::MoveInput);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::MoveInput);
 
 		// Looking/Aiming
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APlotBuilderCharacter::LookInput);
-		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &APlotBuilderCharacter::LookInput);
+		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::LookInput);
+		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::LookInput);
 	}
 	else
 	{
-		UE_LOG(LogPlotBuilder, Error, TEXT("'%s' Failed to find an Enhanced Input Component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
+		UE_LOG(LogPlayerCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input Component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
 	}
 }
 
 
-void APlotBuilderCharacter::MoveInput(const FInputActionValue& Value)
+void APlayerCharacter::MoveInput(const FInputActionValue& Value)
 {
 	// get the Vector2D move axis
 	FVector2D MovementVector = Value.Get<FVector2D>();
@@ -77,7 +79,7 @@ void APlotBuilderCharacter::MoveInput(const FInputActionValue& Value)
 
 }
 
-void APlotBuilderCharacter::LookInput(const FInputActionValue& Value)
+void APlayerCharacter::LookInput(const FInputActionValue& Value)
 {
 	// get the Vector2D look axis
 	FVector2D LookAxisVector = Value.Get<FVector2D>();
@@ -87,7 +89,7 @@ void APlotBuilderCharacter::LookInput(const FInputActionValue& Value)
 
 }
 
-void APlotBuilderCharacter::DoAim(float Yaw, float Pitch)
+void APlayerCharacter::DoAim(float Yaw, float Pitch)
 {
 	if (GetController())
 	{
@@ -97,7 +99,7 @@ void APlotBuilderCharacter::DoAim(float Yaw, float Pitch)
 	}
 }
 
-void APlotBuilderCharacter::DoMove(float Right, float Forward)
+void APlayerCharacter::DoMove(float Right, float Forward)
 {
 	if (GetController())
 	{
@@ -107,13 +109,13 @@ void APlotBuilderCharacter::DoMove(float Right, float Forward)
 	}
 }
 
-void APlotBuilderCharacter::DoJumpStart()
+void APlayerCharacter::DoJumpStart()
 {
 	// pass Jump to the character
 	Jump();
 }
 
-void APlotBuilderCharacter::DoJumpEnd()
+void APlayerCharacter::DoJumpEnd()
 {
 	// pass StopJumping to the character
 	StopJumping();

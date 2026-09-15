@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
-#include "PlotBuilderCharacter.generated.h"
+#include "PlayerCharacter.generated.h"
 
 class UInputComponent;
 class USkeletalMeshComponent;
@@ -13,13 +13,13 @@ class UCameraComponent;
 class UInputAction;
 struct FInputActionValue;
 
-DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
+DECLARE_LOG_CATEGORY_EXTERN(LogPlayerCharacter, Log, All);
 
 /**
  *  A basic first person character
  */
 UCLASS(abstract)
-class APlotBuilderCharacter : public ACharacter
+class APlayerCharacter : public ACharacter
 {
 	GENERATED_BODY()
 
@@ -48,9 +48,9 @@ protected:
 	/** Mouse Look Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* MouseLookAction;
-	
+
 public:
-	APlotBuilderCharacter();
+	APlayerCharacter();
 
 protected:
 
@@ -80,7 +80,7 @@ protected:
 
 	/** Set up input action bindings */
 	virtual void SetupPlayerInputComponent(UInputComponent* InputComponent) override;
-	
+
 
 public:
 
@@ -91,4 +91,3 @@ public:
 	UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
 
 };
-
