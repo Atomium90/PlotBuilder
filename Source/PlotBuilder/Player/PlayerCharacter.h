@@ -11,6 +11,7 @@ class UInputComponent;
 class USkeletalMeshComponent;
 class UCameraComponent;
 class UInputAction;
+class UInteractionComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPlayerCharacter, Log, All);
@@ -31,6 +32,10 @@ class APlayerCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FirstPersonCameraComponent;
 
+	/** Generic interaction trace + focus tracking */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UInteractionComponent* InteractionComponent;
+
 protected:
 
 	/** Jump Input Action */
@@ -48,6 +53,10 @@ protected:
 	/** Mouse Look Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* MouseLookAction;
+
+	/** Interact Input Action */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* InteractAction;
 
 public:
 	APlayerCharacter();
@@ -89,5 +98,8 @@ public:
 
 	/** Returns first person camera component **/
 	UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
+
+	/** Returns InteractionComponent subobject **/
+	UInteractionComponent* GetInteractionComponent() const { return InteractionComponent; }
 
 };
