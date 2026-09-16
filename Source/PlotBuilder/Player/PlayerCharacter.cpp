@@ -9,6 +9,7 @@
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Interaction/InteractionComponent.h"
+#include "Interaction/PhysicsManipulationComponent.h"
 #include "PlotBuilder.h"
 
 DEFINE_LOG_CATEGORY(LogPlayerCharacter);
@@ -48,6 +49,9 @@ APlayerCharacter::APlayerCharacter()
 
 	// Generic interaction trace + focus tracking
 	InteractionComponent = CreateDefaultSubobject<UInteractionComponent>(TEXT("InteractionComponent"));
+
+	// Push / Pull / Launch on the current focus
+	PhysicsManipulationComponent = CreateDefaultSubobject<UPhysicsManipulationComponent>(TEXT("PhysicsManipulationComponent"));
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -66,8 +70,11 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::LookInput);
 		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::LookInput);
 
-		// Interacting
-		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, InteractionComponent, &UInteractionComponent::TryInteract);
+		// Grab: single press, picks up the current focus
+		EnhancedInputComponent->BindAction(GrabAction, ETriggerEvent::Started, PhysicsManipulationComponent, &UPhysicsManipulationComponent::Grab);
+
+		// Push: Launch if something is held, Push on the current focus otherwise
+		EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, PhysicsManipulationComponent, &UPhysicsManipulationComponent::Push);
 	}
 	else
 	{

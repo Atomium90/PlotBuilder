@@ -12,6 +12,7 @@ class USkeletalMeshComponent;
 class UCameraComponent;
 class UInputAction;
 class UInteractionComponent;
+class UPhysicsManipulationComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPlayerCharacter, Log, All);
@@ -36,6 +37,10 @@ class APlayerCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UInteractionComponent* InteractionComponent;
 
+	/** Push / Pull / Launch on the current focus */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UPhysicsManipulationComponent* PhysicsManipulationComponent;
+
 protected:
 
 	/** Jump Input Action */
@@ -54,9 +59,13 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* MouseLookAction;
 
-	/** Interact Input Action */
+	/** Grab Input Action: hold to Pull, release to Launch */
 	UPROPERTY(EditAnywhere, Category ="Input")
-	class UInputAction* InteractAction;
+	class UInputAction* GrabAction;
+
+	/** Push Input Action */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* PushAction;
 
 public:
 	APlayerCharacter();
@@ -101,5 +110,8 @@ public:
 
 	/** Returns InteractionComponent subobject **/
 	UInteractionComponent* GetInteractionComponent() const { return InteractionComponent; }
+
+	/** Returns PhysicsManipulationComponent subobject **/
+	UPhysicsManipulationComponent* GetPhysicsManipulationComponent() const { return PhysicsManipulationComponent; }
 
 };
