@@ -50,8 +50,9 @@ void UPhysicsManipulationComponent::TickComponent(float DeltaTime, ELevelTick Ti
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!HeldComponent)
+	if (!IsValid(HeldComponent))
 	{
+		HeldComponent = nullptr;
 		return;
 	}
 
@@ -84,12 +85,13 @@ void UPhysicsManipulationComponent::Grab()
 
 void UPhysicsManipulationComponent::Push()
 {
-	if (HeldComponent)
+	if (IsValid(HeldComponent))
 	{
 		LaunchHeld();
 	}
 	else
 	{
+		HeldComponent = nullptr;
 		PushFocus();
 	}
 }

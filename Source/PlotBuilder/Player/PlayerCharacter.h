@@ -13,6 +13,7 @@ class UCameraComponent;
 class UInputAction;
 class UInteractionComponent;
 class UPhysicsManipulationComponent;
+class UHotbarComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPlayerCharacter, Log, All);
@@ -41,6 +42,10 @@ class APlayerCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UPhysicsManipulationComponent* PhysicsManipulationComponent;
 
+	/** Minimal hotbar: pickup + reuse for ABuildablePiece and APhysicsProp */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UHotbarComponent* HotbarComponent;
+
 protected:
 
 	/** Jump Input Action */
@@ -66,6 +71,14 @@ protected:
 	/** Push Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* PushAction;
+
+	/** Interact Input Action: generic interact, also picks up storable objects into the hotbar */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* InteractAction;
+
+	/** Place Input Action: places the last hotbar item */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* PlaceAction;
 
 public:
 	APlayerCharacter();
@@ -113,5 +126,8 @@ public:
 
 	/** Returns PhysicsManipulationComponent subobject **/
 	UPhysicsManipulationComponent* GetPhysicsManipulationComponent() const { return PhysicsManipulationComponent; }
+
+	/** Returns HotbarComponent subobject **/
+	UHotbarComponent* GetHotbarComponent() const { return HotbarComponent; }
 
 };

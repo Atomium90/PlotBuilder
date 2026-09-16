@@ -1,20 +1,25 @@
-#include "PhysicsProp.h"
+#include "BuildablePiece.h"
 #include "Components/StaticMeshComponent.h"
 #include "Interaction/HotbarComponent.h"
 
-APhysicsProp::APhysicsProp()
+ABuildablePiece::ABuildablePiece()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	SetRootComponent(MeshComponent);
 
-	MeshComponent->SetSimulatePhysics(true);
 	MeshComponent->SetCollisionProfileName(FName("BlockAllDynamic"));
+	MeshComponent->SetMobility(EComponentMobility::Movable);
 }
 
-void APhysicsProp::Interact_Implementation(AActor* InteractingActor)
+void ABuildablePiece::Interact_Implementation(AActor* InteractingActor)
 {
+	if (State != EBuildablePieceState::Stock)
+	{
+		return;
+	}
+
 	if (UHotbarComponent* Hotbar = InteractingActor ? InteractingActor->FindComponentByClass<UHotbarComponent>() : nullptr)
 	{
 		Hotbar->Store(this);

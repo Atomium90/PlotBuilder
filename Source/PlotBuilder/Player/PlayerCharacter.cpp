@@ -10,6 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Interaction/InteractionComponent.h"
 #include "Interaction/PhysicsManipulationComponent.h"
+#include "Interaction/HotbarComponent.h"
 #include "PlotBuilder.h"
 
 DEFINE_LOG_CATEGORY(LogPlayerCharacter);
@@ -52,6 +53,9 @@ APlayerCharacter::APlayerCharacter()
 
 	// Push / Pull / Launch on the current focus
 	PhysicsManipulationComponent = CreateDefaultSubobject<UPhysicsManipulationComponent>(TEXT("PhysicsManipulationComponent"));
+
+	// Minimal hotbar: pickup + reuse for ABuildablePiece and APhysicsProp
+	HotbarComponent = CreateDefaultSubobject<UHotbarComponent>(TEXT("HotbarComponent"));
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -75,6 +79,12 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Push: Launch if something is held, Push on the current focus otherwise
 		EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, PhysicsManipulationComponent, &UPhysicsManipulationComponent::Push);
+
+		// Interact: generic Interact() on the current focus (also how storable objects get picked up)
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, InteractionComponent, &UInteractionComponent::TryInteract);
+
+		// Place: spawns the last hotbar item
+		EnhancedInputComponent->BindAction(PlaceAction, ETriggerEvent::Started, HotbarComponent, &UHotbarComponent::TryPlace);
 	}
 	else
 	{
