@@ -59,7 +59,8 @@ void UPhysicsManipulationComponent::TickComponent(float DeltaTime, ELevelTick Ti
 	const FVector ViewLocation = GetViewLocationAndForward(ViewForward);
 	const FVector HoldPoint = ViewLocation + ViewForward * HoldDistance;
 
-	const FVector ToTarget = HoldPoint - HeldComponent->GetComponentLocation();
+	const FVector CenterOfMass = HeldComponent->GetCenterOfMass();
+	const FVector ToTarget = HoldPoint - CenterOfMass;
 	const FVector Velocity = HeldComponent->GetPhysicsLinearVelocity();
 	const FVector Force = ToTarget * PullStrength - Velocity * PullDamping;
 
@@ -67,7 +68,7 @@ void UPhysicsManipulationComponent::TickComponent(float DeltaTime, ELevelTick Ti
 
 	if (bShowDebug)
 	{
-		DrawDebugDirectionalArrow(GetWorld(), HeldComponent->GetComponentLocation(), HeldComponent->GetComponentLocation() + Force.GetClampedToMaxSize(200.f), 20.f, FColor::Cyan, false, 0.f, 0, 2.f);
+		DrawDebugDirectionalArrow(GetWorld(), CenterOfMass, CenterOfMass + Force.GetClampedToMaxSize(200.f), 20.f, FColor::Cyan, false, 0.f, 0, 2.f);
 	}
 }
 
@@ -103,7 +104,8 @@ void UPhysicsManipulationComponent::LaunchHeld()
 
 	if (bShowDebug)
 	{
-		DrawDebugDirectionalArrow(GetWorld(), HeldComponent->GetComponentLocation(), HeldComponent->GetComponentLocation() + Impulse.GetClampedToMaxSize(200.f), 20.f, FColor::Orange, false, 1.f, 0, 2.f);
+		const FVector CenterOfMass = HeldComponent->GetCenterOfMass();
+		DrawDebugDirectionalArrow(GetWorld(), CenterOfMass, CenterOfMass + Impulse.GetClampedToMaxSize(200.f), 20.f, FColor::Orange, false, 1.f, 0, 2.f);
 	}
 
 	HeldComponent = nullptr;
@@ -131,6 +133,7 @@ void UPhysicsManipulationComponent::PushFocus()
 
 	if (bShowDebug)
 	{
-		DrawDebugDirectionalArrow(GetWorld(), Target->GetComponentLocation(), Target->GetComponentLocation() + Impulse.GetClampedToMaxSize(200.f), 20.f, FColor::Red, false, 1.f, 0, 2.f);
+		const FVector CenterOfMass = Target->GetCenterOfMass();
+		DrawDebugDirectionalArrow(GetWorld(), CenterOfMass, CenterOfMass + Impulse.GetClampedToMaxSize(200.f), 20.f, FColor::Red, false, 1.f, 0, 2.f);
 	}
 }
