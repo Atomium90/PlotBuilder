@@ -14,7 +14,7 @@ class UStaticMeshComponent;
  *  goes through UPhysicsManipulationComponent directly on the mesh's physics body, not through
  *  Interact; Interact is only used to pick the prop up into a UHotbarComponent.
  */
-UCLASS()
+UCLASS(abstract)
 class APhysicsProp : public AActor, public IInteractable
 {
 	GENERATED_BODY()

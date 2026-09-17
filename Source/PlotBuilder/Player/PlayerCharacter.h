@@ -80,6 +80,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* PlaceAction;
 
+	/** Purchase Input Actions: index in this array = row index purchased from the hotbar's ShopCatalog */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	TArray<UInputAction*> PurchaseActions;
+
 public:
 	APlayerCharacter();
 

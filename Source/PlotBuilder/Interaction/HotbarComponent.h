@@ -5,6 +5,19 @@
 #include "Engine/DataTable.h"
 #include "HotbarComponent.generated.h"
 
+/** One stored slot: class to respawn, plus the scale it had when picked up (SpawnActor only takes location/rotation). */
+USTRUCT()
+struct FHotbarEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TSubclassOf<AActor> ActorClass;
+
+	UPROPERTY()
+	FVector Scale = FVector::OneVector;
+};
+
 /**
  *  Minimal hotbar: a fixed number of slots holding actor classes, nothing else. Not a real
  *  inventory (no UI, no stacking, no item data) - just enough to demo acquisition + reuse for
@@ -61,6 +74,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	bool PurchaseRow(FName RowName);
 
+	/** Same as PurchaseRow, but resolves the row by its position in ShopCatalog (row order = slot index). */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	void PurchaseByIndex(int32 SlotIndex);
+
 	/**
 	 *  Pops the most recently stored class and spawns it, grid-snapped, in front of the view.
 	 *  No live preview, no rotation: instant placement. Works for any stored class - a spawned
@@ -71,10 +88,10 @@ public:
 	void TryPlace();
 
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
-	int32 GetStoredCount() const { return StoredClasses.Num(); }
+	int32 GetStoredCount() const { return StoredEntries.Num(); }
 
 private:
 
 	UPROPERTY()
-	TArray<TSubclassOf<AActor>> StoredClasses;
+	TArray<FHotbarEntry> StoredEntries;
 };

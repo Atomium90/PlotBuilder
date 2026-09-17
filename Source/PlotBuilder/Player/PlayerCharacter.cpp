@@ -85,6 +85,15 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Place: spawns the last hotbar item
 		EnhancedInputComponent->BindAction(PlaceAction, ETriggerEvent::Started, HotbarComponent, &UHotbarComponent::TryPlace);
+
+		// Purchase: each action in the array buys the ShopCatalog row at its own index
+		for (int32 i = 0; i < PurchaseActions.Num(); ++i)
+		{
+			if (PurchaseActions[i])
+			{
+				EnhancedInputComponent->BindAction(PurchaseActions[i], ETriggerEvent::Started, HotbarComponent, &UHotbarComponent::PurchaseByIndex, i);
+			}
+		}
 	}
 	else
 	{

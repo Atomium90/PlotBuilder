@@ -22,7 +22,7 @@ enum class EBuildablePieceState : uint8
  *  spawned, not authored per-Blueprint, so it stays in sync with the catalog's single source of
  *  truth.
  */
-UCLASS()
+UCLASS(abstract)
 class ABuildablePiece : public AActor, public IInteractable
 {
 	GENERATED_BODY()
