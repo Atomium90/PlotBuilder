@@ -6,7 +6,7 @@
 #include "HotbarComponent.generated.h"
 
 /** One stored slot: class to respawn, plus the scale it had when picked up (SpawnActor only takes location/rotation). */
-USTRUCT()
+USTRUCT(BlueprintType)
 struct FHotbarEntry
 {
 	GENERATED_BODY()
@@ -79,10 +79,9 @@ public:
 	void PurchaseByIndex(int32 SlotIndex);
 
 	/**
-	 *  Pops the most recently stored class and spawns it, grid-snapped, in front of the view.
-	 *  No live preview, no rotation: instant placement. Works for any stored class - a spawned
-	 *  APhysicsProp keeps whatever physics setup its own constructor gives it (simulated), an
-	 *  ABuildablePiece stays fixed (it never simulates physics).
+	 *  Spawns the selected entry, grid-snapped, in front of the view. Instant placement, no
+	 *  preview: this is the APhysicsProp path. ABuildablePiece entries are refused here - they
+	 *  go through UBuildModeComponent's preview + confirm flow instead.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	void TryPlace();
@@ -90,8 +89,46 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	int32 GetStoredCount() const { return StoredEntries.Num(); }
 
+	/** Copies the currently selected entry into OutEntry. Returns false if there is no selection. */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	bool GetSelectedEntry(FHotbarEntry& OutEntry) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	int32 GetSelectedIndex() const { return SelectedIndex; }
+
+	/**
+	 *  Moves the selection by Direction slots (+1/-1), wrapping around. When bBuildablesOnly,
+	 *  entries whose class isn't an ABuildablePiece are skipped - used while Build Mode is active
+	 *  so cycling never lands on a prop the ghost preview couldn't show anyway.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	void CycleSelection(int32 Direction, bool bBuildablesOnly = false);
+
+	/**
+	 *  If the current selection doesn't already qualify (see CycleSelection), snaps it to the
+	 *  first qualifying entry found. Leaves the selection untouched otherwise - unlike
+	 *  CycleSelection, this never moves an already-qualifying selection. Returns whether a
+	 *  qualifying entry ended up selected.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	bool EnsureValidSelection(bool bBuildablesOnly);
+
+	/**
+	 *  Removes and returns the selected entry. When another entry of the same class shifts into
+	 *  its slot (the common case after buying/picking up several of the same piece in a row), it
+	 *  stays selected so Build Mode can chain placements without a full rescan; otherwise the
+	 *  first remaining entry of the same class is selected, if any.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	FHotbarEntry ConsumeSelected();
+
 private:
+
+	static bool EntryQualifies(const FHotbarEntry& Entry, bool bBuildablesOnly);
 
 	UPROPERTY()
 	TArray<FHotbarEntry> StoredEntries;
+
+	UPROPERTY()
+	int32 SelectedIndex = INDEX_NONE;
 };

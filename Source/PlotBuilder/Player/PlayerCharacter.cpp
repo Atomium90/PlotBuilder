@@ -11,6 +11,7 @@
 #include "Interaction/InteractionComponent.h"
 #include "Interaction/PhysicsManipulationComponent.h"
 #include "Interaction/HotbarComponent.h"
+#include "Interaction/BuildModeComponent.h"
 #include "PlotBuilder.h"
 
 DEFINE_LOG_CATEGORY(LogPlayerCharacter);
@@ -56,6 +57,9 @@ APlayerCharacter::APlayerCharacter()
 
 	// Minimal hotbar: pickup + reuse for ABuildablePiece and APhysicsProp
 	HotbarComponent = CreateDefaultSubobject<UHotbarComponent>(TEXT("HotbarComponent"));
+
+	// Preview + confirm placement flow for ABuildablePiece
+	BuildModeComponent = CreateDefaultSubobject<UBuildModeComponent>(TEXT("BuildModeComponent"));
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -83,8 +87,17 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		// Interact: generic Interact() on the current focus (also how storable objects get picked up)
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, InteractionComponent, &UInteractionComponent::TryInteract);
 
-		// Place: spawns the last hotbar item
-		EnhancedInputComponent->BindAction(PlaceAction, ETriggerEvent::Started, HotbarComponent, &UHotbarComponent::TryPlace);
+		// Place: confirms the Build Mode preview if active, otherwise instantly places a Prop
+		EnhancedInputComponent->BindAction(PlaceAction, ETriggerEvent::Started, this, &APlayerCharacter::PlaceInput);
+
+		// Toggle Build Mode: dedicated preview + rotate + confirm flow for ABuildablePiece
+		EnhancedInputComponent->BindAction(ToggleBuildModeAction, ETriggerEvent::Started, BuildModeComponent, &UBuildModeComponent::ToggleBuildMode);
+
+		// Rotate the Build Mode preview by one step (no-op outside Build Mode)
+		EnhancedInputComponent->BindAction(RotatePreviewAction, ETriggerEvent::Started, this, &APlayerCharacter::RotatePreviewInput);
+
+		// Cycle which hotbar entry is selected/previewed
+		EnhancedInputComponent->BindAction(CycleSelectionAction, ETriggerEvent::Started, this, &APlayerCharacter::CycleSelectionInput);
 
 		// Purchase: each action in the array buys the ShopCatalog row at its own index
 		for (int32 i = 0; i < PurchaseActions.Num(); ++i)
@@ -152,4 +165,38 @@ void APlayerCharacter::DoJumpEnd()
 {
 	// pass StopJumping to the character
 	StopJumping();
+}
+
+void APlayerCharacter::PlaceInput()
+{
+	if (BuildModeComponent && BuildModeComponent->IsBuildModeActive())
+	{
+		BuildModeComponent->ConfirmPlacement();
+	}
+	else if (HotbarComponent)
+	{
+		HotbarComponent->TryPlace();
+	}
+}
+
+void APlayerCharacter::RotatePreviewInput(const FInputActionValue& Value)
+{
+	const float Raw = Value.Get<float>();
+	const int32 Direction = (Raw > 0.f) - (Raw < 0.f);
+
+	if (Direction != 0 && BuildModeComponent)
+	{
+		BuildModeComponent->RotatePreview(Direction);
+	}
+}
+
+void APlayerCharacter::CycleSelectionInput(const FInputActionValue& Value)
+{
+	const float Raw = Value.Get<float>();
+	const int32 Direction = (Raw > 0.f) - (Raw < 0.f);
+
+	if (Direction != 0 && HotbarComponent)
+	{
+		HotbarComponent->CycleSelection(Direction, BuildModeComponent && BuildModeComponent->IsBuildModeActive());
+	}
 }

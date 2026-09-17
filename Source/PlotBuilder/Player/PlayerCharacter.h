@@ -14,6 +14,7 @@ class UInputAction;
 class UInteractionComponent;
 class UPhysicsManipulationComponent;
 class UHotbarComponent;
+class UBuildModeComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPlayerCharacter, Log, All);
@@ -46,6 +47,10 @@ class APlayerCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UHotbarComponent* HotbarComponent;
 
+	/** Preview + confirm placement flow for ABuildablePiece, separate from the instant Prop placement */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UBuildModeComponent* BuildModeComponent;
+
 protected:
 
 	/** Jump Input Action */
@@ -76,9 +81,21 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* InteractAction;
 
-	/** Place Input Action: places the last hotbar item */
+	/** Place Input Action: places the selected hotbar item (Prop instantly, or confirms the Build Mode preview) */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* PlaceAction;
+
+	/** Toggle Build Mode Input Action */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* ToggleBuildModeAction;
+
+	/** Rotate Preview Input Action (Axis1D: +1/-1 per step, e.g. two keys with a Negate modifier) */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* RotatePreviewAction;
+
+	/** Cycle Hotbar Selection Input Action (Axis1D: +1/-1 per step, e.g. mouse wheel) */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* CycleSelectionAction;
 
 	/** Purchase Input Actions: index in this array = row index purchased from the hotbar's ShopCatalog */
 	UPROPERTY(EditAnywhere, Category ="Input")
@@ -111,6 +128,15 @@ protected:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
+	/** Place Input Action handler: confirms the Build Mode preview if active, otherwise instantly places a Prop */
+	void PlaceInput();
+
+	/** Rotate Preview Input Action handler */
+	void RotatePreviewInput(const FInputActionValue& Value);
+
+	/** Cycle Hotbar Selection Input Action handler */
+	void CycleSelectionInput(const FInputActionValue& Value);
+
 protected:
 
 	/** Set up input action bindings */
@@ -133,5 +159,8 @@ public:
 
 	/** Returns HotbarComponent subobject **/
 	UHotbarComponent* GetHotbarComponent() const { return HotbarComponent; }
+
+	/** Returns BuildModeComponent subobject **/
+	UBuildModeComponent* GetBuildModeComponent() const { return BuildModeComponent; }
 
 };
