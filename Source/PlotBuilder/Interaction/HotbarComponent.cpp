@@ -1,4 +1,5 @@
 #include "HotbarComponent.h"
+#include "ShopItemRow.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 #include "Engine/World.h"
@@ -49,6 +50,24 @@ TSubclassOf<AActor> UHotbarComponent::PopLast()
 	const TSubclassOf<AActor> Result = StoredClasses.Last();
 	StoredClasses.RemoveAt(StoredClasses.Num() - 1);
 	return Result;
+}
+
+bool UHotbarComponent::PurchaseRow(FName RowName)
+{
+	if (!ShopCatalog || StoredClasses.Num() >= MaxSlots)
+	{
+		return false;
+	}
+
+	const FShopItemRow* Row = ShopCatalog->FindRow<FShopItemRow>(RowName, TEXT("PurchaseRow"));
+
+	if (!Row || !Row->ActorClass)
+	{
+		return false;
+	}
+
+	StoredClasses.Add(Row->ActorClass);
+	return true;
 }
 
 void UHotbarComponent::TryPlace()

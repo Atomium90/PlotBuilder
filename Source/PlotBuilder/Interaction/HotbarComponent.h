@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Engine/DataTable.h"
 #include "HotbarComponent.generated.h"
 
 /**
@@ -34,6 +35,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Hotbar|Debug")
 	bool bShowDebug = true;
 
+	/** Catalog rows are FShopItemRow (see ShopItemRow.h). Assigned in the Blueprint. */
+	UPROPERTY(EditAnywhere, Category = "Hotbar")
+	TObjectPtr<UDataTable> ShopCatalog;
+
 protected:
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
@@ -47,6 +52,14 @@ public:
 	/** Removes and returns the most recently stored class, or nullptr if the hotbar is empty. */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	TSubclassOf<AActor> PopLast();
+
+	/**
+	 *  Looks up RowName in ShopCatalog and adds its ActorClass to the hotbar - no world actor
+	 *  involved, this is "buy from the catalog" rather than "pick up". No cost/currency check
+	 *  yet, Cost on the row is informational until there's an economy system.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	bool PurchaseRow(FName RowName);
 
 	/**
 	 *  Pops the most recently stored class and spawns it, grid-snapped, in front of the view.
