@@ -30,6 +30,16 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Hotbar")
 	float GridSize = 50.f;
 
+	/** Lists stored slots on screen every frame. Stand-in until there's a real inventory UI. */
+	UPROPERTY(EditAnywhere, Category = "Hotbar|Debug")
+	bool bShowDebug = true;
+
+protected:
+
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+public:
+
 	/** Destroys ActorToStore and adds its class to the hotbar. Fails if the hotbar is full. */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	bool Store(AActor* ActorToStore);

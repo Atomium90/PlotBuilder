@@ -2,10 +2,29 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 #include "Engine/World.h"
+#include "Engine/Engine.h"
 
 UHotbarComponent::UHotbarComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+}
+
+void UHotbarComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!bShowDebug || !GEngine)
+	{
+		return;
+	}
+
+	GEngine->AddOnScreenDebugMessage(400, 0.f, FColor::Yellow, FString::Printf(TEXT("Hotbar: %d/%d"), StoredClasses.Num(), MaxSlots));
+
+	for (int32 i = 0; i < StoredClasses.Num(); ++i)
+	{
+		const FString ClassName = StoredClasses[i] ? StoredClasses[i]->GetName() : TEXT("None");
+		GEngine->AddOnScreenDebugMessage(401 + i, 0.f, FColor::Yellow, FString::Printf(TEXT("  [%d] %s"), i, *ClassName));
+	}
 }
 
 bool UHotbarComponent::Store(AActor* ActorToStore)
