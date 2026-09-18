@@ -61,14 +61,14 @@ void UInteractionComponent::UpdateFocus()
 		}
 	}
 
-	if (bShowDebug)
+	if (bShowDebugTrace)
 	{
 		DrawDebugLine(GetWorld(), ViewLocation, bHit ? Hit.Location : TraceEnd, CurrentFocus ? FColor::Green : FColor::Red, false, 0.f, 0, 1.f);
+	}
 
-		if (CurrentFocus && GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::Green, FString::Printf(TEXT("Focus: %s"), *CurrentFocus->GetActorNameOrLabel()));
-		}
+	if (bShowDebugFocusName && CurrentFocus && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::Green, FString::Printf(TEXT("Focus: %s"), *CurrentFocus->GetActorNameOrLabel()));
 	}
 }
 

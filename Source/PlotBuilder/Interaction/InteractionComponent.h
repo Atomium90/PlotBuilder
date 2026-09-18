@@ -21,9 +21,13 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Interaction")
 	float TraceDistance = 300.f;
 
-	/** Draw the trace line and the focused actor's name on screen. */
+	/** Draw the trace line every tick (green when focused, red otherwise). */
 	UPROPERTY(EditAnywhere, Category = "Interaction|Debug")
-	bool bShowDebug = true;
+	bool bShowDebugTrace = false;
+
+	/** Show the focused actor's name on screen. */
+	UPROPERTY(EditAnywhere, Category = "Interaction|Debug")
+	bool bShowDebugFocusName = false;
 
 protected:
 

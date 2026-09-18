@@ -46,7 +46,7 @@ public:
 
 	/** Lists stored slots on screen every frame. Stand-in until there's a real inventory UI. */
 	UPROPERTY(EditAnywhere, Category = "Hotbar|Debug")
-	bool bShowDebug = true;
+	bool bShowDebug = false;
 
 	/** Catalog rows are FShopItemRow (see ShopItemRow.h). Assigned in the Blueprint. */
 	UPROPERTY(EditAnywhere, Category = "Hotbar")

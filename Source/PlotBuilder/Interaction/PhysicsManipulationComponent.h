@@ -45,7 +45,7 @@ public:
 
 	/** Draw the force vector currently applied to the held/pushed object. */
 	UPROPERTY(EditAnywhere, Category = "Physics Manipulation|Debug")
-	bool bShowDebug = true;
+	bool bShowDebug = false;
 
 protected:
 

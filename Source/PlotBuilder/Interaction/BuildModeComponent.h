@@ -39,7 +39,7 @@ public:
 	float RotationStepDegrees = 45.f;
 
 	UPROPERTY(EditAnywhere, Category = "Build Mode|Debug")
-	bool bShowDebug = true;
+	bool bShowDebug = false;
 
 protected:
 
