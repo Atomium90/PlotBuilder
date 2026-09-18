@@ -18,9 +18,9 @@ enum class EBuildablePieceState : uint8
 /**
  *  Construction piece (wall, floor, roof, door, window...). Never simulates physics, unlike
  *  APhysicsProp: it's acquired via Interact into a UHotbarComponent, then placed kinematically
- *  (fixed transform, no Push/Pull/Launch). Cost is set from the shop catalog (FShopItemRow) when
- *  spawned, not authored per-Blueprint, so it stays in sync with the catalog's single source of
- *  truth.
+ *  (fixed transform, no Push/Pull/Launch). Cost is authored per-Blueprint for now, independent of
+ *  the shop catalog's own FShopItemRow::Cost - the two aren't wired together yet (see
+ *  UHotbarComponent::ShopCatalog), since there's no economy system to enforce either value.
  */
 UCLASS(abstract)
 class ABuildablePiece : public AActor, public IInteractable

@@ -60,6 +60,9 @@ void UPhysicsManipulationComponent::TickComponent(float DeltaTime, ELevelTick Ti
 	const FVector ViewLocation = GetViewLocationAndForward(ViewForward);
 	const FVector HoldPoint = ViewLocation + ViewForward * HoldDistance;
 
+	// Spring targets the center of mass, not GetComponentLocation() - an off-center mesh pivot
+	// would otherwise spin continuously, since AddForce applies at the center of mass while the
+	// pivot-to-COM offset rotates with the object, feeding rotational energy back into the spring.
 	const FVector CenterOfMass = HeldComponent->GetCenterOfMass();
 	const FVector ToTarget = HoldPoint - CenterOfMass;
 	const FVector Velocity = HeldComponent->GetPhysicsLinearVelocity();

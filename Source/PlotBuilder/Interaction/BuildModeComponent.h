@@ -12,10 +12,12 @@ class APlot;
 /**
  *  Dedicated placement flow for ABuildablePiece, separate from the instant placement
  *  UHotbarComponent::TryPlace still does for APhysicsProp. While active, ticks a single reusable
- *  ghost actor (translucent preview) that tracks the view at a fixed distance, grid-snapped, and
- *  can be rotated in fixed steps before being confirmed. The ghost's mesh/material are swapped in
- *  place when the hotbar selection changes - never respawned - so switching previewed items costs
- *  a mesh/material assignment, not an actor spawn.
+ *  ghost actor (translucent preview, mesh/material swapped in place, never respawned) whose
+ *  transform is decided by one trace per tick: snaps flush against a placed ABuildablePiece, rests
+ *  flush on any other solid surface, or falls back to a fixed distance in front of the view.
+ *  Manual rotation (fixed steps) stacks on top of whatever the trace implies. One box overlap per
+ *  tick - plus an optional APlot's bounds - decides whether the current transform is blocked (red)
+ *  or free (green) to confirm.
  */
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class UBuildModeComponent : public UActorComponent

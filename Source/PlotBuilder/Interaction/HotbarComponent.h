@@ -19,10 +19,11 @@ struct FHotbarEntry
 };
 
 /**
- *  Minimal hotbar: a fixed number of slots holding actor classes, nothing else. Not a real
- *  inventory (no UI, no stacking, no item data) - just enough to demo acquisition + reuse for
- *  both ABuildablePiece and APhysicsProp. Storing destroys the world actor; popping hands back
- *  the class to spawn, the caller decides how (physics prop vs kinematic placement).
+ *  Minimal hotbar: a fixed number of slots holding actor classes (+ the scale each was picked up
+ *  with), plus a single cycle-able SelectedIndex shared by both APhysicsProp's instant placement
+ *  (TryPlace) and UBuildModeComponent's preview/confirm flow. Not a real inventory (no UI, no
+ *  stacking, no item data) - just enough to demo acquisition + reuse. Storing destroys the world
+ *  actor; the caller decides how a class comes back (physics prop vs kinematic placement).
  */
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class UHotbarComponent : public UActorComponent
