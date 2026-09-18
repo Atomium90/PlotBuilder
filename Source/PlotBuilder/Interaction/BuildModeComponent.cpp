@@ -1,6 +1,7 @@
 #include "BuildModeComponent.h"
 #include "HotbarComponent.h"
 #include "Buildables/BuildablePiece.h"
+#include "Environment/Plot.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
@@ -9,6 +10,7 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "CollisionShape.h"
+#include "Kismet/GameplayStatics.h"
 
 UBuildModeComponent::UBuildModeComponent()
 {
@@ -20,6 +22,9 @@ void UBuildModeComponent::BeginPlay()
 	Super::BeginPlay();
 
 	HotbarComponent = GetOwner() ? GetOwner()->FindComponentByClass<UHotbarComponent>() : nullptr;
+
+	// Single-plot demo for now - no Plot in the level just means placement isn't gated at all.
+	CachedPlot = Cast<APlot>(UGameplayStatics::GetActorOfClass(GetWorld(), APlot::StaticClass()));
 }
 
 void UBuildModeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -129,7 +134,10 @@ void UBuildModeComponent::ConfirmPlacement()
 	{
 		if (bShowDebug && GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(501, 2.f, FColor::Red, TEXT("Can't place here - blocked."));
+			const bool bOutsidePlot = CachedPlot && !CachedPlot->IsLocationInside(PreviewActor->GetActorLocation());
+			GEngine->AddOnScreenDebugMessage(501, 2.f, FColor::Red, bOutsidePlot
+				? TEXT("Can't place here - outside the plot.")
+				: TEXT("Can't place here - blocked."));
 		}
 		return;
 	}
@@ -373,6 +381,11 @@ bool UBuildModeComponent::IsCandidateBlocked(const FVector& Location, const FRot
 	const FBoxSphereBounds LocalBounds = Mesh->GetBounds();
 	const FVector Scale = PreviewActor->GetActorScale3D();
 	const FVector BoxCenter = Location + Rotation.RotateVector(LocalBounds.Origin * Scale);
+
+	if (CachedPlot && !CachedPlot->IsLocationInside(BoxCenter))
+	{
+		return true;
+	}
 
 	// Flush-adjacent pieces touch at zero distance - float error in the snap math (or just the
 	// physics engine treating an exact touch as a hit) would otherwise flag every neighbour as

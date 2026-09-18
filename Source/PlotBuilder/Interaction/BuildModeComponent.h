@@ -7,6 +7,7 @@
 class UHotbarComponent;
 class UMaterialInterface;
 class AStaticMeshActor;
+class APlot;
 
 /**
  *  Dedicated placement flow for ABuildablePiece, separate from the instant placement
@@ -86,6 +87,7 @@ private:
 	 *  transform, against world statics/dynamics/pawns - covers other Buildables, Props, the
 	 *  environment and the player capsule with a single cheap query. Ignores the ghost itself and
 	 *  SnapTarget (the piece being snapped onto, if any) so a flush fit isn't flagged as blocked.
+	 *  Also blocked if a Plot exists in the level and the candidate falls outside it.
 	 */
 	bool IsCandidateBlocked(const FVector& Location, const FRotator& Rotation, AActor* SnapTarget) const;
 
@@ -97,6 +99,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UHotbarComponent> HotbarComponent;
+
+	/** The level's plot, if any. Resolved once in BeginPlay - single-plot demo for now, see APlot. */
+	UPROPERTY()
+	TObjectPtr<APlot> CachedPlot;
 
 	UPROPERTY()
 	TObjectPtr<AStaticMeshActor> PreviewActor;
