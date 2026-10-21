@@ -1,6 +1,7 @@
 #include "BuildablePiece.h"
 #include "Components/StaticMeshComponent.h"
 #include "Interaction/HotbarComponent.h"
+#include "Environment/StructuralSupportComponent.h"
 
 ABuildablePiece::ABuildablePiece()
 {
@@ -15,13 +16,58 @@ ABuildablePiece::ABuildablePiece()
 
 void ABuildablePiece::Interact_Implementation(AActor* InteractingActor)
 {
-	if (State != EBuildablePieceState::Stock)
+	if (State == EBuildablePieceState::Stock)
+	{
+		if (UHotbarComponent* Hotbar = InteractingActor ? InteractingActor->FindComponentByClass<UHotbarComponent>() : nullptr)
+		{
+			Hotbar->Store(this);
+		}
+
+		return;
+	}
+
+	if (State == EBuildablePieceState::Placed)
+	{
+		Demolish();
+	}
+}
+
+void ABuildablePiece::Demolish()
+{
+	if (StructuralComponent)
+	{
+		StructuralComponent->UnregisterPiece(this);
+	}
+
+	Destroy();
+}
+
+void ABuildablePiece::BeginCollapse()
+{
+	if (State == EBuildablePieceState::Collapsing)
 	{
 		return;
 	}
 
-	if (UHotbarComponent* Hotbar = InteractingActor ? InteractingActor->FindComponentByClass<UHotbarComponent>() : nullptr)
+	State = EBuildablePieceState::Collapsing;
+
+	if (MeshComponent)
 	{
-		Hotbar->Store(this);
+		MeshComponent->SetSimulatePhysics(true);
+	}
+
+	SetLifeSpan(CollapseLifeSpan);
+
+	if (StructuralComponent)
+	{
+		StructuralComponent->UnregisterPiece(this);
+	}
+}
+
+void ABuildablePiece::UpdateStabilityDebugColor()
+{
+	if (MeshComponent)
+	{
+		MeshComponent->SetCustomPrimitiveDataFloat(0, Stability);
 	}
 }

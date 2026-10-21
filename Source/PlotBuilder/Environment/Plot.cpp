@@ -2,6 +2,7 @@
 #include "Components/BoxComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "StructuralSupportComponent.h"
 
 APlot::APlot()
 {
@@ -12,6 +13,8 @@ APlot::APlot()
 
 	BoundsVolume->SetBoxExtent(FVector(500.f, 500.f, 50.f));
 	BoundsVolume->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	StructuralSupport = CreateDefaultSubobject<UStructuralSupportComponent>(TEXT("StructuralSupport"));
 }
 
 bool APlot::IsLocationInside(const FVector& WorldLocation) const

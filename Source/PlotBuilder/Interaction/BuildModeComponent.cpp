@@ -2,6 +2,7 @@
 #include "HotbarComponent.h"
 #include "Buildables/BuildablePiece.h"
 #include "Environment/Plot.h"
+#include "Environment/StructuralSupportComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
@@ -153,6 +154,16 @@ void UBuildModeComponent::ConfirmPlacement()
 	if (AActor* Spawned = GetWorld()->SpawnActor<AActor>(ConsumedEntry.ActorClass, SpawnLocation, SpawnRotation, SpawnParams))
 	{
 		Spawned->SetActorScale3D(ConsumedEntry.Scale);
+
+		if (ABuildablePiece* NewPiece = Cast<ABuildablePiece>(Spawned))
+		{
+			NewPiece->State = EBuildablePieceState::Placed;
+
+			if (CachedPlot && CachedPlot->GetStructuralSupport())
+			{
+				CachedPlot->GetStructuralSupport()->RegisterPiece(NewPiece);
+			}
+		}
 	}
 
 	// The hotbar selection has already advanced (same-class continuation, or the next available
@@ -383,6 +394,17 @@ bool UBuildModeComponent::IsCandidateBlocked(const FVector& Location, const FRot
 	const FVector BoxCenter = Location + Rotation.RotateVector(LocalBounds.Origin * Scale);
 
 	if (CachedPlot && !CachedPlot->IsLocationInside(BoxCenter))
+	{
+		return true;
+	}
+
+	// Stability gate: a piece with no sockets declared yet (still the greybox default, or simply
+	// not meant to carry structural weight) skips this check entirely rather than being blocked by
+	// a candidate that can never be "stable".
+	const ABuildablePiece* SelectedCDO = LastPreviewedClass ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
+
+	if (SelectedCDO && !SelectedCDO->GetSockets().IsEmpty() && CachedPlot && CachedPlot->GetStructuralSupport()
+		&& !CachedPlot->GetStructuralSupport()->WouldBeStable(SelectedCDO->GetSockets(), Location, Rotation))
 	{
 		return true;
 	}

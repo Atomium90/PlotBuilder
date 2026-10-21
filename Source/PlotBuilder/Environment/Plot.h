@@ -5,6 +5,7 @@
 #include "Plot.generated.h"
 
 class UBoxComponent;
+class UStructuralSupportComponent;
 
 /**
  *  Minimal buildable area: a resizable box volume other systems can query with IsLocationInside.
@@ -22,6 +23,7 @@ public:
 	APlot();
 
 	UBoxComponent* GetBoundsVolume() const { return BoundsVolume; }
+	UStructuralSupportComponent* GetStructuralSupport() const { return StructuralSupport; }
 
 	/** Whether WorldLocation falls within this plot's bounds (axis-aligned box test, cheap). */
 	UFUNCTION(BlueprintCallable, Category = "Plot")
@@ -41,4 +43,7 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UBoxComponent> BoundsVolume;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UStructuralSupportComponent> StructuralSupport;
 };
