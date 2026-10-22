@@ -93,6 +93,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* RotatePreviewAction;
 
+	/** Change Build Level Input Action (Axis1D: +1/-1 per step, e.g. two keys with a Negate modifier) - no-op outside Build Mode, and for a Legacy piece */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* ChangeBuildLevelAction;
+
 	/** Cycle Hotbar Selection Input Action (Axis1D: +1/-1 per step, e.g. mouse wheel) */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* CycleSelectionAction;
@@ -133,6 +137,9 @@ protected:
 
 	/** Rotate Preview Input Action handler */
 	void RotatePreviewInput(const FInputActionValue& Value);
+
+	/** Change Build Level Input Action handler */
+	void ChangeBuildLevelInput(const FInputActionValue& Value);
 
 	/** Cycle Hotbar Selection Input Action handler */
 	void CycleSelectionInput(const FInputActionValue& Value);

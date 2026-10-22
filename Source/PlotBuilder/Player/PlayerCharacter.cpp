@@ -96,6 +96,9 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		// Rotate the Build Mode preview by one step (no-op outside Build Mode)
 		EnhancedInputComponent->BindAction(RotatePreviewAction, ETriggerEvent::Started, this, &APlayerCharacter::RotatePreviewInput);
 
+		// Change the Build Mode grid level by one step (no-op outside Build Mode, and for a Legacy piece)
+		EnhancedInputComponent->BindAction(ChangeBuildLevelAction, ETriggerEvent::Started, this, &APlayerCharacter::ChangeBuildLevelInput);
+
 		// Cycle which hotbar entry is selected/previewed
 		EnhancedInputComponent->BindAction(CycleSelectionAction, ETriggerEvent::Started, this, &APlayerCharacter::CycleSelectionInput);
 
@@ -187,6 +190,17 @@ void APlayerCharacter::RotatePreviewInput(const FInputActionValue& Value)
 	if (Direction != 0 && BuildModeComponent)
 	{
 		BuildModeComponent->RotatePreview(Direction);
+	}
+}
+
+void APlayerCharacter::ChangeBuildLevelInput(const FInputActionValue& Value)
+{
+	const float Raw = Value.Get<float>();
+	const int32 Direction = (Raw > 0.f) - (Raw < 0.f);
+
+	if (Direction != 0 && BuildModeComponent)
+	{
+		BuildModeComponent->ChangeBuildLevel(Direction);
 	}
 }
 
