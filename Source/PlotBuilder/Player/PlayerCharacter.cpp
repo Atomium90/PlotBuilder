@@ -99,6 +99,9 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		// Change the Build Mode grid level by one step (no-op outside Build Mode, and for a Legacy piece)
 		EnhancedInputComponent->BindAction(ChangeBuildLevelAction, ETriggerEvent::Started, this, &APlayerCharacter::ChangeBuildLevelInput);
 
+		// Change the Build Mode roof step by one step (no-op outside Build Mode)
+		EnhancedInputComponent->BindAction(ChangeRoofStepAction, ETriggerEvent::Started, this, &APlayerCharacter::ChangeRoofStepInput);
+
 		// Cycle which hotbar entry is selected/previewed
 		EnhancedInputComponent->BindAction(CycleSelectionAction, ETriggerEvent::Started, this, &APlayerCharacter::CycleSelectionInput);
 
@@ -201,6 +204,17 @@ void APlayerCharacter::ChangeBuildLevelInput(const FInputActionValue& Value)
 	if (Direction != 0 && BuildModeComponent)
 	{
 		BuildModeComponent->ChangeBuildLevel(Direction);
+	}
+}
+
+void APlayerCharacter::ChangeRoofStepInput(const FInputActionValue& Value)
+{
+	const float Raw = Value.Get<float>();
+	const int32 Direction = (Raw > 0.f) - (Raw < 0.f);
+
+	if (Direction != 0 && BuildModeComponent)
+	{
+		BuildModeComponent->ChangeRoofStep(Direction);
 	}
 }
 

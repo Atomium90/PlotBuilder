@@ -9,6 +9,7 @@ class UHotbarComponent;
 class UMaterialInterface;
 class AStaticMeshActor;
 class APlot;
+class ABuildablePiece;
 
 /**
  *  Placement flow for ABuildablePiece, separate from the instant placement UHotbarComponent::TryPlace
@@ -40,9 +41,13 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Build Mode")
 	TObjectPtr<UMaterialInterface> GhostMaterial;
 
-	/** Translucent material applied to the ghost mesh when it would overlap something. */
+	/** Translucent material applied to the ghost mesh when it would overlap something, fall outside the plot, or land on an occupied slot - a hard block, the game refusing the placement outright. */
 	UPROPERTY(EditAnywhere, Category = "Build Mode")
 	TObjectPtr<UMaterialInterface> BlockedGhostMaterial;
+
+	/** Translucent material applied to the ghost mesh when placement is allowed but the resulting stability would be below UStructuralRules::ComfortThreshold - a warning, not a block: placing here is a choice, including one that collapses the piece right after (below CollapseThreshold). */
+	UPROPERTY(EditAnywhere, Category = "Build Mode")
+	TObjectPtr<UMaterialInterface> RiskyGhostMaterial;
 
 	/** Yaw step size, in degrees, applied per RotatePreview call - Legacy pieces only, grid pieces use a fixed step per EBuildAnchor (90 deg for Cell, 180 deg for Edge, none for Vertex). */
 	UPROPERTY(EditAnywhere, Category = "Build Mode")
@@ -51,6 +56,10 @@ public:
 	/** Highest BuildLevel ChangeBuildLevel will reach - level 0 is the ground floor. */
 	UPROPERTY(EditAnywhere, Category = "Build Mode")
 	int32 MaxBuildLevel = 3;
+
+	/** Highest RoofStep ChangeRoofStep will reach - see FStructuralSocket::RoofStep. */
+	UPROPERTY(EditAnywhere, Category = "Build Mode")
+	int32 MaxRoofStep = 10;
 
 	/** How far out, in cm, the grid path's view-ray/placement-plane intersection is allowed to reach. Independent of UHotbarComponent::PlaceDistance, which only matters for the Legacy fallback. */
 	UPROPERTY(EditAnywhere, Category = "Build Mode")
@@ -80,6 +89,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Build Mode")
 	int32 GetBuildLevel() const { return BuildLevel; }
+
+	/** Changes RoofStep by Direction (+1/-1), clamped to [0, MaxRoofStep] - see FStructuralSocket::RoofStep. No-op outside Build Mode. Never reset automatically (not tied to BuildLevel or to switching the selected piece), so climbing a slope across several piece picks keeps the same RoofStep until changed on purpose. */
+	UFUNCTION(BlueprintCallable, Category = "Build Mode")
+	void ChangeRoofStep(int32 Direction);
+
+	UFUNCTION(BlueprintCallable, Category = "Build Mode")
+	int32 GetRoofStepValue() const { return RoofStepValue; }
 
 	/** Spawns the previewed item at the ghost's current transform, consuming it from the hotbar. */
 	UFUNCTION(BlueprintCallable, Category = "Build Mode")
@@ -114,9 +130,13 @@ private:
 	 *  the candidate transform, against world statics/dynamics/pawns - covers other Buildables,
 	 *  Props, the environment and the player capsule with a single cheap query. Ignores the ghost
 	 *  itself and SnapTarget (the piece being snapped onto, if any) so a flush fit isn't flagged as
-	 *  blocked. Also blocked if a Plot exists in the level and the candidate falls outside it.
+	 *  blocked. Also blocked if a Plot exists in the level and the candidate falls outside it. Never
+	 *  blocks on stability alone - see IsCandidateRisky for that.
 	 */
 	bool IsCandidateBlocked(const FVector& Location, const FRotator& Rotation, AActor* SnapTarget) const;
+
+	/** Whether the candidate's resulting stability would fall under UStructuralRules::ComfortThreshold - a warning (yellow ghost), never a reason to block placement by itself. False for a piece with no sockets, or with no Plot/structural component in the level. */
+	bool IsCandidateRisky(const ABuildablePiece* SelectedCDO, const FVector& Location, const FRotator& Rotation) const;
 
 	/**
 	 *  Grid path. Intersects the view ray with the horizontal placement plane at the current
@@ -131,14 +151,17 @@ private:
 	/**
 	 *  Grid path obstruction test, in this order: outside the plot, the (Anchor, GridCoord) slot
 	 *  already occupied, a ground-clipped physics overlap that's blind to other ABuildablePiece
-	 *  (those are governed by the occupancy table and by WouldBeStable, not raw overlap - two
-	 *  pieces are expected to touch at a shared edge/vertex), and finally structural stability via
-	 *  UStructuralSupportComponent::WouldBeStable. LastBlockReason is set for the debug display.
+	 *  (those are governed by the occupancy table, not raw overlap - two pieces are expected to touch
+	 *  at a shared edge/vertex). Never blocks on stability alone - see IsGridCandidateRisky for that.
+	 *  LastBlockReason is set for the debug display.
 	 */
 	bool IsGridCandidateBlocked(const FVector& Location, const FRotator& Rotation, EBuildAnchor Anchor, const FIntVector& GridCoord, int32 QuarterTurns) const;
 
-	/** Applies GhostMaterial or BlockedGhostMaterial to every slot, only when something changed. */
-	void UpdateGhostMaterial(bool bBlocked);
+	/** Whether the candidate's resulting stability would fall under UStructuralRules::ComfortThreshold - a warning (yellow ghost), never a reason to block placement by itself. False for a piece with no sockets, or with no Plot/structural component in the level. */
+	bool IsGridCandidateRisky(const ABuildablePiece* SelectedCDO, const FIntVector& GridCoord, int32 QuarterTurns) const;
+
+	/** Applies GhostMaterial, RiskyGhostMaterial or BlockedGhostMaterial to every slot (in that priority: a hard block wins over a stability warning), only when something changed. */
+	void UpdateGhostMaterial(bool bBlocked, bool bRisky);
 
 	/** How far a box with the given local half-extents and rotation reaches along WorldAxis (a unit vector) - the standard oriented-box-onto-axis projection, correct for any rotation. */
 	static float ProjectExtentOntoAxis(const FVector& LocalHalfExtent, const FQuat& Rotation, const FVector& WorldAxis);
@@ -159,7 +182,9 @@ private:
 	bool bIsActive = false;
 	int32 RotationSteps = 0;
 	bool bIsBlocked = false;
+	bool bIsRisky = false;
 	int32 BuildLevel = 0;
+	int32 RoofStepValue = 0;
 
 	/** Grid coordinate/orientation the ghost resolved to this tick, for a non-Legacy piece - consumed by ConfirmPlacement. Meaningless for a Legacy piece. */
 	FIntVector PendingGridCoord = FIntVector::ZeroValue;
@@ -171,6 +196,7 @@ private:
 	/** Forces the next UpdateGhostMaterial call to reapply even if the blocked state hasn't changed - set whenever the mesh itself changes, since its slots start with no ghost material assigned. */
 	bool bMaterialNeedsRefresh = true;
 
-	/** Blocked state the ghost's material currently reflects - lets UpdateGhostMaterial skip reassigning when nothing changed. */
+	/** Blocked/risky state the ghost's material currently reflects - lets UpdateGhostMaterial skip reassigning when nothing changed. */
 	bool bLastAppliedBlocked = false;
+	bool bLastAppliedRisky = false;
 };

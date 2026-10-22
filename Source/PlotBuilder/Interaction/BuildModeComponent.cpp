@@ -50,8 +50,8 @@ void UBuildModeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 
 		if (Anchor != EBuildAnchor::Legacy)
 		{
-			GEngine->AddOnScreenDebugMessage(500, 0.f, FColor::Green, FString::Printf(TEXT("Build Mode: %s | level %d | cell (%d,%d,%d) | %s"),
-				*ClassName, BuildLevel, PendingGridCoord.X, PendingGridCoord.Y, PendingGridCoord.Z, *LastBlockReason));
+			GEngine->AddOnScreenDebugMessage(500, 0.f, FColor::Green, FString::Printf(TEXT("Build Mode: %s | level %d | roof step %d | cell (%d,%d,%d) | %s%s"),
+				*ClassName, BuildLevel, RoofStepValue, PendingGridCoord.X, PendingGridCoord.Y, PendingGridCoord.Z, *LastBlockReason, bIsRisky ? TEXT(" | risky") : TEXT("")));
 		}
 		else
 		{
@@ -164,6 +164,16 @@ void UBuildModeComponent::ChangeBuildLevel(int32 Direction)
 	BuildLevel = FMath::Clamp(BuildLevel + FMath::Sign(Direction), 0, MaxBuildLevel);
 }
 
+void UBuildModeComponent::ChangeRoofStep(int32 Direction)
+{
+	if (!bIsActive || Direction == 0)
+	{
+		return;
+	}
+
+	RoofStepValue = FMath::Clamp(RoofStepValue + FMath::Sign(Direction), 0, MaxRoofStep);
+}
+
 void UBuildModeComponent::ConfirmPlacement()
 {
 	if (!bIsActive || !HotbarComponent || !PreviewActor || PreviewActor->IsHidden())
@@ -198,6 +208,7 @@ void UBuildModeComponent::ConfirmPlacement()
 	const FRotator SpawnRotation = PreviewActor->GetActorRotation();
 	const FIntVector GridCoordToApply = PendingGridCoord;
 	const uint8 OrientationToApply = static_cast<uint8>(((PendingQuarterTurns % 4) + 4) % 4);
+	const int32 RoofStepToApply = RoofStepValue;
 
 	const FHotbarEntry ConsumedEntry = HotbarComponent->ConsumeSelected();
 
@@ -216,7 +227,7 @@ void UBuildModeComponent::ConfirmPlacement()
 
 			if (Anchor != EBuildAnchor::Legacy)
 			{
-				NewPiece->SetGridPlacement(GridCoordToApply, OrientationToApply);
+				NewPiece->SetGridPlacement(GridCoordToApply, OrientationToApply, RoofStepToApply);
 			}
 
 			if (CachedPlot && CachedPlot->GetStructuralSupport())
@@ -318,7 +329,8 @@ void UBuildModeComponent::UpdatePreviewTransform()
 		PreviewActor->SetActorLocationAndRotation(CandidateLocation, CandidateRotation);
 
 		bIsBlocked = IsGridCandidateBlocked(CandidateLocation, CandidateRotation, Anchor, GridCoord, QuarterTurns);
-		UpdateGhostMaterial(bIsBlocked);
+		bIsRisky = !bIsBlocked && IsGridCandidateRisky(SelectedCDO, GridCoord, QuarterTurns);
+		UpdateGhostMaterial(bIsBlocked, bIsRisky);
 		return;
 	}
 
@@ -332,7 +344,8 @@ void UBuildModeComponent::UpdatePreviewTransform()
 	PreviewActor->SetActorLocationAndRotation(CandidateLocation, CandidateRotation);
 
 	bIsBlocked = IsCandidateBlocked(CandidateLocation, CandidateRotation, SnapTarget);
-	UpdateGhostMaterial(bIsBlocked);
+	bIsRisky = !bIsBlocked && IsCandidateRisky(SelectedCDO, CandidateLocation, CandidateRotation);
+	UpdateGhostMaterial(bIsBlocked, bIsRisky);
 }
 
 void UBuildModeComponent::ComputeFreeTransform(const FVector& ViewLocation, const FRotator& ViewRotation, FVector& OutLocation, FRotator& OutRotation) const
@@ -492,17 +505,6 @@ bool UBuildModeComponent::IsCandidateBlocked(const FVector& Location, const FRot
 		return true;
 	}
 
-	// Stability gate: a piece with no sockets declared yet (still the greybox default, or simply
-	// not meant to carry structural weight) skips this check entirely rather than being blocked by
-	// a candidate that can never be "stable".
-	const ABuildablePiece* SelectedCDO = LastPreviewedClass ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
-
-	if (SelectedCDO && !SelectedCDO->GetSockets().IsEmpty() && CachedPlot && CachedPlot->GetStructuralSupport()
-		&& !CachedPlot->GetStructuralSupport()->WouldBeStable(SelectedCDO->GetSockets(), Location, Rotation))
-	{
-		return true;
-	}
-
 	// Flush-adjacent pieces touch at zero distance - float error in the snap math (or just the
 	// physics engine treating an exact touch as a hit) would otherwise flag every neighbour as
 	// blocking, not just the one this frame's SnapTarget ignores. Shrinking the test box by a
@@ -534,6 +536,20 @@ bool UBuildModeComponent::IsCandidateBlocked(const FVector& Location, const FRot
 	return GetWorld()->OverlapAnyTestByObjectType(BoxCenter, Rotation.Quaternion(), ObjectParams, FCollisionShape::MakeBox(HalfExtent), QueryParams);
 }
 
+bool UBuildModeComponent::IsCandidateRisky(const ABuildablePiece* SelectedCDO, const FVector& Location, const FRotator& Rotation) const
+{
+	UStructuralSupportComponent* Structural = CachedPlot ? CachedPlot->GetStructuralSupport() : nullptr;
+
+	if (!Structural || !SelectedCDO || SelectedCDO->GetSockets().IsEmpty())
+	{
+		return false;
+	}
+
+	const UStructuralRules* Rules = Structural->Rules;
+	const float ComfortThreshold = Rules ? Rules->ComfortThreshold : 0.5f;
+	return Structural->ComputeStability(SelectedCDO->GetSockets(), Location, Rotation) < ComfortThreshold;
+}
+
 bool UBuildModeComponent::TryResolveGridPlacement(const FVector& ViewLocation, const FRotator& ViewRotation, EBuildAnchor Anchor, FVector& OutLocation, FRotator& OutRotation, FIntVector& OutGridCoord, int32& OutQuarterTurns) const
 {
 	if (!CachedPlot || !CachedPlot->GetStructuralSupport())
@@ -544,16 +560,18 @@ bool UBuildModeComponent::TryResolveGridPlacement(const FVector& ViewLocation, c
 	const UStructuralRules* Rules = CachedPlot->GetStructuralSupport()->Rules;
 	const float CellSize = Rules ? Rules->CellSize : 100.f;
 	const float FloorHeight = Rules ? Rules->FloorHeight : 300.f;
+	const float RoofStepHeight = Rules ? Rules->RoofStepHeight : 100.f;
 
 	const ABuildablePiece* SelectedCDO = LastPreviewedClass ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
 	const float VerticalOffset = SelectedCDO ? SelectedCDO->GetVerticalOffset() : 0.f;
 
 	// FoundationTopZ(BuildLevel): the fondation's own pivot sits 20cm above the plot's ground
 	// surface (it's buried 10cm of its 30cm thickness) - every other piece at a given level shares
-	// that same Z, one FloorHeight step apart per level (see the greybox spec doc). Finer vertical
-	// positioning within a level (roof slope rows, gable infill stacking) goes through RoofStep
-	// instead, which never changes what BuildLevel itself means for any piece type.
-	const float PlaneZ = CachedPlot->GetGroundZ() + 20.f + BuildLevel * FloorHeight + VerticalOffset;
+	// that same Z, one FloorHeight step apart per level (see the greybox spec doc). RoofStepValue
+	// adds a second, independent vertical term on top (RoofStepHeight per step) for a roof piece
+	// climbing a slope or stacking a gable infill - it never changes what BuildLevel itself means,
+	// and it's always 0 unless the player has actually used ChangeRoofStep.
+	const float PlaneZ = CachedPlot->GetGroundZ() + 20.f + BuildLevel * FloorHeight + RoofStepValue * RoofStepHeight + VerticalOffset;
 
 	const FVector RayDir = ViewRotation.Vector();
 
@@ -747,20 +765,25 @@ bool UBuildModeComponent::IsGridCandidateBlocked(const FVector& Location, const 
 		}
 	}
 
-	const ABuildablePiece* SelectedCDO = LastPreviewedClass ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
-
-	if (Structural && SelectedCDO && !SelectedCDO->GetSockets().IsEmpty()
-		&& !Structural->WouldBeStable(SelectedCDO->GetSockets(), GridCoord, QuarterTurns))
-	{
-		LastBlockReason = TEXT("unstable");
-		return true;
-	}
-
 	LastBlockReason = TEXT("free");
 	return false;
 }
 
-void UBuildModeComponent::UpdateGhostMaterial(bool bBlocked)
+bool UBuildModeComponent::IsGridCandidateRisky(const ABuildablePiece* SelectedCDO, const FIntVector& GridCoord, int32 QuarterTurns) const
+{
+	UStructuralSupportComponent* Structural = CachedPlot ? CachedPlot->GetStructuralSupport() : nullptr;
+
+	if (!Structural || !SelectedCDO || SelectedCDO->GetSockets().IsEmpty())
+	{
+		return false;
+	}
+
+	const UStructuralRules* Rules = Structural->Rules;
+	const float ComfortThreshold = Rules ? Rules->ComfortThreshold : 0.5f;
+	return Structural->ComputeStability(SelectedCDO->GetSockets(), GridCoord, QuarterTurns, RoofStepValue) < ComfortThreshold;
+}
+
+void UBuildModeComponent::UpdateGhostMaterial(bool bBlocked, bool bRisky)
 {
 	UStaticMeshComponent* MeshComp = PreviewActor ? PreviewActor->GetStaticMeshComponent() : nullptr;
 
@@ -769,12 +792,13 @@ void UBuildModeComponent::UpdateGhostMaterial(bool bBlocked)
 		return;
 	}
 
-	if (!bMaterialNeedsRefresh && bBlocked == bLastAppliedBlocked)
+	if (!bMaterialNeedsRefresh && bBlocked == bLastAppliedBlocked && bRisky == bLastAppliedRisky)
 	{
 		return;
 	}
 
-	UMaterialInterface* MaterialToApply = bBlocked ? BlockedGhostMaterial : GhostMaterial;
+	// A hard block always wins over a stability warning - bRisky is meaningless once bBlocked is true.
+	UMaterialInterface* MaterialToApply = bBlocked ? BlockedGhostMaterial : bRisky ? RiskyGhostMaterial : GhostMaterial;
 
 	for (int32 i = 0; i < MeshComp->GetNumMaterials(); ++i)
 	{
@@ -782,5 +806,6 @@ void UBuildModeComponent::UpdateGhostMaterial(bool bBlocked)
 	}
 
 	bLastAppliedBlocked = bBlocked;
+	bLastAppliedRisky = bRisky;
 	bMaterialNeedsRefresh = false;
 }

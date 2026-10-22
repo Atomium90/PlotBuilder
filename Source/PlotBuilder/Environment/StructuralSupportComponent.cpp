@@ -197,18 +197,18 @@ void UStructuralSupportComponent::UnregisterPiece(ABuildablePiece* Piece)
 	RecomputeStability();
 }
 
-bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation, int32 RoofStep) const
+float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation, int32 RoofStep) const
 {
-	return WouldBeStable(Sockets, GetPieceCell(WorldLocation), GetQuarterTurns(WorldRotation), RoofStep);
+	return ComputeStability(Sockets, GetPieceCell(WorldLocation), GetQuarterTurns(WorldRotation), RoofStep);
 }
 
-bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FIntVector& Cell, int32 QuarterTurns, int32 RoofStep) const
+float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSocket>& Sockets, const FIntVector& Cell, int32 QuarterTurns, int32 RoofStep) const
 {
 	for (const FStructuralSocket& Socket : Sockets)
 	{
 		if (Socket.Type == EStructuralSocketType::Anchor)
 		{
-			return true;
+			return 1.f;
 		}
 	}
 
@@ -239,8 +239,7 @@ bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>&
 		}
 	}
 
-	const float Threshold = Rules ? Rules->CollapseThreshold : 0.1f;
-	return BestStability >= Threshold;
+	return BestStability;
 }
 
 void UStructuralSupportComponent::RecomputeStability()

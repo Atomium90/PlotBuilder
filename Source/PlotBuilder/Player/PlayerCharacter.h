@@ -97,6 +97,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* ChangeBuildLevelAction;
 
+	/** Change Roof Step Input Action (Axis1D: +1/-1 per step, e.g. two keys with a Negate modifier) - no-op outside Build Mode */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* ChangeRoofStepAction;
+
 	/** Cycle Hotbar Selection Input Action (Axis1D: +1/-1 per step, e.g. mouse wheel) */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* CycleSelectionAction;
@@ -140,6 +144,9 @@ protected:
 
 	/** Change Build Level Input Action handler */
 	void ChangeBuildLevelInput(const FInputActionValue& Value);
+
+	/** Change Roof Step Input Action handler */
+	void ChangeRoofStepInput(const FInputActionValue& Value);
 
 	/** Cycle Hotbar Selection Input Action handler */
 	void CycleSelectionInput(const FInputActionValue& Value);

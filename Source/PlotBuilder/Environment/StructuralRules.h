@@ -29,6 +29,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float CollapseThreshold = 0.1f;
 
+	/** Below this (but still at or above CollapseThreshold), the Build Mode ghost turns risky-yellow rather than green - a warning, not a block: placing here is allowed, it just won't be far from collapsing. Calibrated so a single horizontal link (1.0 - HorizontalLoss) already falls under it, by default. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
+	float ComfortThreshold = 0.5f;
+
 	/** Grid cell size in cm (horizontal). */
 	UPROPERTY(EditDefaultsOnly, Category = "Structural|Grid")
 	float CellSize = 200.f;
@@ -36,4 +40,8 @@ public:
 	/** Floor-to-floor height in cm (vertical cell size). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural|Grid")
 	float FloorHeight = 300.f;
+
+	/** World-space height of one RoofStep, in cm - independent of FloorHeight, see FStructuralSocket::RoofStep. 100cm per the greybox spec's R01 slope rise. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural|Grid")
+	float RoofStepHeight = 100.f;
 };

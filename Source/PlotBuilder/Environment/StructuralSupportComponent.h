@@ -81,16 +81,20 @@ public:
 	int32 GetSocketRoofStep(const ABuildablePiece* Piece, const FStructuralSocket& Socket) const;
 
 	/**
-	 *  Core stability check, in integer grid coordinates - what the FVector/FRotator overload below
-	 *  converts into for a Legacy piece. Read-only: never mutates the registry. Compares against
-	 *  neighbors' already-cached Stability rather than replaying a full relaxation - used by the
-	 *  Build Mode ghost before confirming a placement. RoofStep defaults to 0 - meaningless for
-	 *  anything but a Roof_* candidate.
+	 *  Core stability VALUE a candidate would get, in integer grid coordinates - used by the Build
+	 *  Mode ghost to tell a comfortably-supported candidate from a barely-standing one
+	 *  (UStructuralRules::ComfortThreshold) rather than a plain yes/no; placement itself is no longer
+	 *  gated on this at all (see UBuildModeComponent) - a candidate below CollapseThreshold is
+	 *  allowed to be placed, and will collapse right after via the normal RegisterPiece ->
+	 *  RecomputeStability path. Read-only: never mutates the registry. Compares against neighbors'
+	 *  already-cached Stability rather than replaying a full relaxation. RoofStep defaults to 0 -
+	 *  meaningless for anything but a Roof_* candidate. 1.f for a candidate with an Anchor socket.
 	 */
-	bool WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FIntVector& Cell, int32 QuarterTurns, int32 RoofStep = 0) const;
+	UFUNCTION(BlueprintPure, Category = "Structural")
+	float ComputeStability(const TArray<FStructuralSocket>& Sockets, const FIntVector& Cell, int32 QuarterTurns, int32 RoofStep = 0) const;
 
-	/** Convenience overload for a Legacy piece: converts WorldLocation/WorldRotation to grid coordinates once, then calls the integer overload above. */
-	bool WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation, int32 RoofStep = 0) const;
+	/** Convenience overload for a Legacy piece: converts WorldLocation/WorldRotation to grid coordinates once, then calls the integer overload above. Not itself a UFUNCTION - UHT doesn't support overloading by parameter type. */
+	float ComputeStability(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation, int32 RoofStep = 0) const;
 
 	/** Adds Piece's sockets to the neighbor table (and, for a grid-anchored piece, occupies its slot), links it to whatever matches, then recomputes stability for the whole plot. */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
