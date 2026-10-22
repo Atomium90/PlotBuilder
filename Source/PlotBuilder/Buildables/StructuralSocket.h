@@ -43,4 +43,14 @@ struct FStructuralSocket
 	/** Position of this socket, in grid cells, relative to the piece's own pivot - rotated by the piece's own yaw before being resolved to a world cell. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	FIntVector CellOffset = FIntVector::ZeroValue;
+
+	/**
+	 *  Fine vertical step, relative to the piece's own RoofStep (see ABuildablePiece) - a second,
+	 *  independent integer axis for Roof_* pieces climbing a slope or stacking a gable infill in
+	 *  increments finer than a full BuildLevel (a floor). Never rotated (yaw only ever swaps X/Y).
+	 *  Always 0, and never consumed by matching, for every non-roof socket - adding this changes
+	 *  nothing for a piece that leaves it at the default.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
+	int32 RoofStep = 0;
 };

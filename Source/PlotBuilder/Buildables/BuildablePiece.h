@@ -70,13 +70,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Structural")
 	bool bFaceAnchoredEdge = false;
 
-	/** Vertical offset from the current build level's placement plane, in cm - 0 for everything except future roof pieces. */
+	/** Vertical offset from the current build level's placement plane, in cm - 0 for everything except roof/gable pieces (see the greybox spec doc's VerticalOffset = -20 note). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float VerticalOffset = 0.f;
-
-	/** Vertical spacing this piece advances the build level by, in cm - the floor-to-floor height for normal pieces, something finer for future roof pieces. Not consumed by anything yet. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
-	float VerticalStep = 300.f;
 
 	/**
 	 *  Whether this piece passes its own stability on to whatever rests on it (a load-bearing wall
@@ -105,12 +101,12 @@ public:
 	EBuildAnchor GetBuildAnchor() const { return BuildAnchor; }
 	bool IsFaceAnchoredEdge() const { return bFaceAnchoredEdge; }
 	float GetVerticalOffset() const { return VerticalOffset; }
-	float GetVerticalStep() const { return VerticalStep; }
 	FIntVector GetGridCoord() const { return GridCoord; }
 	uint8 GetOrientation() const { return Orientation; }
+	int32 GetRoofStep() const { return RoofStep; }
 
-	/** Called once by UBuildModeComponent::ConfirmPlacement right after spawning a non-Legacy piece - never meaningful for a Legacy one. */
-	void SetGridPlacement(const FIntVector& NewGridCoord, uint8 NewOrientation) { GridCoord = NewGridCoord; Orientation = NewOrientation; }
+	/** Called once by UBuildModeComponent::ConfirmPlacement right after spawning a non-Legacy piece - never meaningful for a Legacy one. NewRoofStep defaults to 0 - meaningless for anything but a Roof_* piece. */
+	void SetGridPlacement(const FIntVector& NewGridCoord, uint8 NewOrientation, int32 NewRoofStep = 0) { GridCoord = NewGridCoord; Orientation = NewOrientation; RoofStep = NewRoofStep; }
 
 	/**
 	 *  This piece's position in the structural grid: GridCoord directly for a grid-anchored piece,
@@ -148,6 +144,10 @@ private:
 	/** Quarter turns (0-3) around Z, set alongside GridCoord - ignored for Legacy, which reads its orientation from the actor's actual rotation instead. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Structural", meta = (AllowPrivateAccess = "true"))
 	uint8 Orientation = 0;
+
+	/** Fine vertical step, set alongside GridCoord - see FStructuralSocket::RoofStep. Always 0 and meaningless for anything but a Roof_* piece climbing a slope or stacking a gable infill. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Structural", meta = (AllowPrivateAccess = "true"))
+	int32 RoofStep = 0;
 
 	UPROPERTY()
 	TObjectPtr<UStructuralSupportComponent> StructuralComponent;

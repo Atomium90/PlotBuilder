@@ -550,7 +550,9 @@ bool UBuildModeComponent::TryResolveGridPlacement(const FVector& ViewLocation, c
 
 	// FoundationTopZ(BuildLevel): the fondation's own pivot sits 20cm above the plot's ground
 	// surface (it's buried 10cm of its 30cm thickness) - every other piece at a given level shares
-	// that same Z, one FloorHeight step apart per level (see the greybox spec doc).
+	// that same Z, one FloorHeight step apart per level (see the greybox spec doc). Finer vertical
+	// positioning within a level (roof slope rows, gable infill stacking) goes through RoofStep
+	// instead, which never changes what BuildLevel itself means for any piece type.
 	const float PlaneZ = CachedPlot->GetGroundZ() + 20.f + BuildLevel * FloorHeight + VerticalOffset;
 
 	const FVector RayDir = ViewRotation.Vector();

@@ -20,6 +20,10 @@ struct FRegisteredSocket
 
 	UPROPERTY()
 	EStructuralSocketType Type = EStructuralSocketType::WallBottom;
+
+	/** Owner's own RoofStep plus the socket's local RoofStep offset - see FStructuralSocket::RoofStep. Always 0 for a non-roof socket, so it never affects matching for one. */
+	UPROPERTY()
+	int32 RoofStep = 0;
 };
 
 /**
@@ -72,16 +76,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Structural")
 	FIntVector GetSocketCell(const ABuildablePiece* Piece, const FStructuralSocket& Socket) const;
 
+	/** Socket -> absolute RoofStep: Piece's own RoofStep plus the socket's local offset - the RoofStep counterpart to GetSocketCell above. Never rotated (yaw only ever swaps X/Y). Returns 0 for a null Piece. */
+	UFUNCTION(BlueprintPure, Category = "Structural")
+	int32 GetSocketRoofStep(const ABuildablePiece* Piece, const FStructuralSocket& Socket) const;
+
 	/**
 	 *  Core stability check, in integer grid coordinates - what the FVector/FRotator overload below
 	 *  converts into for a Legacy piece. Read-only: never mutates the registry. Compares against
 	 *  neighbors' already-cached Stability rather than replaying a full relaxation - used by the
-	 *  Build Mode ghost before confirming a placement.
+	 *  Build Mode ghost before confirming a placement. RoofStep defaults to 0 - meaningless for
+	 *  anything but a Roof_* candidate.
 	 */
-	bool WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FIntVector& Cell, int32 QuarterTurns) const;
+	bool WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FIntVector& Cell, int32 QuarterTurns, int32 RoofStep = 0) const;
 
 	/** Convenience overload for a Legacy piece: converts WorldLocation/WorldRotation to grid coordinates once, then calls the integer overload above. */
-	bool WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation) const;
+	bool WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation, int32 RoofStep = 0) const;
 
 	/** Adds Piece's sockets to the neighbor table (and, for a grid-anchored piece, occupies its slot), links it to whatever matches, then recomputes stability for the whole plot. */
 	UFUNCTION(BlueprintCallable, Category = "Structural")

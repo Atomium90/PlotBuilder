@@ -33,6 +33,11 @@ FIntVector UStructuralSupportComponent::GetSocketCell(const ABuildablePiece* Pie
 	return Piece->GetStructuralCell() + RotateCellOffset(Socket.CellOffset, Piece->GetStructuralQuarterTurns());
 }
 
+int32 UStructuralSupportComponent::GetSocketRoofStep(const ABuildablePiece* Piece, const FStructuralSocket& Socket) const
+{
+	return Piece ? Piece->GetRoofStep() + Socket.RoofStep : 0;
+}
+
 FIntVector UStructuralSupportComponent::RotateCellOffset(const FIntVector& Offset, int32 QuarterTurns)
 {
 	FIntVector Result = Offset;
@@ -66,7 +71,8 @@ bool UStructuralSupportComponent::AreSocketsLinked(EStructuralSocketType A, EStr
 		|| Matches(EStructuralSocketType::FloorEdge, EStructuralSocketType::FloorEdge)
 		|| Matches(EStructuralSocketType::RoofLow, EStructuralSocketType::RoofLow)
 		|| Matches(EStructuralSocketType::RoofHigh, EStructuralSocketType::RoofHigh)
-		|| Matches(EStructuralSocketType::RoofSide, EStructuralSocketType::RoofSide))
+		|| Matches(EStructuralSocketType::RoofSide, EStructuralSocketType::RoofSide)
+		|| Matches(EStructuralSocketType::RoofHigh, EStructuralSocketType::RoofLow))
 	{
 		OutIsVertical = false;
 		return true;
@@ -161,6 +167,7 @@ void UStructuralSupportComponent::RegisterPiece(ABuildablePiece* Piece)
 		FRegisteredSocket NewEntry;
 		NewEntry.Owner = Piece;
 		NewEntry.Type = Socket.Type;
+		NewEntry.RoofStep = GetSocketRoofStep(Piece, Socket);
 		SocketsByCell.FindOrAdd(AbsoluteCell).Add(NewEntry);
 	}
 
@@ -190,12 +197,12 @@ void UStructuralSupportComponent::UnregisterPiece(ABuildablePiece* Piece)
 	RecomputeStability();
 }
 
-bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation) const
+bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation, int32 RoofStep) const
 {
-	return WouldBeStable(Sockets, GetPieceCell(WorldLocation), GetQuarterTurns(WorldRotation));
+	return WouldBeStable(Sockets, GetPieceCell(WorldLocation), GetQuarterTurns(WorldRotation), RoofStep);
 }
 
-bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FIntVector& Cell, int32 QuarterTurns) const
+bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FIntVector& Cell, int32 QuarterTurns, int32 RoofStep) const
 {
 	for (const FStructuralSocket& Socket : Sockets)
 	{
@@ -212,6 +219,7 @@ bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>&
 	for (const FStructuralSocket& Socket : Sockets)
 	{
 		const FIntVector AbsoluteCell = Cell + RotateCellOffset(Socket.CellOffset, QuarterTurns);
+		const int32 AbsoluteRoofStep = RoofStep + Socket.RoofStep;
 		const TArray<FRegisteredSocket>* Entries = SocketsByCell.Find(AbsoluteCell);
 
 		if (!Entries)
@@ -223,7 +231,7 @@ bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>&
 		{
 			bool bIsVertical = false;
 
-			if (Entry.Owner && Entry.Owner->IsLoadBearing() && AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical))
+			if (Entry.Owner && Entry.Owner->IsLoadBearing() && Entry.RoofStep == AbsoluteRoofStep && AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical))
 			{
 				const float Loss = bIsVertical ? VerticalLoss : HorizontalLoss;
 				BestStability = FMath::Max(BestStability, Entry.Owner->GetStability() - Loss);
@@ -271,6 +279,7 @@ void UStructuralSupportComponent::RecomputeStability()
 			for (const FStructuralSocket& Socket : Piece->GetSockets())
 			{
 				const FIntVector AbsoluteCell = GetSocketCell(Piece, Socket);
+				const int32 AbsoluteRoofStep = GetSocketRoofStep(Piece, Socket);
 				const TArray<FRegisteredSocket>* Entries = SocketsByCell.Find(AbsoluteCell);
 
 				if (!Entries)
@@ -280,7 +289,7 @@ void UStructuralSupportComponent::RecomputeStability()
 
 				for (const FRegisteredSocket& Entry : *Entries)
 				{
-					if (!Entry.Owner || Entry.Owner == Piece || !Entry.Owner->IsLoadBearing())
+					if (!Entry.Owner || Entry.Owner == Piece || !Entry.Owner->IsLoadBearing() || Entry.RoofStep != AbsoluteRoofStep)
 					{
 						continue;
 					}
