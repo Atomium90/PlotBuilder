@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Interaction/Interactable.h"
 #include "StructuralSocket.h"
+#include "BuildAnchor.h"
 #include "BuildablePiece.generated.h"
 
 class UStaticMeshComponent;
@@ -51,8 +52,31 @@ public:
 	 *  claude/Kit greybox specs des pieces et plan de remplacement.md). Read by
 	 *  UStructuralSupportComponent to find this piece's neighbors.
 	 */
-	UPROPERTY(EditDefaultsOnly, Category = "Structural")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	TArray<FStructuralSocket> Sockets;
+
+	/** How this piece is positioned in Build Mode - see EBuildAnchor. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
+	EBuildAnchor BuildAnchor = EBuildAnchor::Legacy;
+
+	/**
+	 *  Edge pieces only: true if this piece's mesh is pivoted on one face rather than centered on the
+	 *  edge (BP_Wall/BP_WallDoor/BP_WallWindow - the mesh extends towards -X local from the pivot, see
+	 *  claude/Kit greybox specs des pieces et plan de remplacement.md). Lets TryResolveGridPlacement
+	 *  auto-pick which of the two possible yaws (base or base+180) faces the mesh towards the floor
+	 *  side rather than out over empty space. Interior partitions (BP_InteriorWall/
+	 *  BP_InteriorWallDoor) stay centered on the edge and leave this false - no inside/outside to pick.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Structural")
+	bool bFaceAnchoredEdge = false;
+
+	/** Vertical offset from the current build level's placement plane, in cm - 0 for everything except future roof pieces. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
+	float VerticalOffset = 0.f;
+
+	/** Vertical spacing this piece advances the build level by, in cm - the floor-to-floor height for normal pieces, something finer for future roof pieces. Not consumed by anything yet. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
+	float VerticalStep = 300.f;
 
 	/**
 	 *  Whether this piece passes its own stability on to whatever rests on it (a load-bearing wall
@@ -78,6 +102,27 @@ public:
 	bool IsLoadBearing() const { return bIsLoadBearing; }
 	void SetStructuralComponent(UStructuralSupportComponent* Component) { StructuralComponent = Component; }
 
+	EBuildAnchor GetBuildAnchor() const { return BuildAnchor; }
+	bool IsFaceAnchoredEdge() const { return bFaceAnchoredEdge; }
+	float GetVerticalOffset() const { return VerticalOffset; }
+	float GetVerticalStep() const { return VerticalStep; }
+	FIntVector GetGridCoord() const { return GridCoord; }
+	uint8 GetOrientation() const { return Orientation; }
+
+	/** Called once by UBuildModeComponent::ConfirmPlacement right after spawning a non-Legacy piece - never meaningful for a Legacy one. */
+	void SetGridPlacement(const FIntVector& NewGridCoord, uint8 NewOrientation) { GridCoord = NewGridCoord; Orientation = NewOrientation; }
+
+	/**
+	 *  This piece's position in the structural grid: GridCoord directly for a grid-anchored piece,
+	 *  or the Legacy fallback (world transform converted via the owning UStructuralSupportComponent)
+	 *  otherwise. Only meaningful once StructuralComponent is set (see SetStructuralComponent),
+	 *  i.e. after this piece has gone through RegisterPiece at least once.
+	 */
+	FIntVector GetStructuralCell() const;
+
+	/** The rotation half of GetStructuralCell() - see there. */
+	int32 GetStructuralQuarterTurns() const;
+
 	/** Voluntary removal (Interact on a Placed piece): detaches from the structural graph, then destroys itself outright - unlike BeginCollapse, this piece chose to leave, so it doesn't become debris. */
 	UFUNCTION(BlueprintCallable, Category = "Buildable")
 	void Demolish();
@@ -95,6 +140,14 @@ private:
 
 	float Stability = 0.f;
 	bool bIsStructuralAnchor = false;
+
+	/** Set by UBuildModeComponent::ConfirmPlacement for a grid-anchored piece - (0,0,0) and ignored for Legacy. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Structural", meta = (AllowPrivateAccess = "true"))
+	FIntVector GridCoord = FIntVector::ZeroValue;
+
+	/** Quarter turns (0-3) around Z, set alongside GridCoord - ignored for Legacy, which reads its orientation from the actor's actual rotation instead. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Structural", meta = (AllowPrivateAccess = "true"))
+	uint8 Orientation = 0;
 
 	UPROPERTY()
 	TObjectPtr<UStructuralSupportComponent> StructuralComponent;

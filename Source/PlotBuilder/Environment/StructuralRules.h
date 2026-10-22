@@ -18,15 +18,15 @@ class UStructuralRules : public UDataAsset
 public:
 
 	/** Stability lost crossing a vertical link (stacked on top of / resting under). */
-	UPROPERTY(EditDefaultsOnly, Category = "Structural")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float VerticalLoss = 0.1f;
 
 	/** Stability lost crossing a horizontal link (side by side) - much higher than vertical, so side-only contact alone never counts as support. */
-	UPROPERTY(EditDefaultsOnly, Category = "Structural")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float HorizontalLoss = 0.6f;
 
 	/** A piece whose stability falls below this collapses. */
-	UPROPERTY(EditDefaultsOnly, Category = "Structural")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float CollapseThreshold = 0.1f;
 
 	/** Grid cell size in cm (horizontal). */
@@ -34,6 +34,6 @@ public:
 	float CellSize = 200.f;
 
 	/** Floor-to-floor height in cm (vertical cell size). */
-	UPROPERTY(EditDefaultsOnly, Category = "Structural|Grid")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural|Grid")
 	float FloorHeight = 300.f;
 };

@@ -23,6 +23,16 @@ int32 UStructuralSupportComponent::GetQuarterTurns(const FRotator& WorldRotation
 	return FMath::RoundToInt(WorldRotation.Yaw / 90.f);
 }
 
+FIntVector UStructuralSupportComponent::GetSocketCell(const ABuildablePiece* Piece, const FStructuralSocket& Socket) const
+{
+	if (!Piece)
+	{
+		return FIntVector::ZeroValue;
+	}
+
+	return Piece->GetStructuralCell() + RotateCellOffset(Socket.CellOffset, Piece->GetStructuralQuarterTurns());
+}
+
 FIntVector UStructuralSupportComponent::RotateCellOffset(const FIntVector& Offset, int32 QuarterTurns)
 {
 	FIntVector Result = Offset;
@@ -66,6 +76,61 @@ bool UStructuralSupportComponent::AreSocketsLinked(EStructuralSocketType A, EStr
 	return false;
 }
 
+TMap<FIntVector, TObjectPtr<ABuildablePiece>>* UStructuralSupportComponent::GetOccupancyMap(EBuildAnchor SlotType)
+{
+	switch (SlotType)
+	{
+	case EBuildAnchor::Cell: return &FloorSlotOccupancy;
+	case EBuildAnchor::Edge: return &EdgeSlotOccupancy;
+	case EBuildAnchor::Vertex: return &VertexSlotOccupancy;
+	default: return nullptr;
+	}
+}
+
+const TMap<FIntVector, TObjectPtr<ABuildablePiece>>* UStructuralSupportComponent::GetOccupancyMap(EBuildAnchor SlotType) const
+{
+	return const_cast<UStructuralSupportComponent*>(this)->GetOccupancyMap(SlotType);
+}
+
+void UStructuralSupportComponent::OccupySlot(EBuildAnchor SlotType, const FIntVector& Cell, ABuildablePiece* Piece)
+{
+	if (TMap<FIntVector, TObjectPtr<ABuildablePiece>>* Map = GetOccupancyMap(SlotType))
+	{
+		Map->Add(Cell, Piece);
+	}
+}
+
+void UStructuralSupportComponent::FreeSlotsFor(ABuildablePiece* Piece)
+{
+	if (!Piece)
+	{
+		return;
+	}
+
+	if (TMap<FIntVector, TObjectPtr<ABuildablePiece>>* Map = GetOccupancyMap(Piece->GetBuildAnchor()))
+	{
+		Map->Remove(Piece->GetGridCoord());
+	}
+}
+
+bool UStructuralSupportComponent::IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell) const
+{
+	return GetPieceAt(SlotType, Cell) == nullptr;
+}
+
+ABuildablePiece* UStructuralSupportComponent::GetPieceAt(EBuildAnchor SlotType, const FIntVector& Cell) const
+{
+	const TMap<FIntVector, TObjectPtr<ABuildablePiece>>* Map = GetOccupancyMap(SlotType);
+
+	if (!Map)
+	{
+		return nullptr;
+	}
+
+	const TObjectPtr<ABuildablePiece>* Found = Map->Find(Cell);
+	return Found ? Found->Get() : nullptr;
+}
+
 void UStructuralSupportComponent::RegisterPiece(ABuildablePiece* Piece)
 {
 	if (!Piece || RegisteredPieces.Contains(Piece))
@@ -76,8 +141,11 @@ void UStructuralSupportComponent::RegisterPiece(ABuildablePiece* Piece)
 	RegisteredPieces.Add(Piece);
 	Piece->SetStructuralComponent(this);
 
-	const FIntVector PieceCell = GetPieceCell(Piece->GetActorLocation());
-	const int32 QuarterTurns = GetQuarterTurns(Piece->GetActorRotation());
+	if (Piece->GetBuildAnchor() != EBuildAnchor::Legacy)
+	{
+		OccupySlot(Piece->GetBuildAnchor(), Piece->GetGridCoord(), Piece);
+	}
+
 	bool bFoundAnchor = false;
 
 	for (const FStructuralSocket& Socket : Piece->GetSockets())
@@ -88,7 +156,7 @@ void UStructuralSupportComponent::RegisterPiece(ABuildablePiece* Piece)
 			continue;
 		}
 
-		const FIntVector AbsoluteCell = PieceCell + RotateCellOffset(Socket.CellOffset, QuarterTurns);
+		const FIntVector AbsoluteCell = GetSocketCell(Piece, Socket);
 
 		FRegisteredSocket NewEntry;
 		NewEntry.Owner = Piece;
@@ -107,6 +175,8 @@ void UStructuralSupportComponent::UnregisterPiece(ABuildablePiece* Piece)
 		return;
 	}
 
+	FreeSlotsFor(Piece);
+
 	for (auto It = SocketsByCell.CreateIterator(); It; ++It)
 	{
 		It.Value().RemoveAll([Piece](const FRegisteredSocket& Entry) { return Entry.Owner == Piece; });
@@ -122,6 +192,11 @@ void UStructuralSupportComponent::UnregisterPiece(ABuildablePiece* Piece)
 
 bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation) const
 {
+	return WouldBeStable(Sockets, GetPieceCell(WorldLocation), GetQuarterTurns(WorldRotation));
+}
+
+bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FIntVector& Cell, int32 QuarterTurns) const
+{
 	for (const FStructuralSocket& Socket : Sockets)
 	{
 		if (Socket.Type == EStructuralSocketType::Anchor)
@@ -130,15 +205,13 @@ bool UStructuralSupportComponent::WouldBeStable(const TArray<FStructuralSocket>&
 		}
 	}
 
-	const FIntVector PieceCell = GetPieceCell(WorldLocation);
-	const int32 QuarterTurns = GetQuarterTurns(WorldRotation);
 	const float VerticalLoss = Rules ? Rules->VerticalLoss : 0.1f;
 	const float HorizontalLoss = Rules ? Rules->HorizontalLoss : 0.6f;
 	float BestStability = 0.f;
 
 	for (const FStructuralSocket& Socket : Sockets)
 	{
-		const FIntVector AbsoluteCell = PieceCell + RotateCellOffset(Socket.CellOffset, QuarterTurns);
+		const FIntVector AbsoluteCell = Cell + RotateCellOffset(Socket.CellOffset, QuarterTurns);
 		const TArray<FRegisteredSocket>* Entries = SocketsByCell.Find(AbsoluteCell);
 
 		if (!Entries)
@@ -193,13 +266,11 @@ void UStructuralSupportComponent::RecomputeStability()
 				continue;
 			}
 
-			const FIntVector PieceCell = GetPieceCell(Piece->GetActorLocation());
-			const int32 QuarterTurns = GetQuarterTurns(Piece->GetActorRotation());
 			float BestStability = Piece->GetStability();
 
 			for (const FStructuralSocket& Socket : Piece->GetSockets())
 			{
-				const FIntVector AbsoluteCell = PieceCell + RotateCellOffset(Socket.CellOffset, QuarterTurns);
+				const FIntVector AbsoluteCell = GetSocketCell(Piece, Socket);
 				const TArray<FRegisteredSocket>* Entries = SocketsByCell.Find(AbsoluteCell);
 
 				if (!Entries)

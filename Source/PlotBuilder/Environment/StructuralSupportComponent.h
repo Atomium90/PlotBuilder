@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Buildables/StructuralSocket.h"
+#include "Buildables/BuildAnchor.h"
 #include "StructuralSupportComponent.generated.h"
 
 class ABuildablePiece;
@@ -33,6 +34,10 @@ struct FRegisteredSocket
  *  pieces et plan de remplacement.md for the socket table this mirrors. Recomputed only on
  *  placement/removal, never per tick - cheap enough for a few hundred pieces with a plain fixed
  *  point relaxation, no priority queue needed.
+ *
+ *  Also owns the grid occupancy table (IsSlotFree/GetPieceAt) - separate concern from stability,
+ *  but naturally lives here too since it's filled/cleared at the same two points (RegisterPiece/
+ *  UnregisterPiece) and keyed by the same EBuildAnchor used for a piece's own placement.
  */
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class UStructuralSupportComponent : public UActorComponent
@@ -43,37 +48,64 @@ public:
 
 	UStructuralSupportComponent();
 
-	UPROPERTY(EditAnywhere, Category = "Structural")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Structural")
 	TObjectPtr<UStructuralRules> Rules;
 
 	/** Colors each registered piece by its stability via Custom Primitive Data (see UpdateStabilityDebugColor on ABuildablePiece) whenever stability is recomputed. */
 	UPROPERTY(EditAnywhere, Category = "Structural|Debug")
 	bool bShowDebug = false;
 
-	/** Adds Piece's sockets to the neighbor table, links it to whatever matches, then recomputes stability for the whole plot. */
+	/** World location to grid cell, via Rules->CellSize/FloorHeight - the Legacy conversion path, also used to resolve a Legacy piece's GetStructuralCell(). */
+	FIntVector GetPieceCell(const FVector& WorldLocation) const;
+
+	/** World yaw to quarter turns (0-3 meaningfully, any int otherwise) - the Legacy conversion path. */
+	static int32 GetQuarterTurns(const FRotator& WorldRotation);
+
+	/**
+	 *  Socket -> absolute grid cell: Piece's own cell plus the socket's local offset rotated by
+	 *  Piece's orientation. The single source of truth for this conversion - RegisterPiece and
+	 *  RecomputeStability both call it, and it's exposed here so a Blueprint tool (e.g. the socket
+	 *  debugger) visualizing the same sockets matches it exactly instead of redoing the rotation
+	 *  itself. Only meaningful once Piece has gone through RegisterPiece at least once (see
+	 *  ABuildablePiece::GetStructuralCell) - returns (0,0,0) for a null Piece.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Structural")
+	FIntVector GetSocketCell(const ABuildablePiece* Piece, const FStructuralSocket& Socket) const;
+
+	/**
+	 *  Core stability check, in integer grid coordinates - what the FVector/FRotator overload below
+	 *  converts into for a Legacy piece. Read-only: never mutates the registry. Compares against
+	 *  neighbors' already-cached Stability rather than replaying a full relaxation - used by the
+	 *  Build Mode ghost before confirming a placement.
+	 */
+	bool WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FIntVector& Cell, int32 QuarterTurns) const;
+
+	/** Convenience overload for a Legacy piece: converts WorldLocation/WorldRotation to grid coordinates once, then calls the integer overload above. */
+	bool WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation) const;
+
+	/** Adds Piece's sockets to the neighbor table (and, for a grid-anchored piece, occupies its slot), links it to whatever matches, then recomputes stability for the whole plot. */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
 	void RegisterPiece(ABuildablePiece* Piece);
 
 	/**
-	 *  Removes Piece's sockets from the neighbor table, then recomputes stability for the whole
-	 *  plot - this is what lets removing one piece cascade to whatever depended on it, since
-	 *  anything that loses its only path to an anchor collapses as part of the same recompute.
+	 *  Removes Piece's sockets from the neighbor table (and frees its occupancy slot, if any), then
+	 *  recomputes stability for the whole plot - this is what lets removing one piece cascade to
+	 *  whatever depended on it, since anything that loses its only path to an anchor collapses as
+	 *  part of the same recompute.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
 	void UnregisterPiece(ABuildablePiece* Piece);
 
-	/**
-	 *  Read-only: would a piece with these sockets be stable at this transform? Used by the Build
-	 *  Mode ghost before confirming a placement. Never mutates the registry - compares against
-	 *  neighbors' already-cached stability rather than replaying a full relaxation.
-	 */
+	/** Occupancy table, separate from structural stability: is SlotType's slot at Cell free? Always true for SlotType == Legacy (nothing is ever tracked there). */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
-	bool WouldBeStable(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation) const;
+	bool IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell) const;
+
+	/** The piece occupying SlotType's slot at Cell, or nullptr if free. */
+	UFUNCTION(BlueprintCallable, Category = "Structural")
+	ABuildablePiece* GetPieceAt(EBuildAnchor SlotType, const FIntVector& Cell) const;
 
 private:
 
-	FIntVector GetPieceCell(const FVector& WorldLocation) const;
-	static int32 GetQuarterTurns(const FRotator& WorldRotation);
 	static FIntVector RotateCellOffset(const FIntVector& Offset, int32 QuarterTurns);
 
 	/** Whether two socket types pair up at all, and if so whether the link counts as vertical (cheap) or horizontal (expensive). */
@@ -81,8 +113,17 @@ private:
 
 	void RecomputeStability();
 
+	void OccupySlot(EBuildAnchor SlotType, const FIntVector& Cell, ABuildablePiece* Piece);
+	void FreeSlotsFor(ABuildablePiece* Piece);
+	TMap<FIntVector, TObjectPtr<ABuildablePiece>>* GetOccupancyMap(EBuildAnchor SlotType);
+	const TMap<FIntVector, TObjectPtr<ABuildablePiece>>* GetOccupancyMap(EBuildAnchor SlotType) const;
+
 	UPROPERTY()
 	TArray<TObjectPtr<ABuildablePiece>> RegisteredPieces;
 
 	TMap<FIntVector, TArray<FRegisteredSocket>> SocketsByCell;
+
+	TMap<FIntVector, TObjectPtr<ABuildablePiece>> FloorSlotOccupancy;
+	TMap<FIntVector, TObjectPtr<ABuildablePiece>> EdgeSlotOccupancy;
+	TMap<FIntVector, TObjectPtr<ABuildablePiece>> VertexSlotOccupancy;
 };

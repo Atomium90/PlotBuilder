@@ -37,10 +37,10 @@ struct FStructuralSocket
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditDefaultsOnly, Category = "Structural")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	EStructuralSocketType Type = EStructuralSocketType::WallBottom;
 
 	/** Position of this socket, in grid cells, relative to the piece's own pivot - rotated by the piece's own yaw before being resolved to a world cell. */
-	UPROPERTY(EditDefaultsOnly, Category = "Structural")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	FIntVector CellOffset = FIntVector::ZeroValue;
 };

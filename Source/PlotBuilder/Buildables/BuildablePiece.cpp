@@ -71,3 +71,23 @@ void ABuildablePiece::UpdateStabilityDebugColor()
 		MeshComponent->SetCustomPrimitiveDataFloat(0, Stability);
 	}
 }
+
+FIntVector ABuildablePiece::GetStructuralCell() const
+{
+	if (BuildAnchor != EBuildAnchor::Legacy)
+	{
+		return GridCoord;
+	}
+
+	return StructuralComponent ? StructuralComponent->GetPieceCell(GetActorLocation()) : FIntVector::ZeroValue;
+}
+
+int32 ABuildablePiece::GetStructuralQuarterTurns() const
+{
+	if (BuildAnchor != EBuildAnchor::Legacy)
+	{
+		return Orientation;
+	}
+
+	return StructuralComponent ? UStructuralSupportComponent::GetQuarterTurns(GetActorRotation()) : 0;
+}
