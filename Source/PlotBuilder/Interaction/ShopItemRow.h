@@ -22,4 +22,8 @@ struct FShopItemRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shop Item")
 	int32 Cost = 0;
+
+	/** Max count a single inventory slot of this item can hold. No single default - set per row (99 for a buildable piece, 9 for a prop, as a starting point). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shop Item")
+	int32 StackSize = 99;
 };

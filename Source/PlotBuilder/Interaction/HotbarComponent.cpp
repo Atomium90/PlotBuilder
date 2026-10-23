@@ -11,6 +11,13 @@ UHotbarComponent::UHotbarComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
+void UHotbarComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	Slots.SetNum(FMath::Max(NumColumns * NumRows, 0));
+}
+
 void UHotbarComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -20,47 +27,153 @@ void UHotbarComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActo
 		return;
 	}
 
-	GEngine->AddOnScreenDebugMessage(400, 0.f, FColor::Yellow, FString::Printf(TEXT("Hotbar: %d/%d"), StoredEntries.Num(), MaxSlots));
+	const FString MoneyText = bInfiniteMoney ? TEXT("(infinite)") : FString::FromInt(Money);
+	const FString CursorText = CursorSlot.IsEmpty() ? TEXT("(none)") : FString::Printf(TEXT("%s x%d"), *GetNameSafe(CursorSlot.ActorClass), CursorSlot.Count);
+	GEngine->AddOnScreenDebugMessage(400, 0.f, FColor::Yellow, FString::Printf(TEXT("Hotbar: money %s | cursor %s"), *MoneyText, *CursorText));
 
-	for (int32 i = 0; i < StoredEntries.Num(); ++i)
+	for (int32 i = 0; i < Slots.Num(); ++i)
 	{
-		const FString ClassName = StoredEntries[i].ActorClass ? StoredEntries[i].ActorClass->GetName() : TEXT("None");
+		const FString ClassName = Slots[i].ActorClass ? Slots[i].ActorClass->GetName() : TEXT("-");
 		const TCHAR* Marker = (i == SelectedIndex) ? TEXT(">") : TEXT(" ");
-		GEngine->AddOnScreenDebugMessage(401 + i, 0.f, FColor::Yellow, FString::Printf(TEXT(" %s [%d] %s"), Marker, i, *ClassName));
+		GEngine->AddOnScreenDebugMessage(401 + i, 0.f, FColor::Yellow, FString::Printf(TEXT(" %s [%d] %s x%d"), Marker, i, *ClassName, Slots[i].Count));
 	}
 }
 
-bool UHotbarComponent::Store(AActor* ActorToStore)
+bool UHotbarComponent::SlotQualifies(const FInventorySlot& Slot, bool bBuildablesOnly)
 {
-	if (!ActorToStore || StoredEntries.Num() >= MaxSlots)
+	if (Slot.IsEmpty())
 	{
 		return false;
 	}
 
-	FHotbarEntry Entry;
-	Entry.ActorClass = ActorToStore->GetClass();
-	Entry.Scale = ActorToStore->GetActorScale3D();
-	StoredEntries.Add(Entry);
-	SelectedIndex = StoredEntries.Num() - 1;
+	return !bBuildablesOnly || Slot.ActorClass->IsChildOf(ABuildablePiece::StaticClass());
+}
+
+int32 UHotbarComponent::AddItem(TSubclassOf<AActor> ActorClass, const FVector& Scale, int32 StackSize, int32 Count)
+{
+	if (!ActorClass || Count <= 0 || StackSize <= 0)
+	{
+		return Count;
+	}
+
+	int32 Remaining = Count;
+
+	// An existing stack with room, in index order, before any empty slot.
+	for (FInventorySlot& Slot : Slots)
+	{
+		if (Remaining <= 0)
+		{
+			break;
+		}
+
+		if (Slot.ActorClass == ActorClass && Slot.Scale.Equals(Scale) && Slot.Count < Slot.StackSize)
+		{
+			const int32 Added = FMath::Min(Remaining, Slot.StackSize - Slot.Count);
+			Slot.Count += Added;
+			Remaining -= Added;
+		}
+	}
+
+	for (FInventorySlot& Slot : Slots)
+	{
+		if (Remaining <= 0)
+		{
+			break;
+		}
+
+		if (Slot.IsEmpty())
+		{
+			Slot.ActorClass = ActorClass;
+			Slot.Scale = Scale;
+			Slot.StackSize = StackSize;
+			const int32 Added = FMath::Min(Remaining, StackSize);
+			Slot.Count = Added;
+			Remaining -= Added;
+		}
+	}
+
+	return Remaining;
+}
+
+const FShopItemRow* UHotbarComponent::FindCatalogRowFor(TSubclassOf<AActor> ActorClass) const
+{
+	if (!ShopCatalog || !ActorClass)
+	{
+		return nullptr;
+	}
+
+	TArray<FShopItemRow*> Rows;
+	ShopCatalog->GetAllRows<FShopItemRow>(TEXT("FindCatalogRowFor"), Rows);
+
+	for (const FShopItemRow* Row : Rows)
+	{
+		if (Row && Row->ActorClass == ActorClass)
+		{
+			return Row;
+		}
+	}
+
+	return nullptr;
+}
+
+void UHotbarComponent::SetSelectedIndex(int32 NewIndex)
+{
+	if (SelectedIndex == NewIndex)
+	{
+		return;
+	}
+
+	SelectedIndex = NewIndex;
+	OnSelectedSlotChanged.Broadcast();
+}
+
+bool UHotbarComponent::Store(AActor* ActorToStore)
+{
+	if (!ActorToStore)
+	{
+		return false;
+	}
+
+	const TSubclassOf<AActor> ActorClass = ActorToStore->GetClass();
+	const FVector Scale = ActorToStore->GetActorScale3D();
+	const FShopItemRow* Row = FindCatalogRowFor(ActorClass);
+	const int32 StackSize = Row ? Row->StackSize : (ActorClass->IsChildOf(ABuildablePiece::StaticClass()) ? 99 : 9);
+
+	if (AddItem(ActorClass, Scale, StackSize) > 0)
+	{
+		return false;
+	}
+
 	ActorToStore->Destroy();
+	OnInventoryChanged.Broadcast();
 	return true;
 }
 
 TSubclassOf<AActor> UHotbarComponent::PopLast()
 {
-	if (StoredEntries.Num() == 0)
+	for (int32 i = Slots.Num() - 1; i >= 0; --i)
 	{
-		return nullptr;
+		if (!Slots[i].IsEmpty())
+		{
+			const TSubclassOf<AActor> Result = Slots[i].ActorClass;
+			Slots[i].Count -= 1;
+
+			if (Slots[i].Count <= 0)
+			{
+				Slots[i].Reset();
+			}
+
+			OnInventoryChanged.Broadcast();
+			return Result;
+		}
 	}
 
-	const TSubclassOf<AActor> Result = StoredEntries.Last().ActorClass;
-	StoredEntries.RemoveAt(StoredEntries.Num() - 1);
-	return Result;
+	return nullptr;
 }
 
 bool UHotbarComponent::PurchaseRow(FName RowName)
 {
-	if (!ShopCatalog || StoredEntries.Num() >= MaxSlots)
+	if (!ShopCatalog)
 	{
 		return false;
 	}
@@ -72,31 +185,29 @@ bool UHotbarComponent::PurchaseRow(FName RowName)
 		return false;
 	}
 
-	FHotbarEntry Entry;
-	Entry.ActorClass = Row->ActorClass;
-	StoredEntries.Add(Entry);
-	SelectedIndex = StoredEntries.Num() - 1;
+	if (!bInfiniteMoney && Money < Row->Cost)
+	{
+		return false;
+	}
+
+	if (AddItem(Row->ActorClass, FVector::OneVector, Row->StackSize) > 0)
+	{
+		return false;
+	}
+
+	if (!bInfiniteMoney)
+	{
+		Money -= Row->Cost;
+		OnMoneyChanged.Broadcast();
+	}
+
+	OnInventoryChanged.Broadcast();
 	return true;
-}
-
-void UHotbarComponent::PurchaseByIndex(int32 SlotIndex)
-{
-	if (!ShopCatalog)
-	{
-		return;
-	}
-
-	const TArray<FName> RowNames = ShopCatalog->GetRowNames();
-
-	if (RowNames.IsValidIndex(SlotIndex))
-	{
-		PurchaseRow(RowNames[SlotIndex]);
-	}
 }
 
 void UHotbarComponent::TryPlace()
 {
-	FHotbarEntry SelectedEntry;
+	FInventorySlot SelectedEntry;
 
 	if (!GetSelectedEntry(SelectedEntry) || !SelectedEntry.ActorClass)
 	{
@@ -132,7 +243,7 @@ void UHotbarComponent::TryPlace()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	const FHotbarEntry Entry = ConsumeSelected();
+	const FInventorySlot Entry = ConsumeSelected();
 
 	if (AActor* Spawned = GetWorld()->SpawnActor<AActor>(Entry.ActorClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams))
 	{
@@ -140,102 +251,180 @@ void UHotbarComponent::TryPlace()
 	}
 }
 
-bool UHotbarComponent::GetSelectedEntry(FHotbarEntry& OutEntry) const
+bool UHotbarComponent::GetSelectedEntry(FInventorySlot& OutSlot) const
 {
-	if (!StoredEntries.IsValidIndex(SelectedIndex))
+	if (!Slots.IsValidIndex(SelectedIndex) || Slots[SelectedIndex].IsEmpty())
 	{
 		return false;
 	}
 
-	OutEntry = StoredEntries[SelectedIndex];
+	OutSlot = Slots[SelectedIndex];
 	return true;
-}
-
-bool UHotbarComponent::EntryQualifies(const FHotbarEntry& Entry, bool bBuildablesOnly)
-{
-	if (!Entry.ActorClass)
-	{
-		return false;
-	}
-
-	return !bBuildablesOnly || Entry.ActorClass->IsChildOf(ABuildablePiece::StaticClass());
-}
-
-bool UHotbarComponent::EnsureValidSelection(bool bBuildablesOnly)
-{
-	if (StoredEntries.IsValidIndex(SelectedIndex) && EntryQualifies(StoredEntries[SelectedIndex], bBuildablesOnly))
-	{
-		return true;
-	}
-
-	for (int32 i = 0; i < StoredEntries.Num(); ++i)
-	{
-		if (EntryQualifies(StoredEntries[i], bBuildablesOnly))
-		{
-			SelectedIndex = i;
-			return true;
-		}
-	}
-
-	SelectedIndex = INDEX_NONE;
-	return false;
 }
 
 void UHotbarComponent::CycleSelection(int32 Direction, bool bBuildablesOnly)
 {
-	const int32 Num = StoredEntries.Num();
+	const int32 HotbarSize = FMath::Min(NumColumns, Slots.Num());
 
-	if (Direction == 0 || Num == 0)
+	if (Direction == 0 || HotbarSize == 0)
 	{
 		return;
 	}
 
 	const int32 Step = FMath::Sign(Direction);
-	int32 Index = StoredEntries.IsValidIndex(SelectedIndex) ? SelectedIndex : (Step > 0 ? Num - 1 : 0);
+	int32 Index = (SelectedIndex >= 0 && SelectedIndex < HotbarSize) ? SelectedIndex : (Step > 0 ? HotbarSize - 1 : 0);
 
-	for (int32 Attempts = 0; Attempts < Num; ++Attempts)
+	for (int32 Attempts = 0; Attempts < HotbarSize; ++Attempts)
 	{
-		Index = (Index + Step + Num) % Num;
+		Index = (Index + Step + HotbarSize) % HotbarSize;
 
-		if (EntryQualifies(StoredEntries[Index], bBuildablesOnly))
+		if (SlotQualifies(Slots[Index], bBuildablesOnly))
 		{
-			SelectedIndex = Index;
+			SetSelectedIndex(Index);
 			return;
 		}
 	}
 
-	// No qualifying entry anywhere in the hotbar - leave SelectedIndex untouched.
+	// No qualifying slot anywhere in the hotbar - leave SelectedIndex untouched.
 }
 
-FHotbarEntry UHotbarComponent::ConsumeSelected()
+bool UHotbarComponent::EnsureValidSelection(bool bBuildablesOnly)
 {
-	if (!StoredEntries.IsValidIndex(SelectedIndex))
+	const int32 HotbarSize = FMath::Min(NumColumns, Slots.Num());
+
+	if (SelectedIndex >= 0 && SelectedIndex < HotbarSize && SlotQualifies(Slots[SelectedIndex], bBuildablesOnly))
 	{
-		return FHotbarEntry();
+		return true;
 	}
 
-	const FHotbarEntry Consumed = StoredEntries[SelectedIndex];
-	const int32 RemovedIndex = SelectedIndex;
-	StoredEntries.RemoveAt(RemovedIndex);
-
-	// The entry that shifted into RemovedIndex is likely the next of a bulk purchase/pickup of
-	// the same class (e.g. buying 20 walls in a row) - keep it selected so Build Mode can chain
-	// placements without a full rescan.
-	if (StoredEntries.IsValidIndex(RemovedIndex) && StoredEntries[RemovedIndex].ActorClass == Consumed.ActorClass)
+	for (int32 i = 0; i < HotbarSize; ++i)
 	{
-		SelectedIndex = RemovedIndex;
-		return Consumed;
-	}
-
-	for (int32 i = 0; i < StoredEntries.Num(); ++i)
-	{
-		if (StoredEntries[i].ActorClass == Consumed.ActorClass)
+		if (SlotQualifies(Slots[i], bBuildablesOnly))
 		{
-			SelectedIndex = i;
-			return Consumed;
+			SetSelectedIndex(i);
+			return true;
 		}
 	}
 
-	SelectedIndex = StoredEntries.IsValidIndex(RemovedIndex) ? RemovedIndex : StoredEntries.Num() - 1;
+	return false;
+}
+
+FInventorySlot UHotbarComponent::ConsumeSelected()
+{
+	if (!Slots.IsValidIndex(SelectedIndex) || Slots[SelectedIndex].IsEmpty())
+	{
+		return FInventorySlot();
+	}
+
+	FInventorySlot& Slot = Slots[SelectedIndex];
+	FInventorySlot Consumed = Slot;
+	Consumed.Count = 1;
+
+	Slot.Count -= 1;
+
+	if (Slot.Count <= 0)
+	{
+		Slot.Reset();
+	}
+
+	OnInventoryChanged.Broadcast();
 	return Consumed;
+}
+
+void UHotbarComponent::OnSlotLeftClicked(int32 SlotIndex)
+{
+	if (!Slots.IsValidIndex(SlotIndex))
+	{
+		return;
+	}
+
+	FInventorySlot& Slot = Slots[SlotIndex];
+
+	if (CursorSlot.IsEmpty())
+	{
+		if (Slot.IsEmpty())
+		{
+			return;
+		}
+
+		CursorSlot = Slot;
+		Slot.Reset();
+		OnInventoryChanged.Broadcast();
+		OnCursorSlotChanged.Broadcast();
+		return;
+	}
+
+	if (Slot.IsEmpty())
+	{
+		Slot = CursorSlot;
+		CursorSlot.Reset();
+		OnInventoryChanged.Broadcast();
+		OnCursorSlotChanged.Broadcast();
+		return;
+	}
+
+	if (Slot.ActorClass == CursorSlot.ActorClass && Slot.Scale.Equals(CursorSlot.Scale))
+	{
+		const int32 Added = FMath::Min(CursorSlot.Count, Slot.StackSize - Slot.Count);
+		Slot.Count += Added;
+		CursorSlot.Count -= Added;
+
+		if (CursorSlot.Count <= 0)
+		{
+			CursorSlot.Reset();
+		}
+
+		OnInventoryChanged.Broadcast();
+		OnCursorSlotChanged.Broadcast();
+		return;
+	}
+
+	// Different items - swap outright.
+	const FInventorySlot Temp = Slot;
+	Slot = CursorSlot;
+	CursorSlot = Temp;
+	OnInventoryChanged.Broadcast();
+	OnCursorSlotChanged.Broadcast();
+}
+
+void UHotbarComponent::OnSlotRightClicked(int32 SlotIndex)
+{
+	if (!Slots.IsValidIndex(SlotIndex))
+	{
+		return;
+	}
+
+	if (CursorSlot.IsEmpty())
+	{
+		OnSlotLeftClicked(SlotIndex);
+		return;
+	}
+
+	FInventorySlot& Slot = Slots[SlotIndex];
+
+	if (Slot.IsEmpty())
+	{
+		Slot.ActorClass = CursorSlot.ActorClass;
+		Slot.Scale = CursorSlot.Scale;
+		Slot.StackSize = CursorSlot.StackSize;
+		Slot.Count = 1;
+	}
+	else if (Slot.ActorClass == CursorSlot.ActorClass && Slot.Scale.Equals(CursorSlot.Scale) && Slot.Count < Slot.StackSize)
+	{
+		Slot.Count += 1;
+	}
+	else
+	{
+		return;
+	}
+
+	CursorSlot.Count -= 1;
+
+	if (CursorSlot.Count <= 0)
+	{
+		CursorSlot.Reset();
+	}
+
+	OnInventoryChanged.Broadcast();
+	OnCursorSlotChanged.Broadcast();
 }

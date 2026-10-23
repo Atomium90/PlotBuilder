@@ -181,7 +181,7 @@ void UBuildModeComponent::ConfirmPlacement()
 		return;
 	}
 
-	FHotbarEntry SelectedEntry;
+	FInventorySlot SelectedEntry;
 
 	if (!HotbarComponent->GetSelectedEntry(SelectedEntry) || !SelectedEntry.ActorClass
 		|| !SelectedEntry.ActorClass->IsChildOf(ABuildablePiece::StaticClass()))
@@ -210,7 +210,7 @@ void UBuildModeComponent::ConfirmPlacement()
 	const uint8 OrientationToApply = static_cast<uint8>(((PendingQuarterTurns % 4) + 4) % 4);
 	const int32 RoofStepToApply = RoofStepValue;
 
-	const FHotbarEntry ConsumedEntry = HotbarComponent->ConsumeSelected();
+	const FInventorySlot ConsumedEntry = HotbarComponent->ConsumeSelected();
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = (Anchor != EBuildAnchor::Legacy)
@@ -249,7 +249,7 @@ void UBuildModeComponent::RefreshPreviewMesh()
 		return;
 	}
 
-	FHotbarEntry SelectedEntry;
+	FInventorySlot SelectedEntry;
 	const bool bHasBuildableSelected = HotbarComponent->GetSelectedEntry(SelectedEntry) && SelectedEntry.ActorClass
 		&& SelectedEntry.ActorClass->IsChildOf(ABuildablePiece::StaticClass());
 

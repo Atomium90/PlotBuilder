@@ -104,15 +104,6 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Cycle which hotbar entry is selected/previewed
 		EnhancedInputComponent->BindAction(CycleSelectionAction, ETriggerEvent::Started, this, &APlayerCharacter::CycleSelectionInput);
-
-		// Purchase: each action in the array buys the ShopCatalog row at its own index
-		for (int32 i = 0; i < PurchaseActions.Num(); ++i)
-		{
-			if (PurchaseActions[i])
-			{
-				EnhancedInputComponent->BindAction(PurchaseActions[i], ETriggerEvent::Started, HotbarComponent, &UHotbarComponent::PurchaseByIndex, i);
-			}
-		}
 	}
 	else
 	{
