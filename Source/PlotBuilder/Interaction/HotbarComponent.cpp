@@ -428,3 +428,23 @@ void UHotbarComponent::OnSlotRightClicked(int32 SlotIndex)
 	OnInventoryChanged.Broadcast();
 	OnCursorSlotChanged.Broadcast();
 }
+
+bool UHotbarComponent::ReturnCursorSlot()
+{
+	if (CursorSlot.IsEmpty())
+	{
+		return true;
+	}
+
+	const int32 Leftover = AddItem(CursorSlot.ActorClass, CursorSlot.Scale, CursorSlot.StackSize, CursorSlot.Count);
+	CursorSlot.Count = Leftover;
+
+	if (Leftover <= 0)
+	{
+		CursorSlot.Reset();
+	}
+
+	OnInventoryChanged.Broadcast();
+	OnCursorSlotChanged.Broadcast();
+	return Leftover <= 0;
+}

@@ -197,6 +197,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	void OnSlotRightClicked(int32 SlotIndex);
 
+	/**
+	 *  Puts the cursor-held stack (see GetCursorSlot) back into the grid - an existing matching
+	 *  stack with room first, an empty slot otherwise, same priority as AddItem. Call this when the
+	 *  inventory UI closes so a stack left on the cursor isn't silently lost. Returns true if the
+	 *  cursor ended up empty (fully returned); if the grid has no room at all, the cursor keeps
+	 *  whatever didn't fit rather than discarding it.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	bool ReturnCursorSlot();
+
 private:
 
 	static bool SlotQualifies(const FInventorySlot& Slot, bool bBuildablesOnly);
