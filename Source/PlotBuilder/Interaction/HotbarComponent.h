@@ -56,11 +56,11 @@ public:
 	UHotbarComponent();
 
 	/** Slot columns - also the hotbar's own size (see the class comment). */
-	UPROPERTY(EditAnywhere, Category = "Hotbar")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hotbar")
 	int32 NumColumns = 9;
 
 	/** Slot rows, hotbar included (row 0). */
-	UPROPERTY(EditAnywhere, Category = "Hotbar")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hotbar")
 	int32 NumRows = 4;
 
 	/** Distance in front of the view items are placed at. */
