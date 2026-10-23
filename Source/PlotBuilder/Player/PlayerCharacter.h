@@ -105,6 +105,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* CycleSelectionAction;
 
+	/** Toggle Inventory Input Action - see ToggleInventory() below. */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* ToggleInventoryAction;
+
+	/** Toggle Shop Input Action - see ToggleShop() below. */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* ToggleShopAction;
+
 public:
 	APlayerCharacter();
 
@@ -147,6 +155,18 @@ protected:
 	/** Cycle Hotbar Selection Input Action handler */
 	void CycleSelectionInput(const FInputActionValue& Value);
 
+	/**
+	 *  Toggle Inventory Input Action handler - no C++ state to flip (nothing here owns widget
+	 *  visibility), implement in the Blueprint to show/hide the inventory widget. Call
+	 *  UHotbarComponent::ReturnCursorSlot() on close so a stack left on the cursor isn't lost.
+	 */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Input")
+	void ToggleInventory();
+
+	/** Toggle Shop Input Action handler - same as ToggleInventory, implement in the Blueprint. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Input")
+	void ToggleShop();
+
 protected:
 
 	/** Set up input action bindings */
@@ -172,5 +192,13 @@ public:
 
 	/** Returns BuildModeComponent subobject **/
 	UBuildModeComponent* GetBuildModeComponent() const { return BuildModeComponent; }
+
+	/** Debug console command (open the console with ~, type "ListShop" + Enter): prints every ShopCatalog row's index, display name and cost, so Buy's index is known without any UI. */
+	UFUNCTION(Exec, Category = "Debug")
+	void ListShop() const;
+
+	/** Debug console command (console: "Buy <index>" + Enter): purchases the ShopCatalog row at ItemIndex (see ListShop for indices) - a stand-in for a real shop UI. */
+	UFUNCTION(Exec, Category = "Debug")
+	void Buy(int32 ItemIndex);
 
 };

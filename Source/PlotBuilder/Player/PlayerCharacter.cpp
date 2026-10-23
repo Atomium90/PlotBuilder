@@ -12,6 +12,8 @@
 #include "Interaction/PhysicsManipulationComponent.h"
 #include "Interaction/HotbarComponent.h"
 #include "Interaction/BuildModeComponent.h"
+#include "Interaction/ShopItemRow.h"
+#include "Engine/Engine.h"
 #include "PlotBuilder.h"
 
 DEFINE_LOG_CATEGORY(LogPlayerCharacter);
@@ -104,6 +106,10 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Cycle which hotbar entry is selected/previewed
 		EnhancedInputComponent->BindAction(CycleSelectionAction, ETriggerEvent::Started, this, &APlayerCharacter::CycleSelectionInput);
+
+		// Toggle the inventory/shop widgets - implemented in the Blueprint, see ToggleInventory/ToggleShop
+		EnhancedInputComponent->BindAction(ToggleInventoryAction, ETriggerEvent::Started, this, &APlayerCharacter::ToggleInventory);
+		EnhancedInputComponent->BindAction(ToggleShopAction, ETriggerEvent::Started, this, &APlayerCharacter::ToggleShop);
 	}
 	else
 	{
@@ -217,5 +223,57 @@ void APlayerCharacter::CycleSelectionInput(const FInputActionValue& Value)
 	if (Direction != 0 && HotbarComponent)
 	{
 		HotbarComponent->CycleSelection(Direction, BuildModeComponent && BuildModeComponent->IsBuildModeActive());
+	}
+}
+
+void APlayerCharacter::ListShop() const
+{
+	if (!HotbarComponent || !HotbarComponent->ShopCatalog)
+	{
+		return;
+	}
+
+	const TArray<FName> RowNames = HotbarComponent->ShopCatalog->GetRowNames();
+
+	for (int32 i = 0; i < RowNames.Num(); ++i)
+	{
+		const FShopItemRow* Row = HotbarComponent->ShopCatalog->FindRow<FShopItemRow>(RowNames[i], TEXT("ListShop"));
+
+		if (!Row)
+		{
+			continue;
+		}
+
+		const FString Line = FString::Printf(TEXT("[%d] %s - %d"), i, *Row->DisplayName.ToString(), Row->Cost);
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(600 + i, 10.f, FColor::Cyan, Line);
+		}
+
+		UE_LOG(LogPlayerCharacter, Log, TEXT("%s"), *Line);
+	}
+}
+
+void APlayerCharacter::Buy(int32 ItemIndex)
+{
+	if (!HotbarComponent || !HotbarComponent->ShopCatalog)
+	{
+		return;
+	}
+
+	const TArray<FName> RowNames = HotbarComponent->ShopCatalog->GetRowNames();
+
+	if (!RowNames.IsValidIndex(ItemIndex))
+	{
+		return;
+	}
+
+	const bool bBought = HotbarComponent->PurchaseRow(RowNames[ItemIndex]);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(650, 2.f, bBought ? FColor::Green : FColor::Red,
+			FString::Printf(TEXT("Buy %d: %s"), ItemIndex, bBought ? TEXT("ok") : TEXT("failed")));
 	}
 }
