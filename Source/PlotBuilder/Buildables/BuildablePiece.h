@@ -3,12 +3,15 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Interaction/Interactable.h"
+#include "Destruction/Damageable.h"
+#include "Destruction/DemolitionTypes.h"
 #include "StructuralSocket.h"
 #include "BuildAnchor.h"
 #include "BuildablePiece.generated.h"
 
 class UStaticMeshComponent;
 class UStructuralSupportComponent;
+class UDurabilityComponent;
 
 UENUM(BlueprintType)
 enum class EBuildablePieceState : uint8
@@ -31,7 +34,7 @@ enum class EBuildablePieceState : uint8
  *  since there's no economy system to enforce either value.
  */
 UCLASS(abstract)
-class ABuildablePiece : public AActor, public IInteractable
+class ABuildablePiece : public AActor, public IInteractable, public IDamageable
 {
 	GENERATED_BODY()
 
@@ -40,9 +43,18 @@ public:
 	ABuildablePiece();
 
 	UStaticMeshComponent* GetMeshComponent() const { return MeshComponent; }
+	UDurabilityComponent* GetDurabilityComponent() const { return DurabilityComponent; }
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buildable")
 	int32 Cost = 0;
+
+	/** What this piece is made of - see GDD §7.2. Set per-Blueprint class default, not per-instance. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	EDemolitionMaterial Material = EDemolitionMaterial::Wood;
+
+	/** This piece's role for the HP class factor lookup - see GDD §7.3. Set per-Blueprint class default. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	EPieceClass PieceClass = EPieceClass::ExteriorWall;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Buildable")
 	EBuildablePieceState State = EBuildablePieceState::Stock;
@@ -89,6 +101,7 @@ public:
 	float CollapseLifeSpan = 4.f;
 
 	virtual void Interact_Implementation(AActor* InteractingActor) override;
+	virtual void ApplyDamage_Implementation(const FDamageInfo& DamageInfo) override;
 
 	const TArray<FStructuralSocket>& GetSockets() const { return Sockets; }
 	float GetStability() const { return Stability; }
@@ -129,10 +142,30 @@ public:
 	/** Writes Stability into the mesh's Custom Primitive Data (index 0) for the debug color gradient - see UStructuralSupportComponent::bShowDebug. */
 	void UpdateStabilityDebugColor();
 
+protected:
+
+	virtual void BeginPlay() override;
+
 private:
+
+	/** DurabilityComponent->OnDurabilityDamaged / OnDurabilityStateChanged handler: writes the HP ratio into the mesh's Custom Primitive Data (index 1) for the damage tint - see UpdateStabilityDebugColor for index 0. */
+	UFUNCTION()
+	void HandleDurabilityDamaged(const FDamageInfo& DamageInfo);
+
+	UFUNCTION()
+	void HandleDurabilityStateChanged(EDurabilityState OldState, EDurabilityState NewState);
+
+	/** DurabilityComponent->OnDurabilityDestroyed handler. Stand-in until fracture exists: reuses the existing voluntary-removal path (unregister + Destroy), same end result as a future fracture-on-destroy, no new graph logic. */
+	UFUNCTION()
+	void HandleDurabilityDestroyed();
+
+	void UpdateDamageVisual();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UStaticMeshComponent* MeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UDurabilityComponent* DurabilityComponent;
 
 	float Stability = 0.f;
 	bool bIsStructuralAnchor = false;

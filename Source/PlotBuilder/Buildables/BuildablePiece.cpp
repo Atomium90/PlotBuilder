@@ -2,6 +2,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Interaction/HotbarComponent.h"
 #include "Environment/StructuralSupportComponent.h"
+#include "Destruction/DurabilityComponent.h"
 
 ABuildablePiece::ABuildablePiece()
 {
@@ -12,6 +13,47 @@ ABuildablePiece::ABuildablePiece()
 
 	MeshComponent->SetCollisionProfileName(FName("BlockAllDynamic"));
 	MeshComponent->SetMobility(EComponentMobility::Movable);
+
+	DurabilityComponent = CreateDefaultSubobject<UDurabilityComponent>(TEXT("DurabilityComponent"));
+}
+
+void ABuildablePiece::BeginPlay()
+{
+	Super::BeginPlay();
+
+	DurabilityComponent->OnDurabilityDamaged.AddDynamic(this, &ABuildablePiece::HandleDurabilityDamaged);
+	DurabilityComponent->OnDurabilityStateChanged.AddDynamic(this, &ABuildablePiece::HandleDurabilityStateChanged);
+	DurabilityComponent->OnDurabilityDestroyed.AddDynamic(this, &ABuildablePiece::HandleDurabilityDestroyed);
+
+	DurabilityComponent->InitializeFromRules(Material, PieceClass);
+}
+
+void ABuildablePiece::ApplyDamage_Implementation(const FDamageInfo& DamageInfo)
+{
+	DurabilityComponent->ApplyDamage(DamageInfo);
+}
+
+void ABuildablePiece::HandleDurabilityDamaged(const FDamageInfo& DamageInfo)
+{
+	UpdateDamageVisual();
+}
+
+void ABuildablePiece::HandleDurabilityStateChanged(EDurabilityState OldState, EDurabilityState NewState)
+{
+	UpdateDamageVisual();
+}
+
+void ABuildablePiece::HandleDurabilityDestroyed()
+{
+	Demolish();
+}
+
+void ABuildablePiece::UpdateDamageVisual()
+{
+	if (MeshComponent)
+	{
+		MeshComponent->SetCustomPrimitiveDataFloat(1, 1.f - DurabilityComponent->GetHPRatio());
+	}
 }
 
 void ABuildablePiece::Interact_Implementation(AActor* InteractingActor)

@@ -1,0 +1,69 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "DemolitionTypes.h"
+#include "DurabilityComponent.generated.h"
+
+class UDemolitionRules;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDurabilityDamaged, const FDamageInfo&, DamageInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDurabilityStateChanged, EDurabilityState, OldState, EDurabilityState, NewState);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDurabilityDestroyed);
+
+/**
+ *  Hit points, material and damage state for anything an IDamageable actor owns - see GDD §7.
+ *  Agnostic of its owner (no reference to ABuildablePiece or any other concrete class): the owner
+ *  calls InitializeFromRules once, then forwards IDamageable::ApplyDamage here and reacts to the
+ *  broadcast events. Mirrors UStructuralSupportComponent's "component does the math, owner decides
+ *  what to do about it" split.
+ */
+UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
+class UDurabilityComponent : public UActorComponent
+{
+	GENERATED_BODY()
+
+public:
+
+	UDurabilityComponent();
+
+	/** DA_DemolitionRules asset - set once per Blueprint class default, same pass as the owner's Material/PieceClass. */
+	UPROPERTY(EditDefaultsOnly, Category = "Destruction")
+	TObjectPtr<UDemolitionRules> Rules;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Destruction")
+	float CurrentHP = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Destruction")
+	float MaxHP = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Destruction")
+	EDurabilityState State = EDurabilityState::Intact;
+
+	UPROPERTY(BlueprintAssignable, Category = "Destruction")
+	FOnDurabilityDamaged OnDurabilityDamaged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Destruction")
+	FOnDurabilityStateChanged OnDurabilityStateChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Destruction")
+	FOnDurabilityDestroyed OnDurabilityDestroyed;
+
+	/** Computes and caches MaxHP from Rules (MaterialBaseHP[Material] x PieceClassFactor[PieceClass]), sets CurrentHP to MaxHP. Call once, typically from the owner's BeginPlay. */
+	UFUNCTION(BlueprintCallable, Category = "Destruction")
+	void InitializeFromRules(EDemolitionMaterial InMaterial, EPieceClass InPieceClass);
+
+	/** Subtracts DamageInfo.Amount from CurrentHP (clamped to 0), recomputes State against Rules' thresholds, and broadcasts OnDurabilityDamaged / OnDurabilityStateChanged / OnDurabilityDestroyed as appropriate. No-op once already Destroyed. */
+	UFUNCTION(BlueprintCallable, Category = "Destruction")
+	void ApplyDamage(const FDamageInfo& DamageInfo);
+
+	float GetHPRatio() const { return MaxHP > 0.f ? CurrentHP / MaxHP : 0.f; }
+	EDemolitionMaterial GetMaterial() const { return Material; }
+	EDurabilityState GetState() const { return State; }
+
+private:
+
+	EDurabilityState ComputeStateForRatio(float Ratio) const;
+
+	EDemolitionMaterial Material = EDemolitionMaterial::Wood;
+};
