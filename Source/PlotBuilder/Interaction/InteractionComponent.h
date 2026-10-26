@@ -29,6 +29,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Interaction|Debug")
 	bool bShowDebugFocusName = false;
 
+	/** If the focused actor has a UDurabilityComponent, show its HP/material/state on screen. */
+	UPROPERTY(EditAnywhere, Category = "Interaction|Debug")
+	bool bShowDebugDurability = false;
+
 protected:
 
 	virtual void BeginPlay() override;

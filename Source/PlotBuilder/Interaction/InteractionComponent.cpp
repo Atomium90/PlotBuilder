@@ -5,6 +5,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/EngineTypes.h"
+#include "Destruction/DurabilityComponent.h"
 
 UInteractionComponent::UInteractionComponent()
 {
@@ -69,6 +70,17 @@ void UInteractionComponent::UpdateFocus()
 	if (bShowDebugFocusName && CurrentFocus && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::Green, FString::Printf(TEXT("Focus: %s"), *CurrentFocus->GetActorNameOrLabel()));
+	}
+
+	if (bShowDebugDurability && CurrentFocus && GEngine)
+	{
+		if (const UDurabilityComponent* Durability = CurrentFocus->FindComponentByClass<UDurabilityComponent>())
+		{
+			GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Yellow, FString::Printf(TEXT("HP: %.0f / %.0f  Material: %s  State: %s"),
+				Durability->CurrentHP, Durability->MaxHP,
+				*UEnum::GetValueAsString(Durability->GetMaterial()),
+				*UEnum::GetValueAsString(Durability->GetState())));
+		}
 	}
 }
 
