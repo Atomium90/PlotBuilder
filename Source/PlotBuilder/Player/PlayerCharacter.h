@@ -15,6 +15,7 @@ class UInteractionComponent;
 class UPhysicsManipulationComponent;
 class UHotbarComponent;
 class UBuildModeComponent;
+class UToolbeltComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPlayerCharacter, Log, All);
@@ -50,6 +51,10 @@ class APlayerCharacter : public ACharacter
 	/** Preview + confirm placement flow for ABuildablePiece, separate from the instant Prop placement */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UBuildModeComponent* BuildModeComponent;
+
+	/** Equipped demolition tool slot, separate from the hotbar - see GDD §18.2 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UToolbeltComponent* ToolbeltComponent;
 
 protected:
 
@@ -113,6 +118,18 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* ToggleShopAction;
 
+	/** Cycle Equipped Tool Input Action (Axis1D: +1/-1 per step, e.g. mouse wheel) - mission context only, see IMC_Mission */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* CycleToolAction;
+
+	/** Tool Primary Use Input Action (e.g. Left Click) - mission context only */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* ToolPrimaryUseAction;
+
+	/** Tool Secondary Use Input Action (e.g. Right Click) - mission context only */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* ToolSecondaryUseAction;
+
 public:
 	APlayerCharacter();
 
@@ -155,6 +172,9 @@ protected:
 	/** Cycle Hotbar Selection Input Action handler */
 	void CycleSelectionInput(const FInputActionValue& Value);
 
+	/** Cycle Equipped Tool Input Action handler */
+	void CycleToolInput(const FInputActionValue& Value);
+
 	/**
 	 *  Toggle Inventory Input Action handler - no C++ state to flip (nothing here owns widget
 	 *  visibility), implement in the Blueprint to show/hide the inventory widget. Call
@@ -193,6 +213,9 @@ public:
 	/** Returns BuildModeComponent subobject **/
 	UBuildModeComponent* GetBuildModeComponent() const { return BuildModeComponent; }
 
+	/** Returns ToolbeltComponent subobject **/
+	UToolbeltComponent* GetToolbeltComponent() const { return ToolbeltComponent; }
+
 	/** Debug console command (open the console with ~, type "ListShop" + Enter): prints every ShopCatalog row's index, display name and cost, so Buy's index is known without any UI. */
 	UFUNCTION(Exec, Category = "Debug")
 	void ListShop() const;
@@ -200,5 +223,9 @@ public:
 	/** Debug console command (console: "Buy <index>" + Enter): purchases the ShopCatalog row at ItemIndex (see ListShop for indices) - a stand-in for a real shop UI. */
 	UFUNCTION(Exec, Category = "Debug")
 	void Buy(int32 ItemIndex);
+
+	/** Debug console command (console: "DebugDamageFocus <amount>" + Enter): applies Amount of damage to InteractionComponent's current focus if it implements IDamageable - a stand-in for an actual tool. */
+	UFUNCTION(Exec, Category = "Debug")
+	void DebugDamageFocus(float Amount);
 
 };

@@ -13,6 +13,9 @@
 #include "Interaction/HotbarComponent.h"
 #include "Interaction/BuildModeComponent.h"
 #include "Interaction/ShopItemRow.h"
+#include "Interaction/ToolbeltComponent.h"
+#include "Destruction/Damageable.h"
+#include "Destruction/DemolitionTypes.h"
 #include "Engine/Engine.h"
 #include "PlotBuilder.h"
 
@@ -62,6 +65,9 @@ APlayerCharacter::APlayerCharacter()
 
 	// Preview + confirm placement flow for ABuildablePiece
 	BuildModeComponent = CreateDefaultSubobject<UBuildModeComponent>(TEXT("BuildModeComponent"));
+
+	// Equipped demolition tool slot, separate from the hotbar
+	ToolbeltComponent = CreateDefaultSubobject<UToolbeltComponent>(TEXT("ToolbeltComponent"));
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -110,6 +116,13 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		// Toggle the inventory/shop widgets - implemented in the Blueprint, see ToggleInventory/ToggleShop
 		EnhancedInputComponent->BindAction(ToggleInventoryAction, ETriggerEvent::Started, this, &APlayerCharacter::ToggleInventory);
 		EnhancedInputComponent->BindAction(ToggleShopAction, ETriggerEvent::Started, this, &APlayerCharacter::ToggleShop);
+
+		// Cycle the equipped tool (mission context only)
+		EnhancedInputComponent->BindAction(CycleToolAction, ETriggerEvent::Started, this, &APlayerCharacter::CycleToolInput);
+
+		// Equipped tool primary/secondary use (mission context only)
+		EnhancedInputComponent->BindAction(ToolPrimaryUseAction, ETriggerEvent::Started, ToolbeltComponent, &UToolbeltComponent::PrimaryUse);
+		EnhancedInputComponent->BindAction(ToolSecondaryUseAction, ETriggerEvent::Started, ToolbeltComponent, &UToolbeltComponent::SecondaryUse);
 	}
 	else
 	{
@@ -226,6 +239,17 @@ void APlayerCharacter::CycleSelectionInput(const FInputActionValue& Value)
 	}
 }
 
+void APlayerCharacter::CycleToolInput(const FInputActionValue& Value)
+{
+	const float Raw = Value.Get<float>();
+	const int32 Direction = (Raw > 0.f) - (Raw < 0.f);
+
+	if (Direction != 0 && ToolbeltComponent)
+	{
+		ToolbeltComponent->CycleTool(Direction);
+	}
+}
+
 void APlayerCharacter::ListShop() const
 {
 	if (!HotbarComponent || !HotbarComponent->ShopCatalog)
@@ -275,5 +299,28 @@ void APlayerCharacter::Buy(int32 ItemIndex)
 	{
 		GEngine->AddOnScreenDebugMessage(650, 2.f, bBought ? FColor::Green : FColor::Red,
 			FString::Printf(TEXT("Buy %d: %s"), ItemIndex, bBought ? TEXT("ok") : TEXT("failed")));
+	}
+}
+
+void APlayerCharacter::DebugDamageFocus(float Amount)
+{
+	AActor* Focus = InteractionComponent ? InteractionComponent->GetCurrentFocus() : nullptr;
+
+	if (!Focus || !Focus->Implements<UDamageable>())
+	{
+		return;
+	}
+
+	FDamageInfo DamageInfo;
+	DamageInfo.Amount = Amount;
+	DamageInfo.ToolId = FName("Debug");
+	DamageInfo.HitLocation = Focus->GetActorLocation();
+	DamageInfo.Instigator = this;
+
+	IDamageable::Execute_ApplyDamage(Focus, DamageInfo);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(700, 2.f, FColor::Orange, FString::Printf(TEXT("DebugDamageFocus %s: -%.0f"), *Focus->GetActorNameOrLabel(), Amount));
 	}
 }
