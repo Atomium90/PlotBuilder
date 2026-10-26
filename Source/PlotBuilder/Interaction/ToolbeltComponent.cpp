@@ -1,4 +1,5 @@
 #include "ToolbeltComponent.h"
+#include "PhysicsManipulationComponent.h"
 #include "PlotBuilder.h"
 
 UToolbeltComponent::UToolbeltComponent()
@@ -25,10 +26,30 @@ void UToolbeltComponent::CycleTool(int32 Delta)
 
 void UToolbeltComponent::PrimaryUse()
 {
+	if (IsHandsEquipped())
+	{
+		if (UPhysicsManipulationComponent* Physics = GetOwner() ? GetOwner()->FindComponentByClass<UPhysicsManipulationComponent>() : nullptr)
+		{
+			Physics->Grab();
+		}
+
+		return;
+	}
+
 	UE_LOG(LogPlotBuilder, Verbose, TEXT("UToolbeltComponent::PrimaryUse: slot %d has no tool yet"), EquippedIndex);
 }
 
 void UToolbeltComponent::SecondaryUse()
 {
+	if (IsHandsEquipped())
+	{
+		if (UPhysicsManipulationComponent* Physics = GetOwner() ? GetOwner()->FindComponentByClass<UPhysicsManipulationComponent>() : nullptr)
+		{
+			Physics->Push();
+		}
+
+		return;
+	}
+
 	UE_LOG(LogPlotBuilder, Verbose, TEXT("UToolbeltComponent::SecondaryUse: slot %d has no tool yet"), EquippedIndex);
 }
