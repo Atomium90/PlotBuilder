@@ -9,6 +9,36 @@ UToolbeltComponent::UToolbeltComponent()
 
 void UToolbeltComponent::EquipSlot(int32 Index)
 {
+	if (bLocked)
+	{
+		return;
+	}
+
+	EquipSlotInternal(Index);
+}
+
+void UToolbeltComponent::CycleTool(int32 Delta)
+{
+	if (bLocked)
+	{
+		return;
+	}
+
+	EquipSlotInternal((EquippedIndex + Delta + NumSlots) % NumSlots);
+}
+
+void UToolbeltComponent::SetLocked(bool bNewLocked)
+{
+	bLocked = bNewLocked;
+
+	if (bLocked)
+	{
+		EquipSlotInternal(HandsSlotIndex);
+	}
+}
+
+void UToolbeltComponent::EquipSlotInternal(int32 Index)
+{
 	Index = FMath::Clamp(Index, 0, NumSlots - 1);
 
 	if (Index == EquippedIndex)
@@ -17,11 +47,6 @@ void UToolbeltComponent::EquipSlot(int32 Index)
 	}
 
 	EquippedIndex = Index;
-}
-
-void UToolbeltComponent::CycleTool(int32 Delta)
-{
-	EquipSlot((EquippedIndex + Delta + NumSlots) % NumSlots);
 }
 
 void UToolbeltComponent::PrimaryUse()

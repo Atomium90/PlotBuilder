@@ -24,13 +24,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Toolbelt")
 	int32 NumSlots = 5;
 
-	/** Switches to Index, clamped to [0, NumSlots). No-op if already equipped. */
+	/** Switches to Index, clamped to [0, NumSlots). No-op if already equipped, or if locked - see SetLocked. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void EquipSlot(int32 Index);
 
-	/** Moves the equipped slot by Delta, wrapping around - for the mouse wheel. */
+	/** Moves the equipped slot by Delta, wrapping around - for the mouse wheel. No-op if locked - see SetLocked. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void CycleTool(int32 Delta);
+
+	/** While locked, EquipSlot/CycleTool are no-ops and the equipped slot is forced back to Hands. For a build-only context (Lvl_Home) where Cycle/Primary/Secondary are bound everywhere (IMC_Universal) but there is nothing to switch to and Grab/Push must always stay reachable. */
+	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
+	void SetLocked(bool bNewLocked);
+
+	bool IsLocked() const { return bLocked; }
 
 	int32 GetEquippedIndex() const { return EquippedIndex; }
 	bool IsHandsEquipped() const { return EquippedIndex == HandsSlotIndex; }
@@ -47,5 +53,8 @@ private:
 
 	static constexpr int32 HandsSlotIndex = 0;
 
+	void EquipSlotInternal(int32 Index);
+
 	int32 EquippedIndex = HandsSlotIndex;
+	bool bLocked = false;
 };
