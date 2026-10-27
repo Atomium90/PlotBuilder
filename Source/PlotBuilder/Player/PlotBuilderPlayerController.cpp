@@ -51,9 +51,14 @@ void APlotBuilderPlayerController::SetupInputComponent()
 		// Add Input Mapping Context
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 		{
+			// Earlier entries get a higher priority, so when two contexts bind the same key to
+			// different actions, the one listed first in DefaultMappingContexts wins instead of it
+			// being an unspecified tie (every context used to be added at priority 0).
+			int32 Priority = DefaultMappingContexts.Num();
+
 			for (UInputMappingContext* CurrentContext : DefaultMappingContexts)
 			{
-				Subsystem->AddMappingContext(CurrentContext, 0);
+				Subsystem->AddMappingContext(CurrentContext, Priority--);
 			}
 
 			// only add these IMCs if we're not using mobile touch input
