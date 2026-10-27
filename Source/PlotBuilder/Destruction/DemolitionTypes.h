@@ -39,6 +39,16 @@ enum class EDurabilityState : uint8
 	Destroyed
 };
 
+/** The four demolition tools from GDD §7.4, used only to index DA_DemolitionRules' tool x material matrix - FDamageInfo::ToolId (FName) stays the free-form logging/debug id. */
+UENUM(BlueprintType)
+enum class EDemolitionTool : uint8
+{
+	Charge,
+	Sledgehammer,
+	Crowbar,
+	Jackhammer
+};
+
 /** One damage instance, passed to IDamageable::ApplyDamage - see GDD Appendix A. */
 USTRUCT(BlueprintType)
 struct FDamageInfo

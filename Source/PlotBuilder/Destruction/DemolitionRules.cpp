@@ -23,3 +23,17 @@ float UDemolitionRules::ComputeMaxHP(EDemolitionMaterial Material, EPieceClass P
 
 	return *BaseHP * *Factor;
 }
+
+float UDemolitionRules::ComputeDamage(EDemolitionTool Tool, EDemolitionMaterial Material, float BaseDamage) const
+{
+	const FToolMaterialMultipliers* ToolRow = ToolMaterialMatrix.Find(Tool);
+	const float* Multiplier = ToolRow ? ToolRow->Multipliers.Find(Material) : nullptr;
+
+	if (!Multiplier)
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("UDemolitionRules::ComputeDamage: no ToolMaterialMatrix entry for tool %d / material %d, falling back to a 1.0 multiplier"), (int32)Tool, (int32)Material);
+		return BaseDamage;
+	}
+
+	return BaseDamage * *Multiplier;
+}

@@ -4,12 +4,15 @@
 #include "Components/ActorComponent.h"
 #include "ToolbeltComponent.generated.h"
 
+class AExplosiveCharge;
+
 /**
  *  Owned/equipped demolition tool slot, separate from UHotbarComponent (construction pieces/props)
  *  - see GDD §18.2. Slot 0 (Hands) routes straight to the sibling UPhysicsManipulationComponent
  *  (Grab/Push), same as it already works in Lvl_Home - no separate Grab/Push bindings needed in
- *  the mission input context, LMB/RMB only ever mean one thing there. Slots 1-4 (the four
- *  demolition tools) are still stubs until they exist (Tuesday-Thursday).
+ *  the mission input context, LMB/RMB only ever mean one thing there. Slot 1 (Charge) spawns/
+ *  throws an AExplosiveCharge on secondary use, then detonates it on the next press - see
+ *  SpawnAndThrowCharge. Slots 2-4 (the melee tools) are still stubs until they exist (Wed/Thu).
  */
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class UToolbeltComponent : public UActorComponent
@@ -23,6 +26,22 @@ public:
 	/** Slot 0 = Hands, slots 1-4 = the four demolition tools - see GDD §14. */
 	UPROPERTY(EditDefaultsOnly, Category = "Toolbelt")
 	int32 NumSlots = 5;
+
+	/** Class spawned by slot 1's secondary use - see SpawnAndThrowCharge. */
+	UPROPERTY(EditDefaultsOnly, Category = "Toolbelt")
+	TSubclassOf<AExplosiveCharge> ExplosiveChargeClass;
+
+	/** Initial toss speed given to a freshly spawned charge. */
+	UPROPERTY(EditAnywhere, Category = "Toolbelt")
+	float ChargeThrowSpeed = 800.f;
+
+	/** Forward distance from the view point a charge is spawned at, so it doesn't spawn inside the player. */
+	UPROPERTY(EditAnywhere, Category = "Toolbelt")
+	float ChargeSpawnDistance = 150.f;
+
+	/** On-screen readout of the equipped slot - there's no real HUD indicator yet (Thursday's task), this is the stand-in. */
+	UPROPERTY(EditAnywhere, Category = "Toolbelt|Debug")
+	bool bShowDebug = true;
 
 	/** Switches to Index, clamped to [0, NumSlots). No-op if already equipped, or if locked - see SetLocked. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
@@ -49,12 +68,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void SecondaryUse();
 
+protected:
+
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
 private:
 
 	static constexpr int32 HandsSlotIndex = 0;
+	static constexpr int32 ChargeSlotIndex = 1;
 
 	void EquipSlotInternal(int32 Index);
+	void SpawnAndThrowCharge();
+
+	UFUNCTION()
+	void HandleChargeDestroyed(AActor* DestroyedActor);
 
 	int32 EquippedIndex = HandsSlotIndex;
 	bool bLocked = false;
+
+	UPROPERTY()
+	TObjectPtr<AExplosiveCharge> ActiveCharge;
 };

@@ -5,11 +5,21 @@
 #include "DemolitionTypes.h"
 #include "DemolitionRules.generated.h"
 
+/** Per-tool multipliers for one row of the tool x material matrix - wraps a TMap so UDemolitionRules can hold one per EDemolitionTool (UE doesn't support a TMap of TMaps as a UPROPERTY). */
+USTRUCT(BlueprintType)
+struct FToolMaterialMultipliers
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	TMap<EDemolitionMaterial, float> Multipliers;
+};
+
 /**
- *  Tunable constants for demolition (UDurabilityComponent), kept off to the side so they're
- *  editable without recompiling - same philosophy as UStructuralRules. Today's skeleton only
- *  covers HP and damage-state thresholds (GDD §7.3/§7.6); the tool x material matrix is added
- *  once the first tool exists.
+ *  Tunable constants for demolition (UDurabilityComponent, AExplosiveCharge, ADemolitionTool),
+ *  kept off to the side so they're editable without recompiling - same philosophy as
+ *  UStructuralRules. Covers HP and damage-state thresholds (GDD §7.3/§7.6) and the tool x
+ *  material matrix (GDD §7.5).
  */
 UCLASS(BlueprintType)
 class UDemolitionRules : public UDataAsset
@@ -34,7 +44,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
 	float CriticalThreshold = 0.35f;
 
+	/** Tool x material damage multipliers - see GDD §7.5. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	TMap<EDemolitionTool, FToolMaterialMultipliers> ToolMaterialMatrix;
+
 	/** MaterialBaseHP[Material] x PieceClassFactor[PieceClass]. Falls back to 100 (and logs a warning) if either key is missing from its map. */
 	UFUNCTION(BlueprintPure, Category = "Destruction")
 	float ComputeMaxHP(EDemolitionMaterial Material, EPieceClass PieceClass) const;
+
+	/** BaseDamage x ToolMaterialMatrix[Tool].Multipliers[Material]. Falls back to a 1.0 multiplier (and logs a warning) if either key is missing. */
+	UFUNCTION(BlueprintPure, Category = "Destruction")
+	float ComputeDamage(EDemolitionTool Tool, EDemolitionMaterial Material, float BaseDamage) const;
 };
