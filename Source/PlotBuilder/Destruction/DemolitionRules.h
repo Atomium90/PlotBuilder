@@ -5,6 +5,8 @@
 #include "DemolitionTypes.h"
 #include "DemolitionRules.generated.h"
 
+class USoundBase;
+
 /** Per-tool multipliers for one row of the tool x material matrix - wraps a TMap so UDemolitionRules can hold one per EDemolitionTool (UE doesn't support a TMap of TMaps as a UPROPERTY). */
 USTRUCT(BlueprintType)
 struct FToolMaterialMultipliers
@@ -48,6 +50,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
 	TMap<EDemolitionTool, FToolMaterialMultipliers> ToolMaterialMatrix;
 
+	/** Placeholder impact sound per material (hit feedback v1) - depends on what's hit, not what hit it, same as the damage tint. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Feedback")
+	TMap<EDemolitionMaterial, TObjectPtr<USoundBase>> ImpactSounds;
+
 	/** MaterialBaseHP[Material] x PieceClassFactor[PieceClass]. Falls back to 100 (and logs a warning) if either key is missing from its map. */
 	UFUNCTION(BlueprintPure, Category = "Destruction")
 	float ComputeMaxHP(EDemolitionMaterial Material, EPieceClass PieceClass) const;
@@ -55,4 +61,8 @@ public:
 	/** BaseDamage x ToolMaterialMatrix[Tool].Multipliers[Material]. Falls back to a 1.0 multiplier (and logs a warning) if either key is missing. */
 	UFUNCTION(BlueprintPure, Category = "Destruction")
 	float ComputeDamage(EDemolitionTool Tool, EDemolitionMaterial Material, float BaseDamage) const;
+
+	/** ImpactSounds[Material], or nullptr if unset - no warning, a missing placeholder sound is not an error. */
+	UFUNCTION(BlueprintPure, Category = "Destruction")
+	USoundBase* GetImpactSound(EDemolitionMaterial Material) const;
 };

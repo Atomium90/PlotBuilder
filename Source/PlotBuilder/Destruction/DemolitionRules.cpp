@@ -37,3 +37,9 @@ float UDemolitionRules::ComputeDamage(EDemolitionTool Tool, EDemolitionMaterial 
 
 	return BaseDamage * *Multiplier;
 }
+
+USoundBase* UDemolitionRules::GetImpactSound(EDemolitionMaterial Material) const
+{
+	const TObjectPtr<USoundBase>* Sound = ImpactSounds.Find(Material);
+	return Sound ? *Sound : nullptr;
+}

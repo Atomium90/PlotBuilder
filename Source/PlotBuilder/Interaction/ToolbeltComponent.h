@@ -5,6 +5,7 @@
 #include "ToolbeltComponent.generated.h"
 
 class AExplosiveCharge;
+class ADemolitionTool;
 
 /**
  *  Owned/equipped demolition tool slot, separate from UHotbarComponent (construction pieces/props)
@@ -12,7 +13,10 @@ class AExplosiveCharge;
  *  (Grab/Push), same as it already works in Lvl_Home - no separate Grab/Push bindings needed in
  *  the mission input context, LMB/RMB only ever mean one thing there. Slot 1 (Charge) spawns/
  *  throws an AExplosiveCharge on secondary use, then detonates it on the next press - see
- *  SpawnAndThrowCharge. Slots 2-4 (the melee tools) are still stubs until they exist (Wed/Thu).
+ *  SpawnAndThrowCharge. Slots 2-4 (Sledgehammer/Crowbar/Jackhammer) are ADemolitionTool
+ *  instances, spawned once in BeginPlay from MeleeToolClasses and kept for the owner's lifetime
+ *  (unlike the consumable charge) - PrimaryUse for those slots just forwards to the matching
+ *  instance's own ADemolitionTool::PrimaryUse.
  */
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class UToolbeltComponent : public UActorComponent
@@ -38,6 +42,10 @@ public:
 	/** Forward distance from the view point a charge is spawned at, so it doesn't spawn inside the player. */
 	UPROPERTY(EditAnywhere, Category = "Toolbelt")
 	float ChargeSpawnDistance = 150.f;
+
+	/** One ADemolitionTool class per melee slot (index 0 -> slot 2 Sledgehammer, 1 -> slot 3 Crowbar, 2 -> slot 4 Jackhammer). A slot left unset (e.g. Jackhammer before Thursday) stays a no-op. */
+	UPROPERTY(EditDefaultsOnly, Category = "Toolbelt")
+	TArray<TSubclassOf<ADemolitionTool>> MeleeToolClasses;
 
 	/** On-screen readout of the equipped slot - there's no real HUD indicator yet (Thursday's task), this is the stand-in. */
 	UPROPERTY(EditAnywhere, Category = "Toolbelt|Debug")
@@ -70,15 +78,21 @@ public:
 
 protected:
 
+	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
 
 	static constexpr int32 HandsSlotIndex = 0;
 	static constexpr int32 ChargeSlotIndex = 1;
+	static constexpr int32 FirstMeleeSlotIndex = 2;
 
 	void EquipSlotInternal(int32 Index);
 	void SpawnAndThrowCharge();
+	void SpawnMeleeTools();
+
+	/** SpawnedMeleeTools[Index - FirstMeleeSlotIndex] if Index is a melee slot with a spawned tool, else nullptr. */
+	ADemolitionTool* GetMeleeToolForSlot(int32 Index) const;
 
 	UFUNCTION()
 	void HandleChargeDestroyed(AActor* DestroyedActor);
@@ -88,4 +102,7 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<AExplosiveCharge> ActiveCharge;
+
+	UPROPERTY()
+	TArray<TObjectPtr<ADemolitionTool>> SpawnedMeleeTools;
 };
