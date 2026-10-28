@@ -6,6 +6,7 @@
 #include "Destruction/DemolitionRules.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "Engine/EngineTypes.h"
 #include "TimerManager.h"
 #include "PlotBuilder.h"
@@ -108,6 +109,12 @@ void AExplosiveCharge::Detonate()
 		{
 			UE_LOG(LogPlotBuilder, Log, TEXT("AExplosiveCharge::Detonate: player caught in blast radius - safety penalty stub"));
 		}
+	}
+
+	if (ExplosionSound)
+	{
+		const FVector BlastLocation = MeshComponent->DoesSocketExist(FName("Blast")) ? MeshComponent->GetSocketLocation(FName("Blast")) : Origin;
+		UGameplayStatics::PlaySoundAtLocation(this, ExplosionSound, BlastLocation);
 	}
 
 	Destroy();

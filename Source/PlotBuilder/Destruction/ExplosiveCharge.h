@@ -7,6 +7,7 @@
 
 class UStaticMeshComponent;
 class UDemolitionRules;
+class USoundBase;
 
 /**
  *  First demolition tool (GDD §7.4) - thrown/dropped physics actor, manual detonation. Mirrors
@@ -42,6 +43,10 @@ public:
 	/** DA_DemolitionRules asset - set once per Blueprint class default, same pass as UDurabilityComponent::Rules. */
 	UPROPERTY(EditDefaultsOnly, Category = "Charge")
 	TObjectPtr<UDemolitionRules> Rules;
+
+	/** Explosion sound, played from the mesh's "Blast" socket on detonation. Typically a SoundCue (e.g. SC_Charge_Explosion) that picks a random variant and adds pitch/volume jitter - the random pick deliberately isn't in code, so this stays a plain USoundBase and doesn't care whether it's one SoundWave or a Cue. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Charge")
+	TObjectPtr<USoundBase> ExplosionSound;
 
 	/** Called right after SpawnActor to give the charge its initial toss velocity. */
 	UFUNCTION(BlueprintCallable, Category = "Charge")
