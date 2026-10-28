@@ -24,3 +24,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Raw/WIP assets staged for import, not a deliverable - never tracked
+_Inbox/
+_AssetSources/
