@@ -62,6 +62,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Physics Manipulation")
 	void Push();
 
+	/** Launches the held object if there is one, otherwise does nothing - the Hands tool's mission-context throw (GDD §14), narrower than Push(). */
+	UFUNCTION(BlueprintCallable, Category = "Physics Manipulation")
+	void Throw();
+
 private:
 
 	UPROPERTY()

@@ -86,11 +86,9 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::LookInput);
 		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::LookInput);
 
-		// Grab: single press, picks up the current focus
-		EnhancedInputComponent->BindAction(GrabAction, ETriggerEvent::Started, PhysicsManipulationComponent, &UPhysicsManipulationComponent::Grab);
-
-		// Push: Launch if something is held, Push on the current focus otherwise
-		EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, PhysicsManipulationComponent, &UPhysicsManipulationComponent::Push);
+		// Legacy Grab/Push: single press, only act while the toolbelt is locked (Lvl_Home) - see LegacyGrabInput/LegacyPushInput
+		EnhancedInputComponent->BindAction(GrabAction, ETriggerEvent::Started, this, &APlayerCharacter::LegacyGrabInput);
+		EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &APlayerCharacter::LegacyPushInput);
 
 		// Interact: generic Interact() on the current focus (also how storable objects get picked up)
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, InteractionComponent, &UInteractionComponent::TryInteract);
@@ -122,6 +120,8 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Equipped tool primary/secondary use (mission context only)
 		EnhancedInputComponent->BindAction(ToolPrimaryUseAction, ETriggerEvent::Started, ToolbeltComponent, &UToolbeltComponent::PrimaryUse);
+		EnhancedInputComponent->BindAction(ToolPrimaryUseAction, ETriggerEvent::Completed, ToolbeltComponent, &UToolbeltComponent::ReleasePrimaryUse);
+		EnhancedInputComponent->BindAction(ToolPrimaryUseAction, ETriggerEvent::Canceled, ToolbeltComponent, &UToolbeltComponent::ReleasePrimaryUse);
 		EnhancedInputComponent->BindAction(ToolSecondaryUseAction, ETriggerEvent::Started, ToolbeltComponent, &UToolbeltComponent::SecondaryUse);
 	}
 	else
@@ -247,6 +247,22 @@ void APlayerCharacter::CycleToolInput(const FInputActionValue& Value)
 	if (Direction != 0 && ToolbeltComponent)
 	{
 		ToolbeltComponent->CycleTool(Direction);
+	}
+}
+
+void APlayerCharacter::LegacyGrabInput()
+{
+	if (ToolbeltComponent && ToolbeltComponent->IsLocked() && PhysicsManipulationComponent)
+	{
+		PhysicsManipulationComponent->Grab();
+	}
+}
+
+void APlayerCharacter::LegacyPushInput()
+{
+	if (ToolbeltComponent && ToolbeltComponent->IsLocked() && PhysicsManipulationComponent)
+	{
+		PhysicsManipulationComponent->Push();
 	}
 }
 

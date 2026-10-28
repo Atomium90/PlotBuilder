@@ -9,9 +9,11 @@ class ADemolitionTool;
 
 /**
  *  Owned/equipped demolition tool slot, separate from UHotbarComponent (construction pieces/props)
- *  - see GDD §18.2. Slot 0 (Hands) routes straight to the sibling UPhysicsManipulationComponent
- *  (Grab/Push), same as it already works in Lvl_Home - no separate Grab/Push bindings needed in
- *  the mission input context, LMB/RMB only ever mean one thing there. Slot 1 (Charge) spawns/
+ *  - see GDD §18.2. Slot 0 (Hands) routes straight to the sibling UPhysicsManipulationComponent:
+ *  PrimaryUse Grabs, SecondaryUse Throws (no-op if nothing is held - GDD §14's grab/carry/throw,
+ *  deliberately narrower than Lvl_Home's legacy Grab/Push, which also shoves an unheld focus and
+ *  stays reachable there through APlayerCharacter's locked-toolbelt gate, not through this class).
+ *  Slot 1 (Charge) spawns/
  *  throws an AExplosiveCharge on secondary use, then detonates it on the next press - see
  *  SpawnAndThrowCharge. Slots 2-4 (Sledgehammer/Crowbar/Jackhammer) are ADemolitionTool
  *  instances, spawned once in BeginPlay from MeleeToolClasses and kept for the owner's lifetime
@@ -59,7 +61,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void CycleTool(int32 Delta);
 
-	/** While locked, EquipSlot/CycleTool are no-ops and the equipped slot is forced back to Hands. For a build-only context (Lvl_Home) where Cycle/Primary/Secondary are bound everywhere (IMC_Universal) but there is nothing to switch to and Grab/Push must always stay reachable. */
+	/** While locked, EquipSlot/CycleTool are no-ops and the equipped slot is forced back to Hands. For a build-only context (Lvl_Home): also the signal APlayerCharacter uses to re-enable its legacy, full-featured Grab/Push bindings (push-on-unheld-focus included) instead of routing LMB/RMB through this toolbelt - see APlayerCharacter::LegacyGrabInput/LegacyPushInput. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void SetLocked(bool bNewLocked);
 
@@ -72,9 +74,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void PrimaryUse();
 
-	/** Secondary use (RMB) on the currently equipped tool. Slot 0 (Hands): Push/Launch. Slots 1-4: no-op until an actual tool exists (Tuesday onward). */
+	/** Secondary use (RMB) on the currently equipped tool. Slot 0 (Hands): Throw (no-op if nothing held). Slots 1-4: no-op until an actual tool exists (Tuesday onward). */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void SecondaryUse();
+
+	/** Primary use released (LMB up) - stops a continuous melee tool (e.g. the jackhammer). No-op for Hands/Charge/discrete tools. */
+	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
+	void ReleasePrimaryUse();
 
 protected:
 

@@ -122,7 +122,7 @@ void UToolbeltComponent::SecondaryUse()
 	{
 		if (UPhysicsManipulationComponent* Physics = GetOwner() ? GetOwner()->FindComponentByClass<UPhysicsManipulationComponent>() : nullptr)
 		{
-			Physics->Push();
+			Physics->Throw();
 		}
 
 		return;
@@ -143,6 +143,14 @@ void UToolbeltComponent::SecondaryUse()
 	}
 
 	UE_LOG(LogPlotBuilder, Verbose, TEXT("UToolbeltComponent::SecondaryUse: slot %d has no tool yet"), EquippedIndex);
+}
+
+void UToolbeltComponent::ReleasePrimaryUse()
+{
+	if (ADemolitionTool* MeleeTool = GetMeleeToolForSlot(EquippedIndex))
+	{
+		MeleeTool->ReleasePrimaryUse();
+	}
 }
 
 void UToolbeltComponent::SpawnAndThrowCharge()

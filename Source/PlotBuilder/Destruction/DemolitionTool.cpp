@@ -64,6 +64,14 @@ void ADemolitionTool::PrimaryUse()
 
 	bBusy = true;
 
+	if (ToolData->bContinuous)
+	{
+		const float Interval = ToolData->Rate > 0.f ? 1.f / ToolData->Rate : 1.f;
+		ResolveHit();
+		GetWorldTimerManager().SetTimer(HitTimerHandle, this, &ADemolitionTool::ResolveHit, Interval, true);
+		return;
+	}
+
 	const float WindUp = FMath::Max(0.f, ToolData->WindUpDuration);
 	const float Cycle = ToolData->Rate > 0.f ? 1.f / ToolData->Rate : 1.f;
 	const float BusyDuration = FMath::Max(Cycle, WindUp);
@@ -85,6 +93,17 @@ void ADemolitionTool::PrimaryUse()
 	{
 		ClearBusy();
 	}
+}
+
+void ADemolitionTool::ReleasePrimaryUse()
+{
+	if (!ToolData || !ToolData->bContinuous)
+	{
+		return;
+	}
+
+	GetWorldTimerManager().ClearTimer(HitTimerHandle);
+	ClearBusy();
 }
 
 void ADemolitionTool::ClearBusy()

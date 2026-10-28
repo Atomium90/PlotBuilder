@@ -37,10 +37,18 @@ public:
 
 	/**
 	 *  Primary action (LMB). No-op while busy (wind-up + cooldown) or if ToolData is unset.
-	 *  Continuous tools (ToolData->bContinuous) are not handled yet - Thursday's jackhammer task.
+	 *  Continuous tools (ToolData->bContinuous) start ticking damage at ToolData->Rate until
+	 *  ReleasePrimaryUse() is called - see UToolbeltComponent::PrimaryUse/ReleasePrimaryUse.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Tool")
 	void PrimaryUse();
+
+	/**
+	 *  Stops a continuous tool started by PrimaryUse() (LMB released). No-op for discrete tools,
+	 *  so it is safe to call on every slot regardless of which tool is equipped.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Tool")
+	void ReleasePrimaryUse();
 
 	/** Shows/hides the held mesh - UToolbeltComponent calls this on equip/unequip so only the active tool is visible. */
 	UFUNCTION(BlueprintCallable, Category = "Tool")

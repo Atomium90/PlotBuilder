@@ -74,11 +74,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* MouseLookAction;
 
-	/** Grab Input Action: hold to Pull, release to Launch */
+	/** Grab Input Action: hold to Pull, release to Launch - legacy full-featured binding, only acts while the toolbelt is locked (Lvl_Home); see LegacyGrabInput */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* GrabAction;
 
-	/** Push Input Action */
+	/** Push Input Action - legacy full-featured binding (Launch if holding, otherwise pushes the focus), only acts while the toolbelt is locked (Lvl_Home); see LegacyPushInput */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* PushAction;
 
@@ -174,6 +174,12 @@ protected:
 
 	/** Cycle Equipped Tool Input Action handler */
 	void CycleToolInput(const FInputActionValue& Value);
+
+	/** Grab Input Action handler - forwards to PhysicsManipulationComponent only while the toolbelt is locked (Lvl_Home); mission levels Grab through the toolbelt's Hands slot instead. */
+	void LegacyGrabInput();
+
+	/** Push Input Action handler - same gating as LegacyGrabInput. */
+	void LegacyPushInput();
 
 	/**
 	 *  Toggle Inventory Input Action handler - no C++ state to flip (nothing here owns widget

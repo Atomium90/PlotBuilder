@@ -99,6 +99,14 @@ void UPhysicsManipulationComponent::Push()
 	}
 }
 
+void UPhysicsManipulationComponent::Throw()
+{
+	if (IsValid(HeldComponent))
+	{
+		LaunchHeld();
+	}
+}
+
 void UPhysicsManipulationComponent::LaunchHeld()
 {
 	FVector ViewForward;
