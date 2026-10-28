@@ -82,7 +82,17 @@ void UToolbeltComponent::EquipSlotInternal(int32 Index)
 		return;
 	}
 
+	if (ADemolitionTool* PreviouslyEquipped = GetMeleeToolForSlot(EquippedIndex))
+	{
+		PreviouslyEquipped->SetToolVisible(false);
+	}
+
 	EquippedIndex = Index;
+
+	if (ADemolitionTool* NewlyEquipped = GetMeleeToolForSlot(EquippedIndex))
+	{
+		NewlyEquipped->SetToolVisible(true);
+	}
 }
 
 void UToolbeltComponent::PrimaryUse()

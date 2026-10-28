@@ -3,6 +3,9 @@
 #include "DemolitionRules.h"
 #include "Damageable.h"
 #include "DurabilityComponent.h"
+#include "Player/PlayerCharacter.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -18,6 +21,32 @@
 ADemolitionTool::ADemolitionTool()
 {
 	PrimaryActorTick.bCanEverTick = false;
+
+	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
+	SetRootComponent(MeshComponent);
+	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MeshComponent->SetSimulatePhysics(false);
+}
+
+void ADemolitionTool::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (const APlayerCharacter* OwnerCharacter = Cast<APlayerCharacter>(GetOwner()))
+	{
+		if (USkeletalMeshComponent* FirstPersonMesh = OwnerCharacter->GetFirstPersonMesh())
+		{
+			AttachToComponent(FirstPersonMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, HandSocketName);
+			SetActorRelativeTransform(HandOffset);
+		}
+	}
+
+	SetToolVisible(false);
+}
+
+void ADemolitionTool::SetToolVisible(bool bVisible)
+{
+	SetActorHiddenInGame(!bVisible);
 }
 
 void ADemolitionTool::PrimaryUse()

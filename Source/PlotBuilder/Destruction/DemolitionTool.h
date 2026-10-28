@@ -7,6 +7,7 @@
 
 class UDemolitionToolData;
 class UDemolitionRules;
+class UStaticMeshComponent;
 
 /**
  *  Shared base for the melee demolition tools (GDD §18): one C++ class, BP_Sledgehammer /
@@ -40,6 +41,27 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Tool")
 	void PrimaryUse();
+
+	/** Shows/hides the held mesh - UToolbeltComponent calls this on equip/unequip so only the active tool is visible. */
+	UFUNCTION(BlueprintCallable, Category = "Tool")
+	void SetToolVisible(bool bVisible);
+
+protected:
+
+	/** Mesh held in the player's hand - BP assigns the Static Mesh (e.g. SM_Sledgehammer from _Inbox/Tools). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tool|Visual", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UStaticMeshComponent> MeshComponent;
+
+	/** Socket on the player's first-person mesh this tool attaches to - must match a socket actually authored on that skeleton. */
+	UPROPERTY(EditDefaultsOnly, Category = "Tool|Visual")
+	FName HandSocketName = FName("GripPoint");
+
+	/** Fine-tuning offset applied after snapping to HandSocketName, since each mesh's pivot/scale differs - adjust by eye in the BP viewport. */
+	UPROPERTY(EditDefaultsOnly, Category = "Tool|Visual")
+	FTransform HandOffset = FTransform::Identity;
+
+	/** Attaches MeshComponent to the owner's first-person mesh at HandSocketName, then applies HandOffset. Hidden by default - UToolbeltComponent shows it once equipped. */
+	virtual void BeginPlay() override;
 
 private:
 
