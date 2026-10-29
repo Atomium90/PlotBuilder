@@ -35,9 +35,13 @@ struct FRegisteredSocket
  *
  *  Neighbors are found by a grid cell lookup from each piece's declared Sockets (data on the BP,
  *  never authored on the mesh) rather than a physics overlap - see claude/Kit greybox specs des
- *  pieces et plan de remplacement.md for the socket table this mirrors. Recomputed only on
- *  placement/removal, never per tick - cheap enough for a few hundred pieces with a plain fixed
- *  point relaxation, no priority queue needed.
+ *  pieces et plan de remplacement.md for the socket table this mirrors. Cheap enough for a few
+ *  hundred pieces with a plain fixed point relaxation, no priority queue needed.
+ *
+ *  RegisterPiece/UnregisterPiece no longer recompute inline - they just mark the graph dirty, and
+ *  TickComponent does the actual relaxation at most once per frame. This is what keeps a cascade of
+ *  N pieces collapsing in the same frame (BeginCollapse -> UnregisterPiece, one per piece) down to
+ *  one recompute instead of N nested ones.
  *
  *  Also owns the grid occupancy table (IsSlotFree/GetPieceAt) - separate concern from stability,
  *  but naturally lives here too since it's filled/cleared at the same two points (RegisterPiece/
@@ -51,6 +55,8 @@ class UStructuralSupportComponent : public UActorComponent
 public:
 
 	UStructuralSupportComponent();
+
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Structural")
 	TObjectPtr<UStructuralRules> Rules;
@@ -96,15 +102,15 @@ public:
 	/** Convenience overload for a Legacy piece: converts WorldLocation/WorldRotation to grid coordinates once, then calls the integer overload above. Not itself a UFUNCTION - UHT doesn't support overloading by parameter type. */
 	float ComputeStability(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation, int32 RoofStep = 0) const;
 
-	/** Adds Piece's sockets to the neighbor table (and, for a grid-anchored piece, occupies its slot), links it to whatever matches, then recomputes stability for the whole plot. */
+	/** Adds Piece's sockets to the neighbor table (and, for a grid-anchored piece, occupies its slot), links it to whatever matches, then marks the plot's stability dirty (recomputed on the next TickComponent, see MarkDirty). */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
 	void RegisterPiece(ABuildablePiece* Piece);
 
 	/**
 	 *  Removes Piece's sockets from the neighbor table (and frees its occupancy slot, if any), then
-	 *  recomputes stability for the whole plot - this is what lets removing one piece cascade to
-	 *  whatever depended on it, since anything that loses its only path to an anchor collapses as
-	 *  part of the same recompute.
+	 *  marks the plot's stability dirty - this is what lets removing one piece cascade to whatever
+	 *  depended on it, since anything that loses its only path to an anchor collapses as part of the
+	 *  next recompute.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
 	void UnregisterPiece(ABuildablePiece* Piece);
@@ -126,10 +132,15 @@ private:
 
 	void RecomputeStability();
 
+	/** Flags a pending RecomputeStability for the next TickComponent, instead of recomputing inline - see the class comment. */
+	void MarkDirty() { bRecomputeDirty = true; }
+
 	void OccupySlot(EBuildAnchor SlotType, const FIntVector& Cell, ABuildablePiece* Piece);
 	void FreeSlotsFor(ABuildablePiece* Piece);
 	TMap<FIntVector, TObjectPtr<ABuildablePiece>>* GetOccupancyMap(EBuildAnchor SlotType);
 	const TMap<FIntVector, TObjectPtr<ABuildablePiece>>* GetOccupancyMap(EBuildAnchor SlotType) const;
+
+	bool bRecomputeDirty = false;
 
 	UPROPERTY()
 	TArray<TObjectPtr<ABuildablePiece>> RegisteredPieces;

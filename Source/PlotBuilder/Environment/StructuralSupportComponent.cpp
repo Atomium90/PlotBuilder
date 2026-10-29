@@ -1,10 +1,22 @@
 #include "StructuralSupportComponent.h"
 #include "StructuralRules.h"
 #include "Buildables/BuildablePiece.h"
+#include "Destruction/DurabilityComponent.h"
 
 UStructuralSupportComponent::UStructuralSupportComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+}
+
+void UStructuralSupportComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (bRecomputeDirty)
+	{
+		bRecomputeDirty = false;
+		RecomputeStability();
+	}
 }
 
 FIntVector UStructuralSupportComponent::GetPieceCell(const FVector& WorldLocation) const
@@ -172,7 +184,7 @@ void UStructuralSupportComponent::RegisterPiece(ABuildablePiece* Piece)
 	}
 
 	Piece->SetIsStructuralAnchor(bFoundAnchor);
-	RecomputeStability();
+	MarkDirty();
 }
 
 void UStructuralSupportComponent::UnregisterPiece(ABuildablePiece* Piece)
@@ -194,7 +206,7 @@ void UStructuralSupportComponent::UnregisterPiece(ABuildablePiece* Piece)
 		}
 	}
 
-	RecomputeStability();
+	MarkDirty();
 }
 
 float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation, int32 RoofStep) const
@@ -234,7 +246,9 @@ float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSock
 			if (Entry.Owner && Entry.Owner->IsLoadBearing() && Entry.RoofStep == AbsoluteRoofStep && AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical))
 			{
 				const float Loss = bIsVertical ? VerticalLoss : HorizontalLoss;
-				BestStability = FMath::Max(BestStability, Entry.Owner->GetStability() - Loss);
+				const UDurabilityComponent* EntryDurability = Entry.Owner->GetDurabilityComponent();
+				const float Coupling = EntryDurability ? EntryDurability->GetStabilityCoupling() : 1.f;
+				BestStability = FMath::Max(BestStability, Entry.Owner->GetStability() * Coupling - Loss);
 			}
 		}
 	}
@@ -298,7 +312,9 @@ void UStructuralSupportComponent::RecomputeStability()
 					if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical))
 					{
 						const float Loss = bIsVertical ? VerticalLoss : HorizontalLoss;
-						BestStability = FMath::Max(BestStability, Entry.Owner->GetStability() - Loss);
+						const UDurabilityComponent* EntryDurability = Entry.Owner->GetDurabilityComponent();
+						const float Coupling = EntryDurability ? EntryDurability->GetStabilityCoupling() : 1.f;
+						BestStability = FMath::Max(BestStability, Entry.Owner->GetStability() * Coupling - Loss);
 					}
 				}
 			}
