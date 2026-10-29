@@ -61,6 +61,9 @@ public:
 	EDemolitionMaterial GetMaterial() const { return Material; }
 	EDurabilityState GetState() const { return State; }
 
+	/** UDemolitionRules::ComputeStabilityCoupling at GetHPRatio() - GDD §7.6's c(h). Lets UStructuralSupportComponent ask "how much of this piece's stability still gets through" without knowing about DA_DemolitionRules at all - same owner-forwards/component-computes split as everywhere else. */
+	float GetStabilityCoupling() const;
+
 private:
 
 	EDurabilityState ComputeStateForRatio(float Ratio) const;

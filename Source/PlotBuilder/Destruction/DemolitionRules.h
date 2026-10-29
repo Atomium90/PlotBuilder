@@ -6,6 +6,7 @@
 #include "DemolitionRules.generated.h"
 
 class USoundBase;
+class UCurveFloat;
 
 /** Per-tool multipliers for one row of the tool x material matrix - wraps a TMap so UDemolitionRules can hold one per EDemolitionTool (UE doesn't support a TMap of TMaps as a UPROPERTY). */
 USTRUCT(BlueprintType)
@@ -54,6 +55,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Feedback")
 	TMap<EDemolitionMaterial, TObjectPtr<USoundBase>> ImpactSounds;
 
+	/**
+	 *  Fraction of a piece's own stability it still transmits to whatever rests on it, keyed by its
+	 *  remaining-HP ratio - GDD §7.6's c(h): 1.0 at h >= 0.75, ~0.6 at h = 0.35, ~0.3 at h = 0.
+	 *  Optional - ComputeStabilityCoupling falls back to a hardcoded approximation of the same curve
+	 *  when this is unset, so an unassigned curve is a valid default, not a data error.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	TObjectPtr<UCurveFloat> StabilityTransmission;
+
 	/** MaterialBaseHP[Material] x PieceClassFactor[PieceClass]. Falls back to 100 (and logs a warning) if either key is missing from its map. */
 	UFUNCTION(BlueprintPure, Category = "Destruction")
 	float ComputeMaxHP(EDemolitionMaterial Material, EPieceClass PieceClass) const;
@@ -65,4 +75,8 @@ public:
 	/** ImpactSounds[Material], or nullptr if unset - no warning, a missing placeholder sound is not an error. */
 	UFUNCTION(BlueprintPure, Category = "Destruction")
 	USoundBase* GetImpactSound(EDemolitionMaterial Material) const;
+
+	/** StabilityTransmission->GetFloatValue(HPRatio) if assigned, otherwise the GDD §7.6 fallback curve (piecewise linear through (0, 0.3), (0.35, 0.6), (0.75, 1.0), flat at 1.0 beyond). */
+	UFUNCTION(BlueprintPure, Category = "Destruction")
+	float ComputeStabilityCoupling(float HPRatio) const;
 };

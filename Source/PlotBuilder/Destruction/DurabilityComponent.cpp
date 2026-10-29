@@ -51,6 +51,11 @@ void UDurabilityComponent::ApplyDamage(const FDamageInfo& DamageInfo)
 	}
 }
 
+float UDurabilityComponent::GetStabilityCoupling() const
+{
+	return Rules ? Rules->ComputeStabilityCoupling(GetHPRatio()) : 1.f;
+}
+
 EDurabilityState UDurabilityComponent::ComputeStateForRatio(float Ratio) const
 {
 	if (Ratio <= 0.f)
