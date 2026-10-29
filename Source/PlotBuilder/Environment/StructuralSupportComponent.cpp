@@ -2,6 +2,7 @@
 #include "StructuralRules.h"
 #include "Buildables/BuildablePiece.h"
 #include "Destruction/DurabilityComponent.h"
+#include "Components/StaticMeshComponent.h"
 
 UStructuralSupportComponent::UStructuralSupportComponent()
 {
@@ -16,6 +17,26 @@ void UStructuralSupportComponent::TickComponent(float DeltaTime, ELevelTick Tick
 	{
 		bRecomputeDirty = false;
 		RecomputeStability();
+	}
+}
+
+void UStructuralSupportComponent::SetShowDebug(bool bShow)
+{
+	bShowDebug = bShow;
+
+	for (ABuildablePiece* Piece : RegisteredPieces)
+	{
+		if (!Piece || !Piece->GetMeshComponent())
+		{
+			continue;
+		}
+
+		Piece->GetMeshComponent()->SetMaterial(0, bShow ? DebugHeatmapMaterial : nullptr);
+
+		if (bShow)
+		{
+			Piece->UpdateStabilityDebugColor();
+		}
 	}
 }
 

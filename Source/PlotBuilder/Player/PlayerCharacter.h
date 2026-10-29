@@ -234,4 +234,8 @@ public:
 	UFUNCTION(Exec, Category = "Debug")
 	void DebugDamageFocus(float Amount);
 
+	/** Debug console command (console: "DebugShowStability 1" or "0" + Enter): toggles the level's APlot's stability heat-map (UStructuralSupportComponent::SetShowDebug) - a stand-in for the GDD §18.8 pb.ShowStability proposal, scoped to just this one toggle for now. */
+	UFUNCTION(Exec, Category = "Debug")
+	void DebugShowStability(bool bShow);
+
 };

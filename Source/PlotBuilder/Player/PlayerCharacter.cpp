@@ -16,6 +16,9 @@
 #include "Interaction/ToolbeltComponent.h"
 #include "Destruction/Damageable.h"
 #include "Destruction/DemolitionTypes.h"
+#include "Environment/Plot.h"
+#include "Environment/StructuralSupportComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/Engine.h"
 #include "PlotBuilder.h"
 
@@ -338,5 +341,23 @@ void APlayerCharacter::DebugDamageFocus(float Amount)
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(700, 2.f, FColor::Orange, FString::Printf(TEXT("DebugDamageFocus %s: -%.0f"), *Focus->GetActorNameOrLabel(), Amount));
+	}
+}
+
+void APlayerCharacter::DebugShowStability(bool bShow)
+{
+	APlot* Plot = Cast<APlot>(UGameplayStatics::GetActorOfClass(GetWorld(), APlot::StaticClass()));
+	UStructuralSupportComponent* StructuralSupport = Plot ? Plot->GetStructuralSupport() : nullptr;
+
+	if (!StructuralSupport)
+	{
+		return;
+	}
+
+	StructuralSupport->SetShowDebug(bShow);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(701, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowStability: %s"), bShow ? TEXT("on") : TEXT("off")));
 	}
 }

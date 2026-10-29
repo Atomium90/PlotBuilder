@@ -8,6 +8,7 @@
 
 class ABuildablePiece;
 class UStructuralRules;
+class UMaterialInterface;
 
 /** One socket registered in the plot's neighbor table, with enough to resolve back to its owning piece. */
 USTRUCT()
@@ -61,9 +62,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Structural")
 	TObjectPtr<UStructuralRules> Rules;
 
-	/** Colors each registered piece by its stability via Custom Primitive Data (see UpdateStabilityDebugColor on ABuildablePiece) whenever stability is recomputed. */
+	/** Colors each registered piece by its stability via Custom Primitive Data (see UpdateStabilityDebugColor on ABuildablePiece) whenever stability is recomputed. Set at edit time only - toggle at runtime through SetShowDebug instead, which also swaps the heatmap material in. */
 	UPROPERTY(EditAnywhere, Category = "Structural|Debug")
 	bool bShowDebug = false;
+
+	/** Material swapped onto every registered piece's mesh (slot 0) while the heatmap is on - reads Stability from Custom Primitive Data index 0, see claude/Plan_Sprint_1.md's Friday notes. Swapping back to bShow = false reverts to each mesh's own default material (SetMaterial(0, nullptr)), not a cached one, so this never needs to remember what was there before. */
+	UPROPERTY(EditAnywhere, Category = "Structural|Debug")
+	TObjectPtr<UMaterialInterface> DebugHeatmapMaterial;
+
+	/** Toggles bShowDebug and, on every already-registered piece, swaps its mesh to DebugHeatmapMaterial (or back to its own default) to match - the runtime entry point for a debug command, unlike the EditAnywhere bShowDebug above which only takes effect at the next recompute. */
+	UFUNCTION(BlueprintCallable, Category = "Structural|Debug")
+	void SetShowDebug(bool bShow);
 
 	/** World location to grid cell, via Rules->CellSize/FloorHeight - the Legacy conversion path, also used to resolve a Legacy piece's GetStructuralCell(). */
 	FIntVector GetPieceCell(const FVector& WorldLocation) const;
