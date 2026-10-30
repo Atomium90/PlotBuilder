@@ -18,6 +18,36 @@ void UStructuralSupportComponent::TickComponent(float DeltaTime, ELevelTick Tick
 		bRecomputeDirty = false;
 		RecomputeStability();
 	}
+
+	// Drains CollapseQueue every tick, independent of the dirty flag above - a cascade must keep
+	// releasing pieces on ticks where nothing else changed.
+	const float Now = GetWorld()->GetTimeSeconds();
+	int32 DebugLine = 0;
+
+	for (int32 Index = CollapseQueue.Num() - 1; Index >= 0; --Index)
+	{
+		ABuildablePiece* Piece = CollapseQueue[Index].Piece.Get();
+
+		if (!Piece)
+		{
+			// Stale entry: the piece was destroyed by something else (e.g. a direct tool kill) while queued.
+			CollapseQueue.RemoveAt(Index);
+			continue;
+		}
+
+		if (Now >= CollapseQueue[Index].ReleaseTime)
+		{
+			Piece->BeginCollapse();
+			CollapseQueue.RemoveAt(Index);
+			continue;
+		}
+
+		if (bShowCollapseQueueDebug && GEngine && DebugLine < 20)
+		{
+			GEngine->AddOnScreenDebugMessage(800 + DebugLine++, DeltaTime, FColor::Yellow,
+				FString::Printf(TEXT("%s releases in %.2fs"), *Piece->GetActorNameOrLabel(), CollapseQueue[Index].ReleaseTime - Now));
+		}
+	}
 }
 
 void UStructuralSupportComponent::SetShowDebug(bool bShow)
@@ -219,7 +249,14 @@ void UStructuralSupportComponent::UnregisterPiece(ABuildablePiece* Piece)
 
 	for (auto It = SocketsByCell.CreateIterator(); It; ++It)
 	{
-		It.Value().RemoveAll([Piece](const FRegisteredSocket& Entry) { return Entry.Owner == Piece; });
+		const int32 RemovedCount = It.Value().RemoveAll([Piece](const FRegisteredSocket& Entry) { return Entry.Owner == Piece; });
+
+		if (RemovedCount > 0)
+		{
+			// Seeds the collapse-queue BFS (see ComputeHopDistances) - a cell, not Piece itself, since
+			// Piece may already be mid-Destroy() by the time RecomputeStability consumes this.
+			RecentlyVacatedCells.Add(It.Key());
+		}
 
 		if (It.Value().Num() == 0)
 		{
@@ -277,8 +314,146 @@ float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSock
 	return BestStability;
 }
 
+TMap<ABuildablePiece*, int32> UStructuralSupportComponent::ComputeHopDistances() const
+{
+	TMap<ABuildablePiece*, int32> HopDistances;
+
+	if (RecentlyVacatedCells.Num() == 0)
+	{
+		return HopDistances;
+	}
+
+	// Seed hop 0: any registered piece with a socket resolving to a vacated cell. The piece that
+	// used to be there is already gone from SocketsByCell, so there's nothing left to match socket
+	// types against - being anchored to the same cell it left is adjacency enough for cascade timing.
+	TArray<ABuildablePiece*> Frontier;
+
+	for (ABuildablePiece* Piece : RegisteredPieces)
+	{
+		if (!Piece || HopDistances.Contains(Piece))
+		{
+			continue;
+		}
+
+		for (const FStructuralSocket& Socket : Piece->GetSockets())
+		{
+			if (RecentlyVacatedCells.Contains(GetSocketCell(Piece, Socket)))
+			{
+				HopDistances.Add(Piece, 0);
+				Frontier.Add(Piece);
+				break;
+			}
+		}
+	}
+
+	// BFS outward over the same socket-adjacency graph the stability relaxation below walks, but
+	// over ANY link (not just load-bearing) - hop distance is about physical graph distance for
+	// cascade timing, not about who transmits stability to whom.
+	for (int32 Index = 0; Index < Frontier.Num(); ++Index)
+	{
+		ABuildablePiece* Current = Frontier[Index];
+		const int32 CurrentHop = HopDistances.FindRef(Current);
+
+		for (const FStructuralSocket& Socket : Current->GetSockets())
+		{
+			const FIntVector AbsoluteCell = GetSocketCell(Current, Socket);
+			const int32 AbsoluteRoofStep = GetSocketRoofStep(Current, Socket);
+			const TArray<FRegisteredSocket>* Entries = SocketsByCell.Find(AbsoluteCell);
+
+			if (!Entries)
+			{
+				continue;
+			}
+
+			for (const FRegisteredSocket& Entry : *Entries)
+			{
+				if (!Entry.Owner || Entry.Owner == Current || HopDistances.Contains(Entry.Owner) || Entry.RoofStep != AbsoluteRoofStep)
+				{
+					continue;
+				}
+
+				bool bIsVertical = false;
+
+				if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical))
+				{
+					HopDistances.Add(Entry.Owner, CurrentHop + 1);
+					Frontier.Add(Entry.Owner);
+				}
+			}
+		}
+	}
+
+	return HopDistances;
+}
+
+void UStructuralSupportComponent::EnqueueCollapse(const TArray<ABuildablePiece*>& ToCollapse, const TMap<ABuildablePiece*, int32>& HopDistances)
+{
+	float BaseDelay = 0.25f;
+	float HopDelay = 0.12f;
+	float Jitter = 0.08f;
+	float MaxCascadeSpread = 3.f;
+	bool bHaveRules = false;
+
+	struct FPendingEntry { ABuildablePiece* Piece; float SpreadDelay; };
+	TArray<FPendingEntry> Pending;
+	Pending.Reserve(ToCollapse.Num());
+
+	for (ABuildablePiece* Piece : ToCollapse)
+	{
+		if (!Piece || CollapseQueue.ContainsByPredicate([Piece](const FQueuedCollapse& Entry) { return Entry.Piece.Get() == Piece; }))
+		{
+			continue;
+		}
+
+		if (!bHaveRules)
+		{
+			if (const UDurabilityComponent* Durability = Piece->GetDurabilityComponent())
+			{
+				BaseDelay = Durability->GetBaseDelay();
+				HopDelay = Durability->GetHopDelay();
+				Jitter = Durability->GetJitter();
+				MaxCascadeSpread = Durability->GetMaxCascadeSpread();
+				bHaveRules = true;
+			}
+		}
+
+		const int32 Hop = HopDistances.FindRef(Piece);
+		const float SpreadDelay = FMath::Max(0.f, Hop * HopDelay + FMath::RandRange(-Jitter, Jitter));
+		Pending.Add({Piece, SpreadDelay});
+	}
+
+	if (Pending.Num() == 0)
+	{
+		return;
+	}
+
+	// Compress this batch's spread (hop*HopDelay + jitter only, BaseDelay is untouched) to fit
+	// MaxCascadeSpread, preserving relative order - a big cascade stays within the cap without
+	// flattening the difference between a hop-1 and a hop-5 piece.
+	float MaxSpreadDelay = 0.f;
+
+	for (const FPendingEntry& Entry : Pending)
+	{
+		MaxSpreadDelay = FMath::Max(MaxSpreadDelay, Entry.SpreadDelay);
+	}
+
+	const float CompressionScale = MaxSpreadDelay > MaxCascadeSpread ? MaxCascadeSpread / MaxSpreadDelay : 1.f;
+	const float Now = GetWorld()->GetTimeSeconds();
+
+	for (const FPendingEntry& Entry : Pending)
+	{
+		FQueuedCollapse Queued;
+		Queued.Piece = Entry.Piece;
+		Queued.ReleaseTime = Now + BaseDelay + Entry.SpreadDelay * CompressionScale;
+		CollapseQueue.Add(Queued);
+	}
+}
+
 void UStructuralSupportComponent::RecomputeStability()
 {
+	const TMap<ABuildablePiece*, int32> HopDistances = ComputeHopDistances();
+	RecentlyVacatedCells.Reset();
+
 	const float VerticalLoss = Rules ? Rules->VerticalLoss : 0.1f;
 	const float HorizontalLoss = Rules ? Rules->HorizontalLoss : 0.6f;
 	const float Threshold = Rules ? Rules->CollapseThreshold : 0.1f;
@@ -348,8 +523,9 @@ void UStructuralSupportComponent::RecomputeStability()
 		}
 	}
 
-	// Collect first, then collapse: BeginCollapse unregisters (and recomputes) immediately, which
-	// would otherwise mutate RegisteredPieces out from under this loop.
+	// Collect first, then enqueue: pieces no longer collapse immediately (see EnqueueCollapse) - they
+	// join CollapseQueue and BeginCollapse only fires once their staggered release time comes up, in
+	// TickComponent. Collecting into its own array still avoids mutating RegisteredPieces mid-loop.
 	TArray<ABuildablePiece*> ToCollapse;
 
 	for (ABuildablePiece* Piece : RegisteredPieces)
@@ -360,10 +536,7 @@ void UStructuralSupportComponent::RecomputeStability()
 		}
 	}
 
-	for (ABuildablePiece* Piece : ToCollapse)
-	{
-		Piece->BeginCollapse();
-	}
+	EnqueueCollapse(ToCollapse, HopDistances);
 
 	if (bShowDebug)
 	{

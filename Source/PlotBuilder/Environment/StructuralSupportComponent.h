@@ -74,6 +74,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Structural|Debug")
 	void SetShowDebug(bool bShow);
 
+	/** Draws the pending collapse queue on screen (piece name + seconds to release) every tick - see TickComponent. Independent of bShowDebug, which is the stability heatmap. */
+	UPROPERTY(EditAnywhere, Category = "Structural|Debug")
+	bool bShowCollapseQueueDebug = false;
+
+	/** Runtime entry point for a debug command, same pattern as SetShowDebug. */
+	UFUNCTION(BlueprintCallable, Category = "Structural|Debug")
+	void SetShowCollapseQueueDebug(bool bShow) { bShowCollapseQueueDebug = bShow; }
+
 	/** World location to grid cell, via Rules->CellSize/FloorHeight - the Legacy conversion path, also used to resolve a Legacy piece's GetStructuralCell(). */
 	FIntVector GetPieceCell(const FVector& WorldLocation) const;
 
@@ -141,6 +149,12 @@ private:
 
 	void RecomputeStability();
 
+	/** BFS hop distance (graph adjacency via SocketsByCell, any link direction) from RecentlyVacatedCells to every registered piece - used to stagger the collapse queue. Pieces unreachable from a vacated cell are absent from the result. */
+	TMap<ABuildablePiece*, int32> ComputeHopDistances() const;
+
+	/** Appends newly-unstable pieces (ToCollapse) to CollapseQueue with a release time derived from hop distance, compressing this batch's hop spread to fit Rules->MaxCascadeSpread if needed (BaseDelay is added after compression, untouched). */
+	void EnqueueCollapse(const TArray<ABuildablePiece*>& ToCollapse, const TMap<ABuildablePiece*, int32>& HopDistances);
+
 	/** Flags a pending RecomputeStability for the next TickComponent, instead of recomputing inline - see the class comment. */
 	void MarkDirty() { bRecomputeDirty = true; }
 
@@ -159,4 +173,23 @@ private:
 	TMap<FIntVector, TObjectPtr<ABuildablePiece>> FloorSlotOccupancy;
 	TMap<FIntVector, TObjectPtr<ABuildablePiece>> EdgeSlotOccupancy;
 	TMap<FIntVector, TObjectPtr<ABuildablePiece>> VertexSlotOccupancy;
+
+	/**
+	 *  Cells vacated by UnregisterPiece since the last RecomputeStability - seeds the hop-distance BFS
+	 *  for the collapse queue (§7.7). Cells, not piece pointers: the piece that triggered the
+	 *  unregister may already be mid-Destroy() by the time RecomputeStability runs (e.g. Demolish()'s
+	 *  synchronous Unregister-then-Destroy), so nothing here ever dereferences it. Cleared once
+	 *  consumed at the top of RecomputeStability.
+	 */
+	TSet<FIntVector> RecentlyVacatedCells;
+
+	/** One pending, staggered BeginCollapse() call - see EnqueueCollapse/TickComponent. */
+	struct FQueuedCollapse
+	{
+		TWeakObjectPtr<ABuildablePiece> Piece;
+		float ReleaseTime = 0.f;
+	};
+
+	/** Pieces found unstable by RecomputeStability, waiting for their staggered release time instead of collapsing immediately - see EnqueueCollapse. Drained every tick in TickComponent, independent of bRecomputeDirty. */
+	TArray<FQueuedCollapse> CollapseQueue;
 };

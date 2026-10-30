@@ -64,6 +64,16 @@ public:
 	/** UDemolitionRules::ComputeStabilityCoupling at GetHPRatio() - GDD §7.6's c(h). Lets UStructuralSupportComponent ask "how much of this piece's stability still gets through" without knowing about DA_DemolitionRules at all - same owner-forwards/component-computes split as everywhere else. */
 	float GetStabilityCoupling() const;
 
+	/**
+	 *  Forwarders to Rules' collapse-queue constants (GDD §7.7), with the same hardcoded fallback as
+	 *  the C++ field defaults - let UStructuralSupportComponent read them off any registered piece's
+	 *  durability component without knowing UDemolitionRules exists, same split as GetStabilityCoupling.
+	 */
+	float GetBaseDelay() const;
+	float GetHopDelay() const;
+	float GetJitter() const;
+	float GetMaxCascadeSpread() const;
+
 private:
 
 	EDurabilityState ComputeStateForRatio(float Ratio) const;

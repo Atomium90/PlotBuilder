@@ -56,6 +56,26 @@ float UDurabilityComponent::GetStabilityCoupling() const
 	return Rules ? Rules->ComputeStabilityCoupling(GetHPRatio()) : 1.f;
 }
 
+float UDurabilityComponent::GetBaseDelay() const
+{
+	return Rules ? Rules->BaseDelay : 0.25f;
+}
+
+float UDurabilityComponent::GetHopDelay() const
+{
+	return Rules ? Rules->HopDelay : 0.12f;
+}
+
+float UDurabilityComponent::GetJitter() const
+{
+	return Rules ? Rules->Jitter : 0.08f;
+}
+
+float UDurabilityComponent::GetMaxCascadeSpread() const
+{
+	return Rules ? Rules->MaxCascadeSpread : 3.f;
+}
+
 EDurabilityState UDurabilityComponent::ComputeStateForRatio(float Ratio) const
 {
 	if (Ratio <= 0.f)
