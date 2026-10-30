@@ -3,6 +3,8 @@
 #include "Interaction/HotbarComponent.h"
 #include "Environment/StructuralSupportComponent.h"
 #include "Destruction/DurabilityComponent.h"
+#include "Destruction/DemolitionRules.h"
+#include "Destruction/FragmentDebris.h"
 
 ABuildablePiece::ABuildablePiece()
 {
@@ -45,7 +47,15 @@ void ABuildablePiece::HandleDurabilityStateChanged(EDurabilityState OldState, ED
 
 void ABuildablePiece::HandleDurabilityDestroyed()
 {
-	Demolish();
+	// Direct kill (tool damage reached 0 HP) - fractures in place, no Falling phase, unlike the
+	// cascade path below. Unregister first, same as Demolish(), but destroy via Fracture instead.
+	if (StructuralComponent)
+	{
+		StructuralComponent->UnregisterPiece(this);
+	}
+
+	Fracture(GetActorLocation(), FVector::ZeroVector);
+	Destroy();
 }
 
 void ABuildablePiece::UpdateDamageVisual()
@@ -96,13 +106,76 @@ void ABuildablePiece::BeginCollapse()
 	if (MeshComponent)
 	{
 		MeshComponent->SetSimulatePhysics(true);
+		MeshComponent->SetNotifyRigidBodyCollision(true);
+		MeshComponent->OnComponentHit.AddDynamic(this, &ABuildablePiece::HandleCollapseHit);
 	}
 
-	SetLifeSpan(CollapseLifeSpan);
+	// CollapseLifeSpan is now an explicit, hookable deadline (fracture-on-timeout) instead of a
+	// plain SetLifeSpan - a piece that falls "softly" and never clears MinFractureImpactSpeed must
+	// still end up replaced by fragments, not silently vanish via engine lifespan.
+	GetWorldTimerManager().SetTimer(CollapseTimeoutHandle, this, &ABuildablePiece::HandleCollapseTimeout, CollapseLifeSpan, false);
 
 	if (StructuralComponent)
 	{
 		StructuralComponent->UnregisterPiece(this);
+	}
+}
+
+void ABuildablePiece::HandleCollapseHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+{
+	if (bHasFractured || !MeshComponent || MeshComponent->GetComponentVelocity().Size() < MinFractureImpactSpeed)
+	{
+		return;
+	}
+
+	bHasFractured = true;
+	GetWorldTimerManager().ClearTimer(CollapseTimeoutHandle);
+	Fracture(GetActorLocation(), FVector::ZeroVector);
+	Destroy();
+}
+
+void ABuildablePiece::HandleCollapseTimeout()
+{
+	if (bHasFractured)
+	{
+		return;
+	}
+
+	bHasFractured = true;
+	Fracture(GetActorLocation(), FVector::ZeroVector);
+	Destroy();
+}
+
+void ABuildablePiece::Fracture(const FVector& ScatterOrigin, const FVector& ScatterBias) const
+{
+	const UDemolitionRules* Rules = DurabilityComponent ? DurabilityComponent->Rules : nullptr;
+	UWorld* World = GetWorld();
+
+	if (!Rules || !World)
+	{
+		return;
+	}
+
+	const int32 Count = Rules->ComputeFragmentCount(PieceClass);
+	const FLinearColor Tint = Rules->GetFragmentTint(Material);
+	UClass* SpawnClass = Rules->FragmentClass ? Rules->FragmentClass.Get() : AFragmentDebris::StaticClass();
+
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const FVector RandomOffset = FMath::VRand() * FMath::FRandRange(0.f, Rules->FragmentScatterRadius);
+		const FRotator RandomRotation(FMath::FRandRange(0.f, 360.f), FMath::FRandRange(0.f, 360.f), FMath::FRandRange(0.f, 360.f));
+
+		AFragmentDebris* Fragment = World->SpawnActor<AFragmentDebris>(SpawnClass, ScatterOrigin + RandomOffset, RandomRotation);
+
+		if (!Fragment)
+		{
+			continue;
+		}
+
+		const FVector OutwardDirection = RandomOffset.IsNearlyZero() ? FMath::VRand() : RandomOffset.GetSafeNormal();
+		const FVector Impulse = OutwardDirection * Rules->FragmentImpulseStrength + ScatterBias;
+
+		Fragment->Launch(Impulse, Tint, Rules->FragmentLifetime, Rules->FragmentFadeDuration);
 	}
 }
 

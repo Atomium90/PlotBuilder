@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "TimerManager.h"
 #include "Interaction/Interactable.h"
 #include "Destruction/Damageable.h"
 #include "Destruction/DemolitionTypes.h"
@@ -10,6 +11,7 @@
 #include "BuildablePiece.generated.h"
 
 class UStaticMeshComponent;
+class UPrimitiveComponent;
 class UStructuralSupportComponent;
 class UDurabilityComponent;
 
@@ -155,9 +157,24 @@ private:
 	UFUNCTION()
 	void HandleDurabilityStateChanged(EDurabilityState OldState, EDurabilityState NewState);
 
-	/** DurabilityComponent->OnDurabilityDestroyed handler. Stand-in until fracture exists: reuses the existing voluntary-removal path (unregister + Destroy), same end result as a future fracture-on-destroy, no new graph logic. */
+	/** DurabilityComponent->OnDurabilityDestroyed handler: this piece was killed directly (tool damage reached 0 HP), not by losing structural support - fractures in place immediately, no Falling phase, then destroys itself. */
 	UFUNCTION()
 	void HandleDurabilityDestroyed();
+
+	/** MeshComponent->OnComponentHit handler, bound only while Collapsing - first significant impact (above MinFractureImpactSpeed) fractures the piece early instead of waiting out CollapseLifeSpan. */
+	UFUNCTION()
+	void HandleCollapseHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+
+	/** CollapseLifeSpan timer handler: a Falling piece that never took a significant hit still fractures on timeout, instead of silently vanishing - see BeginCollapse. */
+	void HandleCollapseTimeout();
+
+	/**
+	 *  Shared fracture entry point for both HandleDurabilityDestroyed (direct kill, no fall) and
+	 *  HandleCollapseHit/HandleCollapseTimeout (cascade release, after falling) - GDD §7.8's v1:
+	 *  generic fragments per EPieceClass, not per mesh (see DA_DemolitionRules). Spawns the fragments,
+	 *  does not destroy this actor - callers do that right after.
+	 */
+	void Fracture(const FVector& ScatterOrigin, const FVector& ScatterBias) const;
 
 	void UpdateDamageVisual();
 
@@ -169,6 +186,16 @@ private:
 
 	float Stability = 0.f;
 	bool bIsStructuralAnchor = false;
+
+	/** Timer backing the CollapseLifeSpan fracture-on-timeout fallback - see BeginCollapse/HandleCollapseTimeout. */
+	FTimerHandle CollapseTimeoutHandle;
+
+	/** Guards against fracturing twice if HandleCollapseHit and HandleCollapseTimeout both fire (e.g. hit arrives the same frame the timer does). */
+	bool bHasFractured = false;
+
+	/** Minimum impact speed (cm/s) on MeshComponent's hit event for a Falling piece to fracture early - below this, a grazing contact is ignored and the piece keeps falling. */
+	UPROPERTY(EditAnywhere, Category = "Structural")
+	float MinFractureImpactSpeed = 200.f;
 
 	/** Set by UBuildModeComponent::ConfirmPlacement for a grid-anchored piece - (0,0,0) and ignored for Legacy. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Structural", meta = (AllowPrivateAccess = "true"))
