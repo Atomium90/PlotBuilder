@@ -361,3 +361,21 @@ void APlayerCharacter::DebugShowStability(bool bShow)
 		GEngine->AddOnScreenDebugMessage(701, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowStability: %s"), bShow ? TEXT("on") : TEXT("off")));
 	}
 }
+
+void APlayerCharacter::DebugShowCollapseQueue(bool bShow)
+{
+	APlot* Plot = Cast<APlot>(UGameplayStatics::GetActorOfClass(GetWorld(), APlot::StaticClass()));
+	UStructuralSupportComponent* StructuralSupport = Plot ? Plot->GetStructuralSupport() : nullptr;
+
+	if (!StructuralSupport)
+	{
+		return;
+	}
+
+	StructuralSupport->SetShowCollapseQueueDebug(bShow);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(702, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowCollapseQueue: %s"), bShow ? TEXT("on") : TEXT("off")));
+	}
+}

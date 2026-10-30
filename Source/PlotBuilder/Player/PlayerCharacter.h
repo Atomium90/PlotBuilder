@@ -238,4 +238,8 @@ public:
 	UFUNCTION(Exec, Category = "Debug")
 	void DebugShowStability(bool bShow);
 
+	/** Debug console command (console: "DebugShowCollapseQueue 1" or "0" + Enter): toggles the level's APlot's on-screen collapse-queue readout (UStructuralSupportComponent::SetShowCollapseQueueDebug) - see GDD §7.7's staggered collapse. */
+	UFUNCTION(Exec, Category = "Debug")
+	void DebugShowCollapseQueue(bool bShow);
+
 };
