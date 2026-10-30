@@ -45,6 +45,25 @@ USoundBase* UDemolitionRules::GetImpactSound(EDemolitionMaterial Material) const
 	return Sound ? *Sound : nullptr;
 }
 
+int32 UDemolitionRules::ComputeFragmentCount(EPieceClass PieceClass) const
+{
+	const int32* Count = FragmentCountPerClass.Find(PieceClass);
+
+	if (!Count)
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("UDemolitionRules::ComputeFragmentCount: no FragmentCountPerClass entry for piece class %d, falling back to 4"), (int32)PieceClass);
+		return 4;
+	}
+
+	return FMath::Clamp(*Count, 3, 6);
+}
+
+FLinearColor UDemolitionRules::GetFragmentTint(EDemolitionMaterial Material) const
+{
+	const FLinearColor* Tint = FragmentTintColor.Find(Material);
+	return Tint ? *Tint : FLinearColor::Gray;
+}
+
 float UDemolitionRules::ComputeStabilityCoupling(float HPRatio) const
 {
 	if (StabilityTransmission)

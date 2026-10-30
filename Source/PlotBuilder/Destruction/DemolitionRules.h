@@ -7,6 +7,7 @@
 
 class USoundBase;
 class UCurveFloat;
+class AFragmentDebris;
 
 /** Per-tool multipliers for one row of the tool x material matrix - wraps a TMap so UDemolitionRules can hold one per EDemolitionTool (UE doesn't support a TMap of TMaps as a UPROPERTY). */
 USTRUCT(BlueprintType)
@@ -63,6 +64,58 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
 	TObjectPtr<UCurveFloat> StabilityTransmission;
+
+	/** Fixed reaction time added to every piece's collapse release time, before the per-hop spread - GDD §7.7. Not covered by MaxCascadeSpread's compression. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float BaseDelay = 0.25f;
+
+	/** Seconds of release delay added per BFS hop from the piece(s) that just vacated the structural graph - GDD §7.7. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float HopDelay = 0.12f;
+
+	/** Max random offset (+/-) added to a piece's hop-based delay, so same-hop pieces don't release in lockstep - GDD §7.7. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float Jitter = 0.08f;
+
+	/** Hard cap, in seconds, on the hops*HopDelay+jitter spread of one collapse batch - big cascades get their hop delays compressed to fit, BaseDelay is untouched - GDD §7.7. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float MaxCascadeSpread = 3.f;
+
+	/** Fragment count per piece class for fracture-on-destroy v1 (generic per-class shards, not per-mesh) - GDD §7.8. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	TMap<EPieceClass, int32> FragmentCountPerClass;
+
+	/** Fragment tint per material, read by AFragmentDebris via Custom Primitive Data - mirrors ImpactSounds' per-material map. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	TMap<EDemolitionMaterial, FLinearColor> FragmentTintColor;
+
+	/** Seconds a fragment lives before being destroyed. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float FragmentLifetime = 6.f;
+
+	/** Seconds before FragmentLifetime over which a fragment fades out. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float FragmentFadeDuration = 1.f;
+
+	/** Outward impulse strength applied to a fragment at spawn. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float FragmentImpulseStrength = 300.f;
+
+	/** Radius around the scatter origin within which a fragment spawns. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float FragmentScatterRadius = 60.f;
+
+	/** Fragment actor class to spawn - a BP child of AFragmentDebris carrying the fade material, same C++ base + BP wrapper split as ADemolitionTool/BP_Sledgehammer etc. Falls back to the plain AFragmentDebris class (no visual fade material) if unset. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	TSubclassOf<AFragmentDebris> FragmentClass;
+
+	/** FragmentCountPerClass[PieceClass], clamped to [3, 6]. Falls back to 4 (and logs a warning) if the class is missing - every class should have an entry. */
+	UFUNCTION(BlueprintPure, Category = "Destruction|Collapse")
+	int32 ComputeFragmentCount(EPieceClass PieceClass) const;
+
+	/** FragmentTintColor[Material], or a neutral grey if unset - no warning, matches GetImpactSound's "missing placeholder is not an error" stance. */
+	UFUNCTION(BlueprintPure, Category = "Destruction|Collapse")
+	FLinearColor GetFragmentTint(EDemolitionMaterial Material) const;
 
 	/** MaterialBaseHP[Material] x PieceClassFactor[PieceClass]. Falls back to 100 (and logs a warning) if either key is missing from its map. */
 	UFUNCTION(BlueprintPure, Category = "Destruction")
