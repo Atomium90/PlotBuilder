@@ -101,6 +101,62 @@ int32 UStructuralSupportComponent::GetSocketRoofStep(const ABuildablePiece* Piec
 	return Piece ? Piece->GetRoofStep() + Socket.RoofStep : 0;
 }
 
+FVector UStructuralSupportComponent::ComputeAwayFromNeighbourCentroid(const ABuildablePiece* Piece) const
+{
+	if (!Piece)
+	{
+		return FVector::ZeroVector;
+	}
+
+	TArray<const ABuildablePiece*> Neighbours;
+
+	for (const FStructuralSocket& Socket : Piece->GetSockets())
+	{
+		const FIntVector AbsoluteCell = GetSocketCell(Piece, Socket);
+		const int32 AbsoluteRoofStep = GetSocketRoofStep(Piece, Socket);
+		const TArray<FRegisteredSocket>* Entries = SocketsByCell.Find(AbsoluteCell);
+
+		if (!Entries)
+		{
+			continue;
+		}
+
+		for (const FRegisteredSocket& Entry : *Entries)
+		{
+			if (!Entry.Owner || Entry.Owner == Piece || Entry.RoofStep != AbsoluteRoofStep || Neighbours.Contains(Entry.Owner))
+			{
+				continue;
+			}
+
+			bool bIsVertical = false;
+
+			if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical))
+			{
+				Neighbours.Add(Entry.Owner);
+			}
+		}
+	}
+
+	if (Neighbours.Num() == 0)
+	{
+		return FVector::ZeroVector;
+	}
+
+	FVector Centroid = FVector::ZeroVector;
+
+	for (const ABuildablePiece* Neighbour : Neighbours)
+	{
+		Centroid += Neighbour->GetActorLocation();
+	}
+
+	Centroid /= Neighbours.Num();
+
+	FVector Direction = Piece->GetActorLocation() - Centroid;
+	Direction.Z = 0.f;
+
+	return Direction.IsNearlyZero() ? FVector::ZeroVector : Direction.GetSafeNormal();
+}
+
 FIntVector UStructuralSupportComponent::RotateCellOffset(const FIntVector& Offset, int32 QuarterTurns)
 {
 	FIntVector Result = Offset;

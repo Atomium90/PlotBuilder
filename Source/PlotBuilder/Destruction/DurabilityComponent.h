@@ -73,6 +73,7 @@ public:
 	float GetHopDelay() const;
 	float GetJitter() const;
 	float GetMaxCascadeSpread() const;
+	float GetCollapseImpulseStrength() const;
 
 private:
 

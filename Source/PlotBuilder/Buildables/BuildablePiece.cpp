@@ -103,11 +103,21 @@ void ABuildablePiece::BeginCollapse()
 
 	State = EBuildablePieceState::Collapsing;
 
+	// Computed before UnregisterPiece below removes this piece's own sockets from the table - its
+	// neighbours' registration is what matters here, and unregistering this piece never touches them.
+	CollapseBiasDirection = StructuralComponent ? StructuralComponent->ComputeAwayFromNeighbourCentroid(this) : FVector::ZeroVector;
+
 	if (MeshComponent)
 	{
 		MeshComponent->SetSimulatePhysics(true);
 		MeshComponent->SetNotifyRigidBodyCollision(true);
 		MeshComponent->OnComponentHit.AddDynamic(this, &ABuildablePiece::HandleCollapseHit);
+
+		if (!CollapseBiasDirection.IsNearlyZero())
+		{
+			const float ImpulseStrength = DurabilityComponent ? DurabilityComponent->GetCollapseImpulseStrength() : 400.f;
+			MeshComponent->AddImpulse(CollapseBiasDirection * ImpulseStrength, NAME_None, /*bVelChange=*/true);
+		}
 	}
 
 	// CollapseLifeSpan is now an explicit, hookable deadline (fracture-on-timeout) instead of a
@@ -130,7 +140,7 @@ void ABuildablePiece::HandleCollapseHit(UPrimitiveComponent* HitComponent, AActo
 
 	bHasFractured = true;
 	GetWorldTimerManager().ClearTimer(CollapseTimeoutHandle);
-	Fracture(GetActorLocation(), FVector::ZeroVector);
+	Fracture(GetActorLocation(), CollapseBiasDirection);
 	Destroy();
 }
 
@@ -142,7 +152,7 @@ void ABuildablePiece::HandleCollapseTimeout()
 	}
 
 	bHasFractured = true;
-	Fracture(GetActorLocation(), FVector::ZeroVector);
+	Fracture(GetActorLocation(), CollapseBiasDirection);
 	Destroy();
 }
 
@@ -173,7 +183,7 @@ void ABuildablePiece::Fracture(const FVector& ScatterOrigin, const FVector& Scat
 		}
 
 		const FVector OutwardDirection = RandomOffset.IsNearlyZero() ? FMath::VRand() : RandomOffset.GetSafeNormal();
-		const FVector Impulse = OutwardDirection * Rules->FragmentImpulseStrength + ScatterBias;
+		const FVector Impulse = (OutwardDirection + ScatterBias) * Rules->FragmentImpulseStrength;
 
 		Fragment->Launch(Impulse, Tint, Rules->FragmentLifetime, Rules->FragmentFadeDuration);
 	}

@@ -81,6 +81,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
 	float MaxCascadeSpread = 3.f;
 
+	/** Outward horizontal impulse strength applied to a piece the moment it detaches - away from the centroid of its still-registered neighbours (GDD §7.7 Layer A, direction bias). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float CollapseImpulseStrength = 400.f;
+
 	/** Fragment count per piece class for fracture-on-destroy v1 (generic per-class shards, not per-mesh) - GDD §7.8. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
 	TMap<EPieceClass, int32> FragmentCountPerClass;

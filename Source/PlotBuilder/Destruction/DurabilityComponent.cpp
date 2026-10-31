@@ -76,6 +76,11 @@ float UDurabilityComponent::GetMaxCascadeSpread() const
 	return Rules ? Rules->MaxCascadeSpread : 3.f;
 }
 
+float UDurabilityComponent::GetCollapseImpulseStrength() const
+{
+	return Rules ? Rules->CollapseImpulseStrength : 400.f;
+}
+
 EDurabilityState UDurabilityComponent::ComputeStateForRatio(float Ratio) const
 {
 	if (Ratio <= 0.f)

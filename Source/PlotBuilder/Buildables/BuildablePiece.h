@@ -172,7 +172,10 @@ private:
 	 *  Shared fracture entry point for both HandleDurabilityDestroyed (direct kill, no fall) and
 	 *  HandleCollapseHit/HandleCollapseTimeout (cascade release, after falling) - GDD §7.8's v1:
 	 *  generic fragments per EPieceClass, not per mesh (see DA_DemolitionRules). Spawns the fragments,
-	 *  does not destroy this actor - callers do that right after.
+	 *  does not destroy this actor - callers do that right after. ScatterBias is a direction (not a
+	 *  pre-scaled impulse): blended into each fragment's own outward direction before scaling by
+	 *  Rules->FragmentImpulseStrength, so a falling piece's collapse direction bias (see BeginCollapse)
+	 *  carries through to its fragments too - ZeroVector for a direct kill, which has no fall to bias from.
 	 */
 	void Fracture(const FVector& ScatterOrigin, const FVector& ScatterBias) const;
 
@@ -192,6 +195,9 @@ private:
 
 	/** Guards against fracturing twice if HandleCollapseHit and HandleCollapseTimeout both fire (e.g. hit arrives the same frame the timer does). */
 	bool bHasFractured = false;
+
+	/** Set once in BeginCollapse (StructuralSupportComponent::ComputeAwayFromNeighbourCentroid) - the horizontal direction this piece fell away from, reused both for its own release impulse and as Fracture's ScatterBias once it fractures. ZeroVector for a direct kill (HandleDurabilityDestroyed never sets it). */
+	FVector CollapseBiasDirection = FVector::ZeroVector;
 
 	/** Minimum impact speed (cm/s) on MeshComponent's hit event for a Falling piece to fracture early - below this, a grazing contact is ignored and the piece keeps falling. */
 	UPROPERTY(EditAnywhere, Category = "Structural")

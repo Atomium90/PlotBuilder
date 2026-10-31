@@ -132,6 +132,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Structural")
 	void UnregisterPiece(ABuildablePiece* Piece);
 
+	/**
+	 *  Horizontal unit direction away from the centroid of Piece's still-registered neighbours (any
+	 *  linked socket, same adjacency as ComputeHopDistances) - GDD §7.7 Layer A, the collapse
+	 *  direction bias. Called from BeginCollapse just before the piece unregisters itself, so its
+	 *  neighbours (whether or not they're separately queued to fall later) are still in the table.
+	 *  ZeroVector if Piece has no registered neighbour left to be "away from".
+	 */
+	UFUNCTION(BlueprintPure, Category = "Structural")
+	FVector ComputeAwayFromNeighbourCentroid(const ABuildablePiece* Piece) const;
+
 	/** Occupancy table, separate from structural stability: is SlotType's slot at Cell free? Always true for SlotType == Legacy (nothing is ever tracked there). */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
 	bool IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell) const;
