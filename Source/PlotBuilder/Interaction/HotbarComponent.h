@@ -120,6 +120,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Hotbar")
 	int32 GetMoney() const { return Money; }
 
+	/** Sets Money directly and broadcasts OnMoneyChanged - bypasses bInfiniteMoney/PurchaseRow entirely, for the pb.Money debug command (and later UProgressSave's load path). */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	void SetMoney(int32 NewAmount) { Money = NewAmount; OnMoneyChanged.Broadcast(); }
+
 	UFUNCTION(BlueprintPure, Category = "Hotbar")
 	bool IsInfiniteMoney() const { return bInfiniteMoney; }
 

@@ -54,6 +54,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Tool")
 	void SetToolVisible(bool bVisible);
 
+	/** Gates the "HP left" on-screen print every tool hit already makes - on by default (today's always-on behaviour), toggled by the pb.ShowHP console command. Shared by every tool instance, not per-instance state. */
+	static bool bShowHPDebug;
+
 protected:
 
 	/** Mesh held in the player's hand - BP assigns the Static Mesh (e.g. SM_Sledgehammer from _Inbox/Tools). */

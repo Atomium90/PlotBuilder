@@ -18,6 +18,8 @@
 #include "TimerManager.h"
 #include "PlotBuilder.h"
 
+bool ADemolitionTool::bShowHPDebug = true;
+
 ADemolitionTool::ADemolitionTool()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -178,7 +180,7 @@ void ADemolitionTool::ResolveHit()
 		bHitSomething = true;
 		HitMaterial = Material;
 
-		if (GEngine)
+		if (bShowHPDebug && GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Orange, FString::Printf(TEXT("%s hit %s for %.0f (HP left: %.0f)"),
 				*GetName(), *Target->GetActorNameOrLabel(), FinalDamage, Durability ? Durability->CurrentHP : -1.f));
