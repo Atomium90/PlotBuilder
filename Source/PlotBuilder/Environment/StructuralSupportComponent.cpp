@@ -204,7 +204,12 @@ bool UStructuralSupportComponent::AreSocketsLinked(EStructuralSocketType A, EStr
 	if (Matches(EStructuralSocketType::WallBottom, EStructuralSocketType::FloorEdge)
 		|| Matches(EStructuralSocketType::WallBottom, EStructuralSocketType::FloorCorner)
 		|| Matches(EStructuralSocketType::WallTop, EStructuralSocketType::FloorBottom)
-		|| Matches(EStructuralSocketType::WallTop, EStructuralSocketType::RoofLow))
+		|| Matches(EStructuralSocketType::WallTop, EStructuralSocketType::RoofLow)
+		// Stairwell wall link (GDD §8, D28): a wall stacked directly on another wall, with no floor
+		// between them because a stairwell hole has none at any level by design. Without this, such
+		// walls have no socket pair to pass stability through at all. Only passes a value along - a
+		// wall stack still needs its own chain back down to an anchor (see T9).
+		|| Matches(EStructuralSocketType::WallTop, EStructuralSocketType::WallBottom))
 	{
 		OutIsVertical = true;
 		return true;
