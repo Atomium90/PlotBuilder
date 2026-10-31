@@ -144,6 +144,12 @@ public:
 	/** Writes Stability into the mesh's Custom Primitive Data (index 0) for the debug color gradient - see UStructuralSupportComponent::bShowDebug. */
 	void UpdateStabilityDebugColor();
 
+	/** Called by UStructuralSupportComponent::StartCompromised (GDD §7.6, D29): starts the warning placeholders (creak loop, dust, a small jiggle) while this piece counts down to failing on its own. Safe to call once per Compromised episode - the component only calls it on a fresh queue entry. */
+	void OnCompromisedStart();
+
+	/** Called by UStructuralSupportComponent::CancelCompromised: stops the warning placeholders started by OnCompromisedStart - D29's "dependants destroyed first" un-Compromise case. No-op if not currently Compromised. */
+	void OnCompromisedCancelled();
+
 protected:
 
 	virtual void BeginPlay() override;
@@ -167,6 +173,9 @@ private:
 
 	/** CollapseLifeSpan timer handler: a Falling piece that never took a significant hit still fractures on timeout, instead of silently vanishing - see BeginCollapse. */
 	void HandleCollapseTimeout();
+
+	/** CompromisedJiggleHandle tick: a small, cheap sine offset on MeshComponent's relative location around CompromisedBaseRelativeLocation, read-only visual noise - no physics, stopped by OnCompromisedCancelled/BeginCollapse. */
+	void HandleCompromisedJiggle();
 
 	/**
 	 *  Shared fracture entry point for both HandleDurabilityDestroyed (direct kill, no fall) and
@@ -202,6 +211,20 @@ private:
 	/** Minimum impact speed (cm/s) on MeshComponent's hit event for a Falling piece to fracture early - below this, a grazing contact is ignored and the piece keeps falling. */
 	UPROPERTY(EditAnywhere, Category = "Structural")
 	float MinFractureImpactSpeed = 200.f;
+
+	/** Looping creak placeholder spawned by OnCompromisedStart, stopped/destroyed by OnCompromisedCancelled or whichever collapse path fires next - see GDD §7.6, D29. */
+	UPROPERTY()
+	TObjectPtr<class UAudioComponent> CompromisedWarningAudio;
+
+	/** MeshComponent->GetRelativeLocation() cached by OnCompromisedStart, before HandleCompromisedJiggle starts offsetting it - restored by OnCompromisedCancelled so a cancelled warning never leaves the mesh stuck off-pivot. */
+	FVector CompromisedBaseRelativeLocation = FVector::ZeroVector;
+
+	/** Timer driving HandleCompromisedJiggle - only runs while Compromised, never a full Tick (this actor doesn't otherwise need one). */
+	FTimerHandle CompromisedJiggleHandle;
+
+	/** Amplitude (cm) of the Compromised warning's positional jiggle. */
+	UPROPERTY(EditAnywhere, Category = "Structural|Debug")
+	float CompromisedJiggleAmplitude = 0.4f;
 
 	/** Set by UBuildModeComponent::ConfirmPlacement for a grid-anchored piece - (0,0,0) and ignored for Legacy. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Structural", meta = (AllowPrivateAccess = "true"))

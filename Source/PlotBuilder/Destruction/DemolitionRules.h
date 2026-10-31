@@ -65,6 +65,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
 	TObjectPtr<UCurveFloat> StabilityTransmission;
 
+	/** Minimum random delay (seconds) before a Compromised piece fails on its own - GDD §7.6, D29. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float CompromisedDelayMin = 0.5f;
+
+	/** Maximum random delay (seconds) before a Compromised piece fails on its own - GDD §7.6, D29. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float CompromisedDelayMax = 3.f;
+
+	/** Placeholder warning cue played/looped while a piece is Compromised (creak) - GDD §7.6. Structural warning, not per-material like ImpactSounds, since it's about the graph finding a bottleneck, not about what's being hit. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	TObjectPtr<USoundBase> CompromisedWarningSound;
+
 	/** Fixed reaction time added to every piece's collapse release time, before the per-hop spread - GDD §7.7. Not covered by MaxCascadeSpread's compression. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
 	float BaseDelay = 0.25f;

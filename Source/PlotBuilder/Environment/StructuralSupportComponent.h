@@ -142,6 +142,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Structural")
 	FVector ComputeAwayFromNeighbourCentroid(const ABuildablePiece* Piece) const;
 
+	/**
+	 *  GDD §7.6, D29: would removing Candidate (a dry run, nothing is actually unregistered) drop
+	 *  some OTHER registered piece's stability below Rules->CollapseThreshold, or off its anchor
+	 *  chain entirely? Reuses RelaxStability with a scratch map so the real per-piece Stability
+	 *  values are never touched. True means Candidate is a genuine structural bottleneck, not just
+	 *  "something rests on it with another path still available".
+	 */
+	UFUNCTION(BlueprintPure, Category = "Structural")
+	bool WouldBeBottleneck(const ABuildablePiece* Candidate) const;
+
+	/**
+	 *  Immediate D29 check for the "once when the piece enters Critical" case (HandleDurabilityStateChanged's
+	 *  transition to Critical) - RecomputeStability's own end-of-batch scan (see RecomputeStability)
+	 *  covers "again after each batch of destructions" for every other Critical load-bearing piece.
+	 *  No-op if Piece isn't actually a bottleneck, or is already queued.
+	 */
+	void NotifyEnteredCritical(ABuildablePiece* Piece);
+
 	/** Occupancy table, separate from structural stability: is SlotType's slot at Cell free? Always true for SlotType == Legacy (nothing is ever tracked there). */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
 	bool IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell) const;
@@ -158,6 +176,26 @@ private:
 	static bool AreSocketsLinked(EStructuralSocketType A, EStructuralSocketType B, bool& OutIsVertical);
 
 	void RecomputeStability();
+
+	/**
+	 *  Shared fixed-point relaxation core behind RecomputeStability and WouldBeBottleneck's dry run.
+	 *  DryRunResult == nullptr: the real pass - reads/writes each piece's own Stability field
+	 *  directly (GetStability/SetStability), exactly as before this was factored out. DryRunResult
+	 *  != nullptr: a scratch pass - reads/writes that map instead, and ExcludedPiece is treated as
+	 *  if it had never been registered (skipped whenever it would otherwise be read as a neighbour's
+	 *  support source), so nothing here ever mutates a real piece's Stability. ExcludedPiece is only
+	 *  ever non-null together with a DryRunResult.
+	 */
+	void RelaxStability(const ABuildablePiece* ExcludedPiece, TMap<const ABuildablePiece*, float>* DryRunResult) const;
+
+	/** Re-checks every registered load-bearing piece currently Critical against WouldBeBottleneck, adding newly-found bottlenecks to CompromisedQueue and cancelling entries that no longer qualify - GDD §7.6, D29's "again after each batch of destructions". Called once per RecomputeStability. */
+	void RefreshCompromisedQueue();
+
+	/** Adds Piece to CompromisedQueue with a fresh random fail time and fires its warning FX, unless it's already queued. */
+	void StartCompromised(ABuildablePiece* Piece);
+
+	/** Removes Piece from CompromisedQueue (if present) and cancels its warning FX - D29's "dependants destroyed first" un-Compromise case. */
+	void CancelCompromised(ABuildablePiece* Piece);
 
 	/** BFS hop distance (graph adjacency via SocketsByCell, any link direction) from RecentlyVacatedCells to every registered piece - used to stagger the collapse queue. Pieces unreachable from a vacated cell are absent from the result. */
 	TMap<ABuildablePiece*, int32> ComputeHopDistances() const;
@@ -202,4 +240,14 @@ private:
 
 	/** Pieces found unstable by RecomputeStability, waiting for their staggered release time instead of collapsing immediately - see EnqueueCollapse. Drained every tick in TickComponent, independent of bRecomputeDirty. */
 	TArray<FQueuedCollapse> CollapseQueue;
+
+	/** One pending self-failure for a Compromised piece (GDD §7.6, D29) - see StartCompromised/CancelCompromised/RefreshCompromisedQueue. */
+	struct FCompromisedEntry
+	{
+		TWeakObjectPtr<ABuildablePiece> Piece;
+		float FailTime = 0.f;
+	};
+
+	/** Critical, load-bearing pieces currently found to be a genuine structural bottleneck (WouldBeBottleneck), each counting down to its own BeginCollapse() - drained every tick in TickComponent, same as CollapseQueue. */
+	TArray<FCompromisedEntry> CompromisedQueue;
 };

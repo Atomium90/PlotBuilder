@@ -48,6 +48,30 @@ void UStructuralSupportComponent::TickComponent(float DeltaTime, ELevelTick Tick
 				FString::Printf(TEXT("%s releases in %.2fs"), *Piece->GetActorNameOrLabel(), CollapseQueue[Index].ReleaseTime - Now));
 		}
 	}
+
+	// Drains CompromisedQueue every tick, same reasoning as CollapseQueue above - GDD §7.6, D29.
+	for (int32 Index = CompromisedQueue.Num() - 1; Index >= 0; --Index)
+	{
+		ABuildablePiece* Piece = CompromisedQueue[Index].Piece.Get();
+
+		if (!Piece)
+		{
+			// Stale entry: the piece left some other way (e.g. a direct tool kill) while queued.
+			CompromisedQueue.RemoveAt(Index);
+			continue;
+		}
+
+		if (Now >= CompromisedQueue[Index].FailTime)
+		{
+			CompromisedQueue.RemoveAt(Index);
+
+			// Stop the warning FX (and its jiggle timer) before BeginCollapse starts simulating
+			// physics on the same mesh - OnCompromisedCancelled is also the right cleanup here even
+			// though this piece didn't survive, it's the same "stop and restore" step either way.
+			Piece->OnCompromisedCancelled();
+			Piece->BeginCollapse();
+		}
+	}
 }
 
 void UStructuralSupportComponent::SetShowDebug(bool bShow)
@@ -505,20 +529,42 @@ void UStructuralSupportComponent::EnqueueCollapse(const TArray<ABuildablePiece*>
 	}
 }
 
-void UStructuralSupportComponent::RecomputeStability()
+void UStructuralSupportComponent::RelaxStability(const ABuildablePiece* ExcludedPiece, TMap<const ABuildablePiece*, float>* DryRunResult) const
 {
-	const TMap<ABuildablePiece*, int32> HopDistances = ComputeHopDistances();
-	RecentlyVacatedCells.Reset();
-
 	const float VerticalLoss = Rules ? Rules->VerticalLoss : 0.1f;
 	const float HorizontalLoss = Rules ? Rules->HorizontalLoss : 0.6f;
-	const float Threshold = Rules ? Rules->CollapseThreshold : 0.1f;
+
+	// DryRunResult == nullptr: read/write each piece's own Stability field directly, exactly as
+	// before this was factored out of RecomputeStability. DryRunResult != nullptr (WouldBeBottleneck):
+	// read/write a scratch map instead, so a dry run never touches a real piece's Stability.
+	auto ReadStability = [DryRunResult](const ABuildablePiece* Piece) -> float
+	{
+		if (DryRunResult)
+		{
+			const float* Found = DryRunResult->Find(Piece);
+			return Found ? *Found : 0.f;
+		}
+
+		return Piece->GetStability();
+	};
+
+	auto WriteStability = [DryRunResult](ABuildablePiece* Piece, float Value)
+	{
+		if (DryRunResult)
+		{
+			DryRunResult->Add(Piece, Value);
+		}
+		else
+		{
+			Piece->SetStability(Value);
+		}
+	};
 
 	for (ABuildablePiece* Piece : RegisteredPieces)
 	{
-		if (Piece)
+		if (Piece && Piece != ExcludedPiece)
 		{
-			Piece->SetStability(Piece->IsStructuralAnchor() ? 1.f : 0.f);
+			WriteStability(Piece, Piece->IsStructuralAnchor() ? 1.f : 0.f);
 		}
 	}
 
@@ -534,12 +580,12 @@ void UStructuralSupportComponent::RecomputeStability()
 
 		for (ABuildablePiece* Piece : RegisteredPieces)
 		{
-			if (!Piece || Piece->IsStructuralAnchor())
+			if (!Piece || Piece == ExcludedPiece || Piece->IsStructuralAnchor())
 			{
 				continue;
 			}
 
-			float BestStability = Piece->GetStability();
+			float BestStability = ReadStability(Piece);
 
 			for (const FStructuralSocket& Socket : Piece->GetSockets())
 			{
@@ -554,7 +600,8 @@ void UStructuralSupportComponent::RecomputeStability()
 
 				for (const FRegisteredSocket& Entry : *Entries)
 				{
-					if (!Entry.Owner || Entry.Owner == Piece || !Entry.Owner->IsLoadBearing() || Entry.RoofStep != AbsoluteRoofStep)
+					if (!Entry.Owner || Entry.Owner == Piece || Entry.Owner == ExcludedPiece
+						|| !Entry.Owner->IsLoadBearing() || Entry.RoofStep != AbsoluteRoofStep)
 					{
 						continue;
 					}
@@ -566,18 +613,124 @@ void UStructuralSupportComponent::RecomputeStability()
 						const float Loss = bIsVertical ? VerticalLoss : HorizontalLoss;
 						const UDurabilityComponent* EntryDurability = Entry.Owner->GetDurabilityComponent();
 						const float Coupling = EntryDurability ? EntryDurability->GetStabilityCoupling() : 1.f;
-						BestStability = FMath::Max(BestStability, Entry.Owner->GetStability() * Coupling - Loss);
+						BestStability = FMath::Max(BestStability, ReadStability(Entry.Owner) * Coupling - Loss);
 					}
 				}
 			}
 
-			if (BestStability > Piece->GetStability() + KINDA_SMALL_NUMBER)
+			if (BestStability > ReadStability(Piece) + KINDA_SMALL_NUMBER)
 			{
-				Piece->SetStability(BestStability);
+				WriteStability(Piece, BestStability);
 				bChanged = true;
 			}
 		}
 	}
+}
+
+bool UStructuralSupportComponent::WouldBeBottleneck(const ABuildablePiece* Candidate) const
+{
+	if (!Candidate)
+	{
+		return false;
+	}
+
+	TMap<const ABuildablePiece*, float> DryRun;
+	RelaxStability(Candidate, &DryRun);
+
+	const float Threshold = Rules ? Rules->CollapseThreshold : 0.1f;
+
+	for (const TPair<const ABuildablePiece*, float>& Pair : DryRun)
+	{
+		// Only counts if removing Candidate is what pushes this piece under the threshold - a piece
+		// already below it for an unrelated reason (e.g. mid-batch, already queued to collapse on
+		// its own) would show up here regardless of Candidate, and must not make Candidate a
+		// bottleneck by coincidence.
+		if (Pair.Key != Candidate && Pair.Value < Threshold && Pair.Key->GetStability() >= Threshold)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void UStructuralSupportComponent::NotifyEnteredCritical(ABuildablePiece* Piece)
+{
+	if (Piece && WouldBeBottleneck(Piece))
+	{
+		StartCompromised(Piece);
+	}
+}
+
+void UStructuralSupportComponent::StartCompromised(ABuildablePiece* Piece)
+{
+	if (!Piece || CompromisedQueue.ContainsByPredicate([Piece](const FCompromisedEntry& Entry) { return Entry.Piece.Get() == Piece; }))
+	{
+		return;
+	}
+
+	const UDurabilityComponent* Durability = Piece->GetDurabilityComponent();
+	const float DelayMin = Durability ? Durability->GetCompromisedDelayMin() : 0.5f;
+	const float DelayMax = Durability ? Durability->GetCompromisedDelayMax() : 3.f;
+
+	FCompromisedEntry Entry;
+	Entry.Piece = Piece;
+	Entry.FailTime = GetWorld()->GetTimeSeconds() + FMath::FRandRange(DelayMin, DelayMax);
+	CompromisedQueue.Add(Entry);
+
+	Piece->OnCompromisedStart();
+}
+
+void UStructuralSupportComponent::CancelCompromised(ABuildablePiece* Piece)
+{
+	const int32 RemovedCount = CompromisedQueue.RemoveAll([Piece](const FCompromisedEntry& Entry) { return Entry.Piece.Get() == Piece; });
+
+	if (RemovedCount > 0 && Piece)
+	{
+		Piece->OnCompromisedCancelled();
+	}
+}
+
+void UStructuralSupportComponent::RefreshCompromisedQueue()
+{
+	// GDD §7.6, D29's "again after each batch of destructions" - re-checks every currently Critical,
+	// load-bearing piece: starts (or leaves running) a fail timer for a genuine bottleneck, cancels
+	// one for a piece that no longer is (its dependants were destroyed first) or isn't Critical any
+	// more. Called once per RecomputeStability, same cadence as the collapse queue above it.
+	for (ABuildablePiece* Piece : RegisteredPieces)
+	{
+		if (!Piece || !Piece->IsLoadBearing())
+		{
+			continue;
+		}
+
+		const UDurabilityComponent* Durability = Piece->GetDurabilityComponent();
+
+		if (!Durability || Durability->GetState() != EDurabilityState::Critical)
+		{
+			CancelCompromised(Piece);
+			continue;
+		}
+
+		if (WouldBeBottleneck(Piece))
+		{
+			StartCompromised(Piece);
+		}
+		else
+		{
+			CancelCompromised(Piece);
+		}
+	}
+}
+
+void UStructuralSupportComponent::RecomputeStability()
+{
+	const TMap<ABuildablePiece*, int32> HopDistances = ComputeHopDistances();
+	RecentlyVacatedCells.Reset();
+
+	const float Threshold = Rules ? Rules->CollapseThreshold : 0.1f;
+
+	RelaxStability(nullptr, nullptr);
 
 	// Collect first, then enqueue: pieces no longer collapse immediately (see EnqueueCollapse) - they
 	// join CollapseQueue and BeginCollapse only fires once their staggered release time comes up, in
@@ -593,6 +746,7 @@ void UStructuralSupportComponent::RecomputeStability()
 	}
 
 	EnqueueCollapse(ToCollapse, HopDistances);
+	RefreshCompromisedQueue();
 
 	if (bShowDebug)
 	{

@@ -81,6 +81,21 @@ float UDurabilityComponent::GetCollapseImpulseStrength() const
 	return Rules ? Rules->CollapseImpulseStrength : 400.f;
 }
 
+float UDurabilityComponent::GetCompromisedDelayMin() const
+{
+	return Rules ? Rules->CompromisedDelayMin : 0.5f;
+}
+
+float UDurabilityComponent::GetCompromisedDelayMax() const
+{
+	return Rules ? Rules->CompromisedDelayMax : 3.f;
+}
+
+USoundBase* UDurabilityComponent::GetCompromisedWarningSound() const
+{
+	return Rules ? Rules->CompromisedWarningSound : nullptr;
+}
+
 EDurabilityState UDurabilityComponent::ComputeStateForRatio(float Ratio) const
 {
 	if (Ratio <= 0.f)

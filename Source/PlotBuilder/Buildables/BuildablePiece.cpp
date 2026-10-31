@@ -1,5 +1,7 @@
 #include "BuildablePiece.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/AudioComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Interaction/HotbarComponent.h"
 #include "Environment/StructuralSupportComponent.h"
 #include "Destruction/DurabilityComponent.h"
@@ -43,12 +45,24 @@ void ABuildablePiece::HandleDurabilityDamaged(const FDamageInfo& DamageInfo)
 void ABuildablePiece::HandleDurabilityStateChanged(EDurabilityState OldState, EDurabilityState NewState)
 {
 	UpdateDamageVisual();
+
+	// GDD §7.6, D29: the immediate "once when the piece enters Critical" bottleneck check - entering
+	// Critical doesn't yet mean this piece's own stability changed (that's tracked separately), just
+	// that it's now eligible to warn and fail on its own if nothing else holds up its dependants.
+	if (NewState == EDurabilityState::Critical && IsLoadBearing() && StructuralComponent)
+	{
+		StructuralComponent->NotifyEnteredCritical(this);
+	}
 }
 
 void ABuildablePiece::HandleDurabilityDestroyed()
 {
-	// Direct kill (tool damage reached 0 HP) - fractures in place, no Falling phase, unlike the
-	// cascade path below. Unregister first, same as Demolish(), but destroy via Fracture instead.
+	// Direct kill (tool damage reached 0 HP) - stop any Compromised warning first (D29), it never
+	// gets to fail on its own if the tool just finished the job directly.
+	OnCompromisedCancelled();
+
+	// Fractures in place, no Falling phase, unlike the cascade path below. Unregister first, same as
+	// Demolish(), but destroy via Fracture instead.
 	if (StructuralComponent)
 	{
 		StructuralComponent->UnregisterPiece(this);
@@ -86,6 +100,10 @@ void ABuildablePiece::Interact_Implementation(AActor* InteractingActor)
 
 void ABuildablePiece::Demolish()
 {
+	// Voluntary removal can happen while Compromised (still Placed, not yet Collapsing) - stop the
+	// warning before it's moot.
+	OnCompromisedCancelled();
+
 	if (StructuralComponent)
 	{
 		StructuralComponent->UnregisterPiece(this);
@@ -195,6 +213,69 @@ void ABuildablePiece::UpdateStabilityDebugColor()
 	{
 		MeshComponent->SetCustomPrimitiveDataFloat(0, Stability);
 	}
+}
+
+void ABuildablePiece::OnCompromisedStart()
+{
+	if (GetWorldTimerManager().IsTimerActive(CompromisedJiggleHandle))
+	{
+		// Already warning (shouldn't happen - UStructuralSupportComponent only calls this on a fresh
+		// queue entry - but never stack a second audio component/jiggle base over the first).
+		return;
+	}
+
+	USoundBase* WarningSound = DurabilityComponent ? DurabilityComponent->GetCompromisedWarningSound() : nullptr;
+
+	if (WarningSound && MeshComponent)
+	{
+		CompromisedWarningAudio = UGameplayStatics::SpawnSoundAttached(WarningSound, MeshComponent);
+
+		if (CompromisedWarningAudio)
+		{
+			CompromisedWarningAudio->bAutoDestroy = false;
+			CompromisedWarningAudio->Play();
+		}
+	}
+
+	if (MeshComponent)
+	{
+		CompromisedBaseRelativeLocation = MeshComponent->GetRelativeLocation();
+		GetWorldTimerManager().SetTimer(CompromisedJiggleHandle, this, &ABuildablePiece::HandleCompromisedJiggle, 0.03f, true);
+	}
+}
+
+void ABuildablePiece::OnCompromisedCancelled()
+{
+	if (!GetWorldTimerManager().IsTimerActive(CompromisedJiggleHandle) && !CompromisedWarningAudio)
+	{
+		return;
+	}
+
+	GetWorldTimerManager().ClearTimer(CompromisedJiggleHandle);
+
+	if (MeshComponent)
+	{
+		MeshComponent->SetRelativeLocation(CompromisedBaseRelativeLocation);
+	}
+
+	if (CompromisedWarningAudio)
+	{
+		CompromisedWarningAudio->Stop();
+		CompromisedWarningAudio->DestroyComponent();
+		CompromisedWarningAudio = nullptr;
+	}
+}
+
+void ABuildablePiece::HandleCompromisedJiggle()
+{
+	if (!MeshComponent)
+	{
+		return;
+	}
+
+	const float Phase = GetWorld()->GetTimeSeconds() * 2.f * PI * 12.f; // ~12 Hz, cheap and visibly nervous without reading as a seizure
+	const FVector Offset(0.f, 0.f, FMath::Sin(Phase) * CompromisedJiggleAmplitude);
+	MeshComponent->SetRelativeLocation(CompromisedBaseRelativeLocation + Offset);
 }
 
 FIntVector ABuildablePiece::GetStructuralCell() const

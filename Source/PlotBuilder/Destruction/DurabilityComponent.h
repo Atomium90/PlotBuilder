@@ -6,6 +6,7 @@
 #include "DurabilityComponent.generated.h"
 
 class UDemolitionRules;
+class USoundBase;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDurabilityDamaged, const FDamageInfo&, DamageInfo);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDurabilityStateChanged, EDurabilityState, OldState, EDurabilityState, NewState);
@@ -74,6 +75,11 @@ public:
 	float GetJitter() const;
 	float GetMaxCascadeSpread() const;
 	float GetCollapseImpulseStrength() const;
+	float GetCompromisedDelayMin() const;
+	float GetCompromisedDelayMax() const;
+
+	/** Rules->CompromisedWarningSound, or nullptr if unset - same "missing placeholder is not an error" stance as GetImpactSound. */
+	USoundBase* GetCompromisedWarningSound() const;
 
 private:
 
