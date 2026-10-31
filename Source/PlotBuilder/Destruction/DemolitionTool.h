@@ -8,6 +8,7 @@
 class UDemolitionToolData;
 class UDemolitionRules;
 class UStaticMeshComponent;
+class UAudioComponent;
 
 /**
  *  Shared base for the melee demolition tools (GDD §18): one C++ class, BP_Sledgehammer /
@@ -81,10 +82,14 @@ private:
 
 	void ClearBusy();
 
-	/** Camera shake (per-tool, from ToolData) + impact sound (per-material, from Rules) on a landed hit. */
+	/** Camera shake (per-tool, from ToolData) + impact sound (per-material, from Rules) on a landed hit - ducked by ToolData->ContinuousImpactDuckVolume while ContinuousLoopAudio is playing. */
 	void PlayHitFeedback(const FVector& Location, EDemolitionMaterial Material) const;
 
 	FTimerHandle HitTimerHandle;
 	FTimerHandle BusyTimerHandle;
 	bool bBusy = false;
+
+	/** ToolData->ContinuousLoopSound instance, started by PrimaryUse's continuous branch and stopped (faded) by ReleasePrimaryUse - null whenever ContinuousLoopSound itself is unset (sledgehammer/crowbar). */
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> ContinuousLoopAudio;
 };

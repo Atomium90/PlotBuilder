@@ -6,6 +6,7 @@
 #include "Player/PlayerCharacter.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/AudioComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -68,6 +69,11 @@ void ADemolitionTool::PrimaryUse()
 
 	if (ToolData->bContinuous)
 	{
+		if (ToolData->ContinuousLoopSound && MeshComponent)
+		{
+			ContinuousLoopAudio = UGameplayStatics::SpawnSoundAttached(ToolData->ContinuousLoopSound, MeshComponent);
+		}
+
 		const float Interval = ToolData->Rate > 0.f ? 1.f / ToolData->Rate : 1.f;
 		ResolveHit();
 		GetWorldTimerManager().SetTimer(HitTimerHandle, this, &ADemolitionTool::ResolveHit, Interval, true);
@@ -99,6 +105,12 @@ void ADemolitionTool::PrimaryUse()
 
 void ADemolitionTool::ReleasePrimaryUse()
 {
+	if (ContinuousLoopAudio)
+	{
+		ContinuousLoopAudio->FadeOut(ToolData ? ToolData->ContinuousLoopFadeOutDuration : 0.2f, 0.f);
+		ContinuousLoopAudio = nullptr;
+	}
+
 	if (!ToolData || !ToolData->bContinuous)
 	{
 		return;
@@ -210,7 +222,11 @@ void ADemolitionTool::PlayHitFeedback(const FVector& Location, EDemolitionMateri
 	{
 		if (USoundBase* ImpactSound = Rules->GetImpactSound(Material))
 		{
-			UGameplayStatics::PlaySoundAtLocation(this, ImpactSound, Location);
+			// Ducked while the drill loop plays (jackhammer) so the two don't stack at Rate ticks/s -
+			// a no-op (volume 1.0) for a tool with no ContinuousLoopSound.
+			const bool bDuck = ContinuousLoopAudio && ContinuousLoopAudio->IsPlaying();
+			const float Volume = (bDuck && ToolData) ? ToolData->ContinuousImpactDuckVolume : 1.f;
+			UGameplayStatics::PlaySoundAtLocation(this, ImpactSound, Location, Volume);
 		}
 	}
 }
