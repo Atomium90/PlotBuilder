@@ -225,6 +225,23 @@ void UBuildModeComponent::ConfirmPlacement()
 		{
 			NewPiece->State = EBuildablePieceState::Placed;
 
+			// Corner parity bias (D21, visual only): nudges this wall-class piece's length (local Y -
+			// every wall mesh's 200cm run, local X is its 20cm/10cm thickness) scale by a tiny,
+			// orientation-parity-dependent fraction so two walls meeting at a corner don't share an
+			// exactly coplanar end face/top. Never touches grid/socket math, which only ever reads
+			// GridCoordToApply/OrientationToApply, not actor scale. CornerPost is deliberately excluded:
+			// its cross-section is a symmetric 20x20cm square with no length axis to nudge.
+			const bool bIsWallClass = NewPiece->PieceClass == EPieceClass::ExteriorWall || NewPiece->PieceClass == EPieceClass::InteriorWall;
+
+			if (bIsWallClass && CachedPlot && CachedPlot->GetStructuralSupport() && CachedPlot->GetStructuralSupport()->Rules)
+			{
+				const float Bias = CachedPlot->GetStructuralSupport()->Rules->CornerParityBias;
+				const float Sign = (OrientationToApply % 2 == 0) ? 1.f : -1.f;
+				FVector BiasedScale = NewPiece->GetActorScale3D();
+				BiasedScale.Y *= (1.f + Sign * Bias);
+				NewPiece->SetActorScale3D(BiasedScale);
+			}
+
 			if (Anchor != EBuildAnchor::Legacy)
 			{
 				NewPiece->SetGridPlacement(GridCoordToApply, OrientationToApply, RoofStepToApply);

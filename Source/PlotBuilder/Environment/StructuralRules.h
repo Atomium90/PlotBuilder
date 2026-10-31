@@ -33,6 +33,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float ComfortThreshold = 0.5f;
 
+	/**
+	 *  Visual-only fraction nudge applied to a wall-class piece's length (local Y - every wall mesh's
+	 *  200cm run) scale at placement - even orientation gets +CornerParityBias, odd gets
+	 *  -CornerParityBias, so two walls meeting at a corner no longer share an exactly coplanar end
+	 *  face/top (D21). Never read by ComputeStability or any socket/grid math - those work in integer
+	 *  cells, not actor scale.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural|Visual")
+	float CornerParityBias = 0.003f;
+
 	/** Grid cell size in cm (horizontal). */
 	UPROPERTY(EditDefaultsOnly, Category = "Structural|Grid")
 	float CellSize = 200.f;
