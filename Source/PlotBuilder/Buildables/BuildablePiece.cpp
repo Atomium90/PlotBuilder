@@ -7,6 +7,11 @@
 #include "Destruction/DurabilityComponent.h"
 #include "Destruction/DemolitionRules.h"
 #include "Destruction/FragmentDebris.h"
+#include "Destruction/DebrisSubsystem.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "GeometryCollection/GeometryCollectionActor.h"
+#include "GeometryCollection/GeometryCollectionComponent.h"
 
 ABuildablePiece::ABuildablePiece()
 {
@@ -184,6 +189,44 @@ void ABuildablePiece::Fracture(const FVector& ScatterOrigin, const FVector& Scat
 		return;
 	}
 
+	const UStaticMesh* OwnMesh = MeshComponent ? MeshComponent->GetStaticMesh() : nullptr;
+	const FMeshFractureOverride* Override = OwnMesh ? Rules->MeshFractureOverrides.Find(OwnMesh) : nullptr;
+
+	if (Override && Override->Collection)
+	{
+		// Match the destroyed mesh's own world rotation, not a fixed zero - the Geometry Collection
+		// was authored against this mesh's unrotated orientation, so spawning it at the mesh's actual
+		// world rotation is what keeps the fracture cut lined up with how the piece was actually
+		// placed (a wall rotated 90° previously fractured along the wrong axis because of this).
+		// MeshComponent's own rotation, not the actor's - correct even if the mesh has a relative
+		// offset from the actor root, and identical to the actor's rotation when it doesn't.
+		const FRotator MeshWorldRotation = MeshComponent ? MeshComponent->GetComponentRotation() : GetActorRotation();
+
+		if (AGeometryCollectionActor* GeometryCollectionActor = World->SpawnActor<AGeometryCollectionActor>(ScatterOrigin, MeshWorldRotation))
+		{
+			if (UGeometryCollectionComponent* GCComponent = GeometryCollectionActor->GetGeometryCollectionComponent())
+			{
+				GCComponent->SetRestCollection(Override->Collection);
+				GeometryCollectionActor->Tags.Add(FName("Fragment"));
+
+				const FVector Impulse = (ScatterBias.IsNearlyZero() ? FVector::UpVector : ScatterBias) * Rules->FragmentImpulseStrength;
+				GCComponent->AddImpulse(Impulse, NAME_None, true);
+			}
+
+			// No scale-to-zero fade here, unlike the generic path below - Chaos clusters don't have
+			// a clean uniform-scale fade hook, so this is a hard pop at end of life. Accepted as a v1
+			// gap, same "simple over literal" call already made elsewhere this sprint.
+			GeometryCollectionActor->SetLifeSpan(Rules->FragmentLifetime);
+
+			if (UDebrisSubsystem* DebrisSubsystem = World->GetSubsystem<UDebrisSubsystem>())
+			{
+				DebrisSubsystem->RegisterDebrisActor(GeometryCollectionActor, Rules->FragmentGlobalCap, FMath::Max(1, Override->FragmentCount));
+			}
+		}
+
+		return;
+	}
+
 	const int32 Count = Rules->ComputeFragmentCount(PieceClass);
 	const FLinearColor Tint = Rules->GetFragmentTint(Material);
 	UClass* SpawnClass = Rules->FragmentClass ? Rules->FragmentClass.Get() : AFragmentDebris::StaticClass();
@@ -203,7 +246,7 @@ void ABuildablePiece::Fracture(const FVector& ScatterOrigin, const FVector& Scat
 		const FVector OutwardDirection = RandomOffset.IsNearlyZero() ? FMath::VRand() : RandomOffset.GetSafeNormal();
 		const FVector Impulse = (OutwardDirection + ScatterBias) * Rules->FragmentImpulseStrength;
 
-		Fragment->Launch(Impulse, Tint, Rules->FragmentLifetime, Rules->FragmentFadeDuration);
+		Fragment->Launch(Impulse, Tint, Rules->FragmentLifetime, Rules->FragmentFadeDuration, Rules->FragmentGlobalCap, Rules->FragmentSleepVelocityThreshold);
 	}
 }
 

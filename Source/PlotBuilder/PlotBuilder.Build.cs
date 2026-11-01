@@ -18,7 +18,7 @@ public class PlotBuilder : ModuleRules
 			"Slate"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] { "GeometryCollectionEngine" });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"PlotBuilder"

@@ -9,11 +9,12 @@ class UMaterialInterface;
 
 /**
  *  Generic greybox fragment spawned by ABuildablePiece::Fracture - fracture-on-destroy v1 (GDD §7.8):
- *  one procedural shard shape per destroyed piece, not an authored per-mesh Geometry Collection
- *  (that's UFractureLibrary, Sprint 2). Not interactable, unlike APhysicsProp - purely a short-lived
- *  physics prop that fades and destroys itself. Tagged "Fragment" at spawn so a future
- *  UDebrisSubsystem can enumerate/cap live fragments (GetAllActorsWithTag) without this class
- *  needing to change.
+ *  one procedural shard shape per destroyed piece for any mesh without an authored per-mesh
+ *  Geometry Collection override (UDemolitionRules::MeshFractureOverrides - Sprint 2 day 2). Not
+ *  interactable, unlike APhysicsProp - purely a short-lived physics prop that fades and destroys
+ *  itself. Tagged "Fragment" at spawn, and self-registers with UDebrisSubsystem (global fragment
+ *  cap, oldest-first eviction) in Launch - the subsystem unregisters it automatically via the
+ *  generic AActor::OnDestroyed delegate, so this class needs no EndPlay override for that.
  */
 UCLASS()
 class AFragmentDebris : public AActor
@@ -24,8 +25,16 @@ public:
 
 	AFragmentDebris();
 
-	/** Called right after SpawnActor by ABuildablePiece::Fracture - tints the mesh, applies the launch impulse, and starts the lifetime/fade clock. */
-	void Launch(const FVector& Impulse, const FLinearColor& Tint, float Lifetime, float FadeDuration);
+	/**
+	 *  Called right after SpawnActor by ABuildablePiece::Fracture - tints the mesh, applies the
+	 *  launch impulse, starts the lifetime/fade clock, and registers with UDebrisSubsystem (Cap
+	 *  sourced from UDemolitionRules::FragmentGlobalCap by the caller - this class never reads that
+	 *  data asset itself). SleepVelocityThreshold (UDemolitionRules::FragmentSleepVelocityThreshold)
+	 *  is checked every Tick once the fragment's linear speed drops under it, putting the rigid body
+	 *  to sleep once and skipping the check from then on - a cheap win since this actor already ticks
+	 *  for the fade, no extra tick added.
+	 */
+	void Launch(const FVector& Impulse, const FLinearColor& Tint, float Lifetime, float FadeDuration, int32 DebrisCap, float InSleepVelocityThreshold);
 
 protected:
 
@@ -54,4 +63,10 @@ private:
 	float LifetimeSeconds = 6.f;
 	float FadeDurationSeconds = 1.f;
 	float Age = 0.f;
+
+	/** Checked every Tick while awake - see Launch. 0 keeps the check always-false (never sleeps early), the safe default before Launch runs. */
+	float SleepVelocityThreshold = 0.f;
+
+	/** Set once MeshComponent has been put to sleep, so Tick stops checking its velocity every frame. */
+	bool bAsleep = false;
 };

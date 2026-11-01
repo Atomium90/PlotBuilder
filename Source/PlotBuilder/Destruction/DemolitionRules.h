@@ -8,6 +8,8 @@
 class USoundBase;
 class UCurveFloat;
 class AFragmentDebris;
+class UStaticMesh;
+class UGeometryCollection;
 
 /** Per-tool multipliers for one row of the tool x material matrix - wraps a TMap so UDemolitionRules can hold one per EDemolitionTool (UE doesn't support a TMap of TMaps as a UPROPERTY). */
 USTRUCT(BlueprintType)
@@ -17,6 +19,26 @@ struct FToolMaterialMultipliers
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
 	TMap<EDemolitionMaterial, float> Multipliers;
+};
+
+/** One per-mesh fracture override (UDemolitionRules::MeshFractureOverrides) - the authored Geometry Collection to spawn instead of generic AFragmentDebris shards, plus its chunk count for UDebrisSubsystem's cap bookkeeping (a Geometry Collection is one actor, not Count separate actors, so the cap can't infer this from the spawn loop the way the generic path does). */
+USTRUCT(BlueprintType)
+struct FMeshFractureOverride
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	TObjectPtr<UGeometryCollection> Collection;
+
+	/**
+	 *  Authored chunk count - used as this Geometry Collection actor's weight against
+	 *  UDemolitionRules::FragmentGlobalCap. Set per mesh when authoring, independently of every
+	 *  other entry - a tiny piece (e.g. a corner post) can stay low, a larger one can go up to 8-10.
+	 *  No code-side clamp here, unlike UDemolitionRules::ComputeFragmentCount which only governs the
+	 *  generic fallback path below, never this one.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	int32 FragmentCount = 6;
 };
 
 /**
@@ -124,6 +146,18 @@ public:
 	/** Fragment actor class to spawn - a BP child of AFragmentDebris carrying the fade material, same C++ base + BP wrapper split as ADemolitionTool/BP_Sledgehammer etc. Falls back to the plain AFragmentDebris class (no visual fade material) if unset. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
 	TSubclassOf<AFragmentDebris> FragmentClass;
+
+	/** Global cap on live debris actors (UDebrisSubsystem), across every fragment and per-mesh Geometry Collection combined - GDD §7.8. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	int32 FragmentGlobalCap = 300;
+
+	/** Linear speed (cm/s) below which a settled AFragmentDebris is put to sleep - saves physics cost on fragments that stopped moving but haven't timed out yet. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	float FragmentSleepVelocityThreshold = 15.f;
+
+	/** Piece mesh -> authored Geometry Collection override (Chaos Fracture Mode, 3-6 chunks) for the handful of common meshes worth a real per-mesh fracture - GDD §7.8. Falls back to the generic per-class AFragmentDebris shards (above) for any mesh without an entry here. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
+	TMap<TObjectPtr<UStaticMesh>, FMeshFractureOverride> MeshFractureOverrides;
 
 	/** FragmentCountPerClass[PieceClass], clamped to [3, 6]. Falls back to 4 (and logs a warning) if the class is missing - every class should have an entry. */
 	UFUNCTION(BlueprintPure, Category = "Destruction|Collapse")

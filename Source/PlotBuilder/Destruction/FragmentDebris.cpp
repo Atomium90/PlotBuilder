@@ -1,6 +1,8 @@
 #include "FragmentDebris.h"
+#include "DebrisSubsystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "UObject/ConstructorHelpers.h"
 
 AFragmentDebris::AFragmentDebris()
@@ -11,7 +13,10 @@ AFragmentDebris::AFragmentDebris()
 	SetRootComponent(MeshComponent);
 
 	MeshComponent->SetSimulatePhysics(true);
-	MeshComponent->SetCollisionProfileName(FName("BlockAllDynamic"));
+	// "Debris" (Config/DefaultEngine.ini): ignores Camera/Pawn/other debris, still blocks world
+	// geometry - lets a fragment pile sit on the ground without ever blocking the player's movement
+	// or build-mode's obstruction checks (a different object type than what that query asks for).
+	MeshComponent->SetCollisionProfileName(FName("Debris"));
 	MeshComponent->SetWorldScale3D(FVector(0.25f));
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeFinder(TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -39,13 +44,22 @@ void AFragmentDebris::BeginPlay()
 	InitialScale = MeshComponent->GetComponentScale();
 }
 
-void AFragmentDebris::Launch(const FVector& Impulse, const FLinearColor& Tint, float Lifetime, float FadeDuration)
+void AFragmentDebris::Launch(const FVector& Impulse, const FLinearColor& Tint, float Lifetime, float FadeDuration, int32 DebrisCap, float InSleepVelocityThreshold)
 {
 	LifetimeSeconds = Lifetime;
 	FadeDurationSeconds = FadeDuration;
+	SleepVelocityThreshold = InSleepVelocityThreshold;
 
 	MeshComponent->SetCustomPrimitiveDataVector3(0, FVector(Tint.R, Tint.G, Tint.B));
 	MeshComponent->AddImpulse(Impulse, NAME_None, true);
+
+	if (UWorld* World = GetWorld())
+	{
+		if (UDebrisSubsystem* DebrisSubsystem = World->GetSubsystem<UDebrisSubsystem>())
+		{
+			DebrisSubsystem->RegisterDebrisActor(this, DebrisCap);
+		}
+	}
 }
 
 void AFragmentDebris::Tick(float DeltaTime)
@@ -58,6 +72,15 @@ void AFragmentDebris::Tick(float DeltaTime)
 	{
 		Destroy();
 		return;
+	}
+
+	// Checked once per tick until asleep, then skipped - a settled fragment stops costing anything
+	// here. Linear speed only (not angular): close enough to "settled" for this heuristic without a
+	// second tunable in a different unit.
+	if (!bAsleep && SleepVelocityThreshold > 0.f && MeshComponent->GetPhysicsLinearVelocity().Size() < SleepVelocityThreshold)
+	{
+		MeshComponent->PutRigidBodyToSleep();
+		bAsleep = true;
 	}
 
 	const float FadeStart = LifetimeSeconds - FadeDurationSeconds;
