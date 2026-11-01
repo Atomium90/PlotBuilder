@@ -29,6 +29,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float CollapseThreshold = 0.1f;
 
+	/**
+	 *  Minimum stability a sub-anchor slab (ABuildablePiece::ResetsStability) must be receiving from
+	 *  its own neighbours before it resets to 1.0 - GDD §8, D28. Keep this equal to CollapseThreshold
+	 *  (its default) unless deliberately tuning the two apart: a floating sub-anchor with no valid
+	 *  chain below it must not hold up a building just because it has the flag.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
+	float SubAnchorMinimumIncomingStability = 0.1f;
+
 	/** Below this (but still at or above CollapseThreshold), the Build Mode ghost turns risky-yellow rather than green - a warning, not a block: placing here is allowed, it just won't be far from collapsing. Calibrated so a single horizontal link (1.0 - HorizontalLoss) already falls under it, by default. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float ComfortThreshold = 0.5f;

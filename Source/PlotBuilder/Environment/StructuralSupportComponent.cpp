@@ -623,6 +623,15 @@ void UStructuralSupportComponent::RelaxStability(const ABuildablePiece* Excluded
 				}
 			}
 
+			// Sub-anchor slab (GDD §8, D28): resets to 1.0 like a real Anchor, but only once its own
+			// incoming chain is itself valid - a floating sub-anchor must not hold up a building.
+			// Re-checked every relaxation pass, so this naturally stops once the chain below it is
+			// removed (RelaxStability re-seeds every non-anchor to 0 at the top, every time).
+			if (Piece->ResetsStability() && BestStability >= (Rules ? Rules->SubAnchorMinimumIncomingStability : 0.1f))
+			{
+				BestStability = 1.f;
+			}
+
 			if (BestStability > ReadStability(Piece) + KINDA_SMALL_NUMBER)
 			{
 				WriteStability(Piece, BestStability);

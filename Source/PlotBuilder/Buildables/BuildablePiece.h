@@ -98,6 +98,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Structural")
 	bool bIsLoadBearing = true;
 
+	/**
+	 *  Sub-anchor slab (GDD §8, D28): resets this piece's stability to 1.0, same as a real Anchor
+	 *  socket, but only once its own incoming chain is itself valid (see
+	 *  UStructuralSupportComponent::RelaxStability and UStructuralRules::SubAnchorMinimumIncomingStability).
+	 *  Fixes tall stacks hitting the collapse threshold around the fifth storey even at full health -
+	 *  a plain visual/material swap on the floor slab BP, same footprint and height, nothing else
+	 *  about the piece changes. False for every other piece, including the real foundation (which
+	 *  uses an Anchor socket instead, unconditionally 1.0).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Structural")
+	bool bResetsStability = false;
+
 	/** How long a Collapsing piece simulates physics before being destroyed, in seconds. */
 	UPROPERTY(EditAnywhere, Category = "Structural")
 	float CollapseLifeSpan = 4.f;
@@ -111,6 +123,7 @@ public:
 	bool IsStructuralAnchor() const { return bIsStructuralAnchor; }
 	void SetIsStructuralAnchor(bool bNewValue) { bIsStructuralAnchor = bNewValue; }
 	bool IsLoadBearing() const { return bIsLoadBearing; }
+	bool ResetsStability() const { return bResetsStability; }
 	void SetStructuralComponent(UStructuralSupportComponent* Component) { StructuralComponent = Component; }
 
 	EBuildAnchor GetBuildAnchor() const { return BuildAnchor; }
