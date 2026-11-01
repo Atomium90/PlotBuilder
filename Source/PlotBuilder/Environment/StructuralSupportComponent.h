@@ -172,8 +172,14 @@ private:
 
 	static FIntVector RotateCellOffset(const FIntVector& Offset, int32 QuarterTurns);
 
-	/** Whether two socket types pair up at all, and if so whether the link counts as vertical (cheap) or horizontal (expensive). */
-	static bool AreSocketsLinked(EStructuralSocketType A, EStructuralSocketType B, bool& OutIsVertical);
+	/**
+	 *  Whether two socket types pair up at all, and if so which loss tier the link uses: vertical
+	 *  (cheap, resting on top of something), roof-lateral (a roof tile's edge touching another roof
+	 *  tile's matching edge - cheaper than a generic horizontal contact, since there's no framing/
+	 *  truss piece underneath a roof skin to anchor every tile individually), or generic horizontal
+	 *  (OutIsVertical and OutIsRoofLateral both false - a wall or floor touching sideways).
+	 */
+	static bool AreSocketsLinked(EStructuralSocketType A, EStructuralSocketType B, bool& OutIsVertical, bool& OutIsRoofLateral);
 
 	void RecomputeStability();
 

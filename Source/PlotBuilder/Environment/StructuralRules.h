@@ -25,6 +25,17 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float HorizontalLoss = 0.6f;
 
+	/**
+	 *  Stability lost between a roof tile's edge and another roof tile's matching edge, side by side
+	 *  (not climbing a slope - that's vertical, see WallTop/RoofLow-style links). Lower than
+	 *  HorizontalLoss on purpose: there's no framing/truss piece under a roof skin to anchor every
+	 *  tile individually, so a flat or sloped roof needs to extend several tiles from its one real
+	 *  support without already hitting CollapseThreshold. The anchor-tracing requirement still
+	 *  applies regardless of this value - it only changes how far a lateral-only chain can stretch.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
+	float RoofLateralLoss = 0.2f;
+
 	/** A piece whose stability falls below this collapses. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float CollapseThreshold = 0.1f;

@@ -208,7 +208,9 @@ void UBuildModeComponent::ConfirmPlacement()
 	const FRotator SpawnRotation = PreviewActor->GetActorRotation();
 	const FIntVector GridCoordToApply = PendingGridCoord;
 	const uint8 OrientationToApply = static_cast<uint8>(((PendingQuarterTurns % 4) + 4) % 4);
-	const int32 RoofStepToApply = RoofStepValue;
+	// Same guard as TryResolveGridPlacement's PlaneZ - a leftover RoofStepValue from a previous
+	// roof selection must never be stamped onto a non-roof piece.
+	const int32 RoofStepToApply = (SelectedCDO && SelectedCDO->PieceClass == EPieceClass::RoofTile) ? RoofStepValue : 0;
 
 	const FInventorySlot ConsumedEntry = HotbarComponent->ConsumeSelected();
 
@@ -582,13 +584,18 @@ bool UBuildModeComponent::TryResolveGridPlacement(const FVector& ViewLocation, c
 	const ABuildablePiece* SelectedCDO = LastPreviewedClass ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
 	const float VerticalOffset = SelectedCDO ? SelectedCDO->GetVerticalOffset() : 0.f;
 
+	// RoofStepValue only means something for a Roof_* piece (climbing a slope or stacking a gable
+	// infill) - ignored for anything else, so leaving the roof step dialed in from a previous
+	// selection can't float a wall or floor at an intermediate height it was never meant to occupy.
+	const bool bRoofStepApplies = SelectedCDO && SelectedCDO->PieceClass == EPieceClass::RoofTile;
+
 	// FoundationTopZ(BuildLevel): the fondation's own pivot sits 20cm above the plot's ground
 	// surface (it's buried 10cm of its 30cm thickness) - every other piece at a given level shares
 	// that same Z, one FloorHeight step apart per level (see the greybox spec doc). RoofStepValue
 	// adds a second, independent vertical term on top (RoofStepHeight per step) for a roof piece
 	// climbing a slope or stacking a gable infill - it never changes what BuildLevel itself means,
 	// and it's always 0 unless the player has actually used ChangeRoofStep.
-	const float PlaneZ = CachedPlot->GetGroundZ() + 20.f + BuildLevel * FloorHeight + RoofStepValue * RoofStepHeight + VerticalOffset;
+	const float PlaneZ = CachedPlot->GetGroundZ() + 20.f + BuildLevel * FloorHeight + (bRoofStepApplies ? RoofStepValue : 0) * RoofStepHeight + VerticalOffset;
 
 	const FVector RayDir = ViewRotation.Vector();
 
@@ -797,7 +804,11 @@ bool UBuildModeComponent::IsGridCandidateRisky(const ABuildablePiece* SelectedCD
 
 	const UStructuralRules* Rules = Structural->Rules;
 	const float ComfortThreshold = Rules ? Rules->ComfortThreshold : 0.5f;
-	return Structural->ComputeStability(SelectedCDO->GetSockets(), GridCoord, QuarterTurns, RoofStepValue) < ComfortThreshold;
+	// Same guard as TryResolveGridPlacement/ConfirmPlacement - a leftover RoofStepValue from a
+	// previous roof selection must not make an unrelated piece look for neighbours at RoofStep != 0,
+	// where it'll find none and read as falsely risky.
+	const int32 RoofStepToCheck = SelectedCDO->PieceClass == EPieceClass::RoofTile ? RoofStepValue : 0;
+	return Structural->ComputeStability(SelectedCDO->GetSockets(), GridCoord, QuarterTurns, RoofStepToCheck) < ComfortThreshold;
 }
 
 void UBuildModeComponent::UpdateGhostMaterial(bool bBlocked, bool bRisky)

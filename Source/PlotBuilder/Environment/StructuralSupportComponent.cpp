@@ -85,7 +85,16 @@ void UStructuralSupportComponent::SetShowDebug(bool bShow)
 			continue;
 		}
 
-		Piece->GetMeshComponent()->SetMaterial(0, bShow ? DebugHeatmapMaterial : nullptr);
+		// Slot 0 only isn't enough for a piece with more than one material slot (e.g. a Boolean-built
+		// mesh like BP_Roof_Slope) - the untouched slot keeps its own material and never shows the
+		// tint. SetMaterial(Slot, nullptr) still reverts each slot to ITS OWN static mesh default, not
+		// a shared one, so this stays correct for a multi-material piece either way.
+		UStaticMeshComponent* Mesh = Piece->GetMeshComponent();
+
+		for (int32 SlotIndex = 0; SlotIndex < Mesh->GetNumMaterials(); ++SlotIndex)
+		{
+			Mesh->SetMaterial(SlotIndex, bShow ? DebugHeatmapMaterial : nullptr);
+		}
 
 		if (bShow)
 		{
@@ -153,8 +162,9 @@ FVector UStructuralSupportComponent::ComputeAwayFromNeighbourCentroid(const ABui
 			}
 
 			bool bIsVertical = false;
+			bool bIsRoofLateral = false;
 
-			if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical))
+			if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical, bIsRoofLateral))
 			{
 				Neighbours.Add(Entry.Owner);
 			}
@@ -194,8 +204,10 @@ FIntVector UStructuralSupportComponent::RotateCellOffset(const FIntVector& Offse
 	return Result;
 }
 
-bool UStructuralSupportComponent::AreSocketsLinked(EStructuralSocketType A, EStructuralSocketType B, bool& OutIsVertical)
+bool UStructuralSupportComponent::AreSocketsLinked(EStructuralSocketType A, EStructuralSocketType B, bool& OutIsVertical, bool& OutIsRoofLateral)
 {
+	OutIsRoofLateral = false;
+
 	const auto Matches = [A, B](EStructuralSocketType X, EStructuralSocketType Y)
 	{
 		return (A == X && B == Y) || (A == Y && B == X);
@@ -209,18 +221,38 @@ bool UStructuralSupportComponent::AreSocketsLinked(EStructuralSocketType A, EStr
 		// between them because a stairwell hole has none at any level by design. Without this, such
 		// walls have no socket pair to pass stability through at all. Only passes a value along - a
 		// wall stack still needs its own chain back down to an anchor (see T9).
-		|| Matches(EStructuralSocketType::WallTop, EStructuralSocketType::WallBottom))
+		|| Matches(EStructuralSocketType::WallTop, EStructuralSocketType::WallBottom)
+		// Roof climbing a slope (RoofStep): one row's RoofHigh resting on the row below's RoofLow is
+		// a piece sitting on top of another, same relationship as WallTop/WallBottom - not a lateral
+		// contact. Moved out of the horizontal bucket below, which was otherwise stacking its 0.6 loss
+		// on every row past the first and collapsing a roof two steps tall. The anchor-tracing
+		// requirement (nothing is seeded above 0 without a real Anchor reachable through the chain)
+		// already prevents an unsupported ring of roof pieces from self-supporting regardless of loss
+		// size, so this doesn't reopen that case - RoofLow/RoofLow and RoofHigh/RoofHigh (genuine
+		// side-by-side neighbours, or the ridge meeting) stay horizontal below.
+		|| Matches(EStructuralSocketType::RoofHigh, EStructuralSocketType::RoofLow))
 	{
 		OutIsVertical = true;
 		return true;
 	}
 
-	if (Matches(EStructuralSocketType::WallSide, EStructuralSocketType::WallSide)
-		|| Matches(EStructuralSocketType::FloorEdge, EStructuralSocketType::FloorEdge)
-		|| Matches(EStructuralSocketType::RoofLow, EStructuralSocketType::RoofLow)
+	// Roof tile touching another roof tile's matching edge sideways (not climbing a slope - see the
+	// vertical bucket above for that). Cheaper than the generic horizontal loss below: there's no
+	// framing/truss piece under a roof skin to anchor every tile individually, so a flat or sloped
+	// roof needs to extend several tiles from its one real support without already hitting the
+	// collapse threshold - the anchor-tracing requirement still applies either way, this only changes
+	// how far a lateral-only chain can stretch before it does.
+	if (Matches(EStructuralSocketType::RoofLow, EStructuralSocketType::RoofLow)
 		|| Matches(EStructuralSocketType::RoofHigh, EStructuralSocketType::RoofHigh)
-		|| Matches(EStructuralSocketType::RoofSide, EStructuralSocketType::RoofSide)
-		|| Matches(EStructuralSocketType::RoofHigh, EStructuralSocketType::RoofLow))
+		|| Matches(EStructuralSocketType::RoofSide, EStructuralSocketType::RoofSide))
+	{
+		OutIsVertical = false;
+		OutIsRoofLateral = true;
+		return true;
+	}
+
+	if (Matches(EStructuralSocketType::WallSide, EStructuralSocketType::WallSide)
+		|| Matches(EStructuralSocketType::FloorEdge, EStructuralSocketType::FloorEdge))
 	{
 		OutIsVertical = false;
 		return true;
@@ -369,6 +401,7 @@ float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSock
 
 	const float VerticalLoss = Rules ? Rules->VerticalLoss : 0.1f;
 	const float HorizontalLoss = Rules ? Rules->HorizontalLoss : 0.6f;
+	const float RoofLateralLoss = Rules ? Rules->RoofLateralLoss : 0.2f;
 	float BestStability = 0.f;
 
 	for (const FStructuralSocket& Socket : Sockets)
@@ -385,10 +418,11 @@ float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSock
 		for (const FRegisteredSocket& Entry : *Entries)
 		{
 			bool bIsVertical = false;
+			bool bIsRoofLateral = false;
 
-			if (Entry.Owner && Entry.Owner->IsLoadBearing() && Entry.RoofStep == AbsoluteRoofStep && AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical))
+			if (Entry.Owner && Entry.Owner->IsLoadBearing() && Entry.RoofStep == AbsoluteRoofStep && AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical, bIsRoofLateral))
 			{
-				const float Loss = bIsVertical ? VerticalLoss : HorizontalLoss;
+				const float Loss = bIsVertical ? VerticalLoss : (bIsRoofLateral ? RoofLateralLoss : HorizontalLoss);
 				const UDurabilityComponent* EntryDurability = Entry.Owner->GetDurabilityComponent();
 				const float Coupling = EntryDurability ? EntryDurability->GetStabilityCoupling() : 1.f;
 				BestStability = FMath::Max(BestStability, Entry.Owner->GetStability() * Coupling - Loss);
@@ -458,8 +492,9 @@ TMap<ABuildablePiece*, int32> UStructuralSupportComponent::ComputeHopDistances()
 				}
 
 				bool bIsVertical = false;
+				bool bIsRoofLateral = false;
 
-				if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical))
+				if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical, bIsRoofLateral))
 				{
 					HopDistances.Add(Entry.Owner, CurrentHop + 1);
 					Frontier.Add(Entry.Owner);
@@ -538,6 +573,7 @@ void UStructuralSupportComponent::RelaxStability(const ABuildablePiece* Excluded
 {
 	const float VerticalLoss = Rules ? Rules->VerticalLoss : 0.1f;
 	const float HorizontalLoss = Rules ? Rules->HorizontalLoss : 0.6f;
+	const float RoofLateralLoss = Rules ? Rules->RoofLateralLoss : 0.2f;
 
 	// DryRunResult == nullptr: read/write each piece's own Stability field directly, exactly as
 	// before this was factored out of RecomputeStability. DryRunResult != nullptr (WouldBeBottleneck):
@@ -612,10 +648,11 @@ void UStructuralSupportComponent::RelaxStability(const ABuildablePiece* Excluded
 					}
 
 					bool bIsVertical = false;
+					bool bIsRoofLateral = false;
 
-					if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical))
+					if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical, bIsRoofLateral))
 					{
-						const float Loss = bIsVertical ? VerticalLoss : HorizontalLoss;
+						const float Loss = bIsVertical ? VerticalLoss : (bIsRoofLateral ? RoofLateralLoss : HorizontalLoss);
 						const UDurabilityComponent* EntryDurability = Entry.Owner->GetDurabilityComponent();
 						const float Coupling = EntryDurability ? EntryDurability->GetStabilityCoupling() : 1.f;
 						BestStability = FMath::Max(BestStability, ReadStability(Entry.Owner) * Coupling - Loss);
