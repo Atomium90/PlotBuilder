@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Tickable.h"
 #include "DebrisSubsystem.generated.h"
 
 /**
@@ -14,7 +15,7 @@
  *  between UStructuralSupportComponent (mechanism) and UDemolitionRules/UStructuralRules (tuning).
  */
 UCLASS()
-class UDebrisSubsystem : public UWorldSubsystem
+class UDebrisSubsystem : public UWorldSubsystem, public FTickableGameObject
 {
 	GENERATED_BODY()
 
@@ -26,9 +27,18 @@ public:
 	 *  automatically whenever Actor is destroyed, by any means (an explicit Destroy() call, its own
 	 *  SetLifeSpan timeout, or this subsystem's own eviction) - OnDestroyed is a generic AActor
 	 *  delegate, so this works the same for AFragmentDebris and an engine AGeometryCollectionActor
-	 *  alike, with no per-class hook needed on either.
+	 *  alike, with no per-class hook needed on either. Also records Cap as LastCapSeen, for the
+	 *  fragment-counter debug display below (the cap itself isn't otherwise stored here).
 	 */
 	void RegisterDebrisActor(AActor* Actor, int32 Cap, int32 FragmentWeight = 1);
+
+	/** Toggles the on-screen "active fragments vs. cap" readout - GDD's debug table, same SetShowDebug naming as UStructuralSupportComponent. Only ticks while this is true. */
+	void SetShowDebugCount(bool bShow) { bShowDebugCount = bShow; }
+
+	// FTickableGameObject
+	virtual void Tick(float DeltaTime) override;
+	virtual bool IsTickable() const override { return bShowDebugCount; }
+	virtual TStatId GetStatId() const override { RETURN_QUICK_DECLARE_CYCLE_STAT(UDebrisSubsystem, STATGROUP_Tickables); }
 
 private:
 
@@ -47,4 +57,6 @@ private:
 
 	TArray<FDebrisEntry> LiveDebris;
 	int32 TotalWeight = 0;
+	int32 LastCapSeen = 0;
+	bool bShowDebugCount = false;
 };

@@ -1,5 +1,6 @@
 #include "DebrisSubsystem.h"
 #include "GameFramework/Actor.h"
+#include "Engine/Engine.h"
 
 void UDebrisSubsystem::RegisterDebrisActor(AActor* Actor, int32 Cap, int32 FragmentWeight)
 {
@@ -10,9 +11,19 @@ void UDebrisSubsystem::RegisterDebrisActor(AActor* Actor, int32 Cap, int32 Fragm
 
 	LiveDebris.Add({Actor, FragmentWeight});
 	TotalWeight += FragmentWeight;
+	LastCapSeen = Cap;
 	Actor->OnDestroyed.AddDynamic(this, &UDebrisSubsystem::HandleDebrisActorDestroyed);
 
 	EvictOldestUntilUnderCap(Cap);
+}
+
+void UDebrisSubsystem::Tick(float DeltaTime)
+{
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(710, DeltaTime, FColor::Green,
+			FString::Printf(TEXT("Fragments: %d / %d"), TotalWeight, LastCapSeen));
+	}
 }
 
 void UDebrisSubsystem::HandleDebrisActorDestroyed(AActor* DestroyedActor)
