@@ -6,7 +6,6 @@
 #include "Environment/StructuralSupportComponent.h"
 #include "Destruction/DurabilityComponent.h"
 #include "Destruction/DemolitionRules.h"
-#include "Destruction/FragmentDebris.h"
 #include "Destruction/DebrisSubsystem.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -227,27 +226,7 @@ void ABuildablePiece::Fracture(const FVector& ScatterOrigin, const FVector& Scat
 		return;
 	}
 
-	const int32 Count = Rules->ComputeFragmentCount(PieceClass);
-	const FLinearColor Tint = Rules->GetFragmentTint(Material);
-	UClass* SpawnClass = Rules->FragmentClass ? Rules->FragmentClass.Get() : AFragmentDebris::StaticClass();
-
-	for (int32 Index = 0; Index < Count; ++Index)
-	{
-		const FVector RandomOffset = FMath::VRand() * FMath::FRandRange(0.f, Rules->FragmentScatterRadius);
-		const FRotator RandomRotation(FMath::FRandRange(0.f, 360.f), FMath::FRandRange(0.f, 360.f), FMath::FRandRange(0.f, 360.f));
-
-		AFragmentDebris* Fragment = World->SpawnActor<AFragmentDebris>(SpawnClass, ScatterOrigin + RandomOffset, RandomRotation);
-
-		if (!Fragment)
-		{
-			continue;
-		}
-
-		const FVector OutwardDirection = RandomOffset.IsNearlyZero() ? FMath::VRand() : RandomOffset.GetSafeNormal();
-		const FVector Impulse = (OutwardDirection + ScatterBias) * Rules->FragmentImpulseStrength;
-
-		Fragment->Launch(Impulse, Tint, Rules->FragmentLifetime, Rules->FragmentFadeDuration, Rules->FragmentGlobalCap, Rules->FragmentSleepVelocityThreshold);
-	}
+	Rules->SpawnGenericFragments(World, Rules->ComputeFragmentCount(PieceClass), Material, ScatterOrigin, ScatterBias);
 }
 
 void ABuildablePiece::UpdateStabilityDebugColor()

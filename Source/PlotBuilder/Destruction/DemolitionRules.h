@@ -10,6 +10,7 @@ class UCurveFloat;
 class AFragmentDebris;
 class UStaticMesh;
 class UGeometryCollection;
+class UCameraShakeBase;
 
 /** Per-tool multipliers for one row of the tool x material matrix - wraps a TMap so UDemolitionRules can hold one per EDemolitionTool (UE doesn't support a TMap of TMaps as a UPROPERTY). */
 USTRUCT(BlueprintType)
@@ -158,6 +159,33 @@ public:
 	/** Piece mesh -> authored Geometry Collection override (Chaos Fracture Mode, 3-6 chunks) for the handful of common meshes worth a real per-mesh fracture - GDD §7.8. Falls back to the generic per-class AFragmentDebris shards (above) for any mesh without an entry here. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
 	TMap<TObjectPtr<UStaticMesh>, FMeshFractureOverride> MeshFractureOverrides;
+
+	/** Accumulated crush energy (mass x relative speed of a Falling piece hitting the player) above which a crush event fires - GDD §7.9. Tuned by feel, not a physically meaningful unit. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Crush")
+	float CrushThreshold = 500.f;
+
+	/** Rolling window (seconds) over which crush energy is accumulated before decaying out - GDD §7.9, "~2s". */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Crush")
+	float CrushWindow = 2.f;
+
+	/** How long a crush event disables the player's movement/camera/tool input, in seconds - GDD §7.9, "~2s stun". */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Crush")
+	float CrushStunDuration = 2.f;
+
+	/** Camera shake played on the player's controller when a crush event fires - same TSubclassOf<UCameraShakeBase> pattern as UDemolitionToolData::HitCameraShakeClass. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Crush")
+	TSubclassOf<UCameraShakeBase> CrushCameraShakeClass;
+
+	/**
+	 *  Spawns Count generic AFragmentDebris shards around ScatterOrigin, tinted for Material and
+	 *  nudged by ScatterBias - the non-Geometry-Collection fragment path shared by
+	 *  ABuildablePiece::Fracture (generic per-class fallback) and any breakable APhysicsProp (which
+	 *  has no EPieceClass/MeshFractureOverrides concept at all, so it always takes this path).
+	 *  Registers each fragment with UDebrisSubsystem exactly like the piece path does - see
+	 *  AFragmentDebris::Launch.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Destruction|Collapse")
+	void SpawnGenericFragments(UWorld* World, int32 Count, EDemolitionMaterial Material, const FVector& ScatterOrigin, const FVector& ScatterBias) const;
 
 	/** FragmentCountPerClass[PieceClass], clamped to [3, 6]. Falls back to 4 (and logs a warning) if the class is missing - every class should have an entry. */
 	UFUNCTION(BlueprintPure, Category = "Destruction|Collapse")

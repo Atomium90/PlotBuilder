@@ -3,19 +3,25 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Interaction/Interactable.h"
+#include "Destruction/Damageable.h"
+#include "Destruction/DemolitionTypes.h"
 #include "PhysicsProp.generated.h"
 
 class UStaticMeshComponent;
+class UDurabilityComponent;
 
 /**
  *  Generic physics-simulated prop (crate, barrel, furniture...). Mass and friction are tuned
  *  per Blueprint variant via the mesh's own physics properties, nothing hardcoded in C++.
  *  Implements IInteractable so UInteractionComponent can focus it. Push/Pull/Launch manipulation
  *  goes through UPhysicsManipulationComponent directly on the mesh's physics body, not through
- *  Interact; Interact is only used to pick the prop up into a UHotbarComponent.
+ *  Interact; Interact is only used to pick the prop up into a UHotbarComponent. Implements
+ *  IDamageable (breakable furniture, GDD §10) via the same UDurabilityComponent as
+ *  ABuildablePiece, but initialized with a flat per-prop MaxHP instead of the Material x
+ *  PieceClass lookup - furniture has no EPieceClass of its own (see the comment on EPieceClass).
  */
 UCLASS(abstract)
-class APhysicsProp : public AActor, public IInteractable
+class APhysicsProp : public AActor, public IInteractable, public IDamageable
 {
 	GENERATED_BODY()
 
@@ -26,9 +32,33 @@ public:
 	UStaticMeshComponent* GetMeshComponent() const { return MeshComponent; }
 
 	virtual void Interact_Implementation(AActor* InteractingActor) override;
+	virtual void ApplyDamage_Implementation(const FDamageInfo& DamageInfo) override;
+
+	/** What this prop is made of - drives the fragment tint and the tool x material matrix, same as ABuildablePiece::Material. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	EDemolitionMaterial Material = EDemolitionMaterial::Wood;
+
+	/** Flat hit points for this prop - set per Blueprint class default (GDD §10: "furniture HP is set per prop", not computed from a piece-class factor). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	float MaxHP = 50.f;
+
+	/** How many generic AFragmentDebris shards to spawn when this prop breaks - see UDemolitionRules::SpawnGenericFragments. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	int32 FragmentCount = 4;
+
+protected:
+
+	virtual void BeginPlay() override;
 
 private:
 
+	/** DurabilityComponent->OnDurabilityDestroyed handler: spawns generic fragments and removes this prop - furniture's "simple break on destruction" (GDD, Sprint 2 Monday), no per-mesh fracture. */
+	UFUNCTION()
+	void HandleBroken();
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UStaticMeshComponent* MeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UDurabilityComponent* DurabilityComponent;
 };

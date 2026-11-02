@@ -1,6 +1,8 @@
 #include "DemolitionRules.h"
 #include "PlotBuilder.h"
 #include "Curves/CurveFloat.h"
+#include "FragmentDebris.h"
+#include "Engine/World.h"
 
 float UDemolitionRules::ComputeMaxHP(EDemolitionMaterial Material, EPieceClass PieceClass) const
 {
@@ -62,6 +64,35 @@ FLinearColor UDemolitionRules::GetFragmentTint(EDemolitionMaterial Material) con
 {
 	const FLinearColor* Tint = FragmentTintColor.Find(Material);
 	return Tint ? *Tint : FLinearColor::Gray;
+}
+
+void UDemolitionRules::SpawnGenericFragments(UWorld* World, int32 Count, EDemolitionMaterial Material, const FVector& ScatterOrigin, const FVector& ScatterBias) const
+{
+	if (!World)
+	{
+		return;
+	}
+
+	const FLinearColor Tint = GetFragmentTint(Material);
+	UClass* SpawnClass = FragmentClass ? FragmentClass.Get() : AFragmentDebris::StaticClass();
+
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const FVector RandomOffset = FMath::VRand() * FMath::FRandRange(0.f, FragmentScatterRadius);
+		const FRotator RandomRotation(FMath::FRandRange(0.f, 360.f), FMath::FRandRange(0.f, 360.f), FMath::FRandRange(0.f, 360.f));
+
+		AFragmentDebris* Fragment = World->SpawnActor<AFragmentDebris>(SpawnClass, ScatterOrigin + RandomOffset, RandomRotation);
+
+		if (!Fragment)
+		{
+			continue;
+		}
+
+		const FVector OutwardDirection = RandomOffset.IsNearlyZero() ? FMath::VRand() : RandomOffset.GetSafeNormal();
+		const FVector Impulse = (OutwardDirection + ScatterBias) * FragmentImpulseStrength;
+
+		Fragment->Launch(Impulse, Tint, FragmentLifetime, FragmentFadeDuration, FragmentGlobalCap, FragmentSleepVelocityThreshold);
+	}
 }
 
 float UDemolitionRules::ComputeStabilityCoupling(float HPRatio) const

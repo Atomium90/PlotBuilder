@@ -54,6 +54,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Destruction")
 	void InitializeFromRules(EDemolitionMaterial InMaterial, EPieceClass InPieceClass);
 
+	/**
+	 *  Same as InitializeFromRules, but MaxHP is given directly instead of computed from
+	 *  Rules->MaterialBaseHP x PieceClassFactor - for owners with no EPieceClass concept of their
+	 *  own (breakable APhysicsProp furniture, GDD §10 - "furniture HP is set per prop", see the
+	 *  comment on EPieceClass). Rules can still be assigned and is still used for everything else
+	 *  (damage-state thresholds, ApplyDamage) - only the HP lookup itself is bypassed.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Destruction")
+	void InitializeWithFlatHP(EDemolitionMaterial InMaterial, float InMaxHP);
+
 	/** Subtracts DamageInfo.Amount from CurrentHP (clamped to 0), recomputes State against Rules' thresholds, and broadcasts OnDurabilityDamaged / OnDurabilityStateChanged / OnDurabilityDestroyed as appropriate. No-op once already Destroyed. */
 	UFUNCTION(BlueprintCallable, Category = "Destruction")
 	void ApplyDamage(const FDamageInfo& DamageInfo);

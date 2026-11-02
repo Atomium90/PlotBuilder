@@ -25,6 +25,14 @@ void UDurabilityComponent::InitializeFromRules(EDemolitionMaterial InMaterial, E
 	State = EDurabilityState::Intact;
 }
 
+void UDurabilityComponent::InitializeWithFlatHP(EDemolitionMaterial InMaterial, float InMaxHP)
+{
+	Material = InMaterial;
+	MaxHP = InMaxHP;
+	CurrentHP = MaxHP;
+	State = EDurabilityState::Intact;
+}
+
 void UDurabilityComponent::ApplyDamage(const FDamageInfo& DamageInfo)
 {
 	if (State == EDurabilityState::Destroyed)
