@@ -155,7 +155,7 @@ private:
 	 *  at a shared edge/vertex). Never blocks on stability alone - see IsGridCandidateRisky for that.
 	 *  LastBlockReason is set for the debug display.
 	 */
-	bool IsGridCandidateBlocked(const FVector& Location, const FRotator& Rotation, EBuildAnchor Anchor, const FIntVector& GridCoord, int32 QuarterTurns) const;
+	bool IsGridCandidateBlocked(const FVector& Location, const FRotator& Rotation, EBuildAnchor Anchor, const FIntVector& GridCoord, int32 QuarterTurns, int32 RoofStepForOccupancy) const;
 
 	/** Whether the candidate's resulting stability would fall under UStructuralRules::ComfortThreshold - a warning (yellow ghost), never a reason to block placement by itself. False for a piece with no sockets, or with no Plot/structural component in the level. */
 	bool IsGridCandidateRisky(const ABuildablePiece* SelectedCDO, const FIntVector& GridCoord, int32 QuarterTurns) const;
@@ -178,6 +178,9 @@ private:
 
 	UPROPERTY()
 	TSubclassOf<AActor> LastPreviewedClass;
+
+	/** Mirror state RefreshPreviewMesh's ghost mesh currently reflects, for a MirrorVariantClass piece - see RefreshPreviewMesh. Meaningless otherwise. */
+	bool bLastPreviewedMirrored = false;
 
 	bool bIsActive = false;
 	int32 RotationSteps = 0;

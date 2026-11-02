@@ -282,7 +282,7 @@ void UStructuralSupportComponent::OccupySlot(EBuildAnchor SlotType, const FIntVe
 {
 	if (TMap<FIntVector, TObjectPtr<ABuildablePiece>>* Map = GetOccupancyMap(SlotType))
 	{
-		Map->Add(Cell, Piece);
+		Map->Add(MakeOccupancyKey(Cell, Piece ? Piece->GetRoofStep() : 0), Piece);
 	}
 }
 
@@ -295,16 +295,16 @@ void UStructuralSupportComponent::FreeSlotsFor(ABuildablePiece* Piece)
 
 	if (TMap<FIntVector, TObjectPtr<ABuildablePiece>>* Map = GetOccupancyMap(Piece->GetBuildAnchor()))
 	{
-		Map->Remove(Piece->GetGridCoord());
+		Map->Remove(MakeOccupancyKey(Piece->GetGridCoord(), Piece->GetRoofStep()));
 	}
 }
 
-bool UStructuralSupportComponent::IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell) const
+bool UStructuralSupportComponent::IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep) const
 {
-	return GetPieceAt(SlotType, Cell) == nullptr;
+	return GetPieceAt(SlotType, Cell, RoofStep) == nullptr;
 }
 
-ABuildablePiece* UStructuralSupportComponent::GetPieceAt(EBuildAnchor SlotType, const FIntVector& Cell) const
+ABuildablePiece* UStructuralSupportComponent::GetPieceAt(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep) const
 {
 	const TMap<FIntVector, TObjectPtr<ABuildablePiece>>* Map = GetOccupancyMap(SlotType);
 
@@ -313,7 +313,7 @@ ABuildablePiece* UStructuralSupportComponent::GetPieceAt(EBuildAnchor SlotType, 
 		return nullptr;
 	}
 
-	const TObjectPtr<ABuildablePiece>* Found = Map->Find(Cell);
+	const TObjectPtr<ABuildablePiece>* Found = Map->Find(MakeOccupancyKey(Cell, RoofStep));
 	return Found ? Found->Get() : nullptr;
 }
 

@@ -84,6 +84,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Structural")
 	bool bFaceAnchoredEdge = false;
 
+	/**
+	 *  Edge pieces only, for an asymmetric mesh that needs a true left/right mirror rather than a
+	 *  180 yaw (e.g. a gable half) - set on the "canonical" Blueprint, pointing at its mirrored
+	 *  counterpart. A plain 180 yaw can't mirror an asymmetric mesh, and combined with
+	 *  bFaceAnchoredEdge it would just relocate the piece onto the other flanking cell instead -
+	 *  see TryResolveGridPlacement's Edge branch. When set, BuildModeComponent reuses the same
+	 *  Edge "flip" toggle (RotatePreview) to pick which of the two classes to preview/spawn instead
+	 *  of rotating, so the player still only ever sees one hotbar entry. Left null for every piece
+	 *  that doesn't need this (the overwhelming majority).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Structural")
+	TSubclassOf<ABuildablePiece> MirrorVariantClass;
+
 	/** Vertical offset from the current build level's placement plane, in cm - 0 for everything except roof/gable pieces (see the greybox spec doc's VerticalOffset = -20 note). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float VerticalOffset = 0.f;

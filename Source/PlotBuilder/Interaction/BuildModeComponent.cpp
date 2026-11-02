@@ -212,14 +212,21 @@ void UBuildModeComponent::ConfirmPlacement()
 	// roof selection must never be stamped onto a non-roof piece.
 	const int32 RoofStepToApply = (SelectedCDO && SelectedCDO->PieceClass == EPieceClass::RoofTile) ? RoofStepValue : 0;
 
+	// Same flip toggle TryResolveGridPlacement reads to skip the 180-yaw ManualFlip for this piece -
+	// here it decides which of the two mirrored classes is the one actually spawned.
+	const bool bSpawnMirrored = SelectedCDO && SelectedCDO->MirrorVariantClass && (RotationSteps % 2) == 1;
+
 	const FInventorySlot ConsumedEntry = HotbarComponent->ConsumeSelected();
+	const TSubclassOf<AActor> ClassToSpawn = (bSpawnMirrored && SelectedCDO->MirrorVariantClass)
+		? TSubclassOf<AActor>(SelectedCDO->MirrorVariantClass)
+		: ConsumedEntry.ActorClass;
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = (Anchor != EBuildAnchor::Legacy)
 		? ESpawnActorCollisionHandlingMethod::AlwaysSpawn
 		: ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	if (AActor* Spawned = GetWorld()->SpawnActor<AActor>(ConsumedEntry.ActorClass, SpawnLocation, SpawnRotation, SpawnParams))
+	if (AActor* Spawned = GetWorld()->SpawnActor<AActor>(ClassToSpawn, SpawnLocation, SpawnRotation, SpawnParams))
 	{
 		Spawned->SetActorScale3D(ConsumedEntry.Scale);
 
@@ -281,24 +288,40 @@ void UBuildModeComponent::RefreshPreviewMesh()
 
 	PreviewActor->SetActorHiddenInGame(false);
 
-	if (SelectedEntry.ActorClass == LastPreviewedClass)
+	const ABuildablePiece* CDO = SelectedEntry.ActorClass->GetDefaultObject<ABuildablePiece>();
+
+	// A mirror-variant piece reuses the Edge "flip" toggle (RotationSteps) to pick which of its two
+	// mirrored meshes to preview, instead of rotating 180 - see TryResolveGridPlacement's Edge
+	// branch. Tracked alongside LastPreviewedClass so toggling it refreshes the mesh below even
+	// though the hotbar selection itself hasn't changed.
+	const bool bPreviewMirrored = CDO && CDO->MirrorVariantClass && (RotationSteps % 2) == 1;
+
+	if (SelectedEntry.ActorClass == LastPreviewedClass && bPreviewMirrored == bLastPreviewedMirrored)
 	{
-		// Same class as last frame - only the transform needs updating (done every tick separately).
+		// Same class and mirror state as last frame - only the transform needs updating (done every tick separately).
 		return;
 	}
 
+	const bool bClassChanged = SelectedEntry.ActorClass != LastPreviewedClass;
 	LastPreviewedClass = SelectedEntry.ActorClass;
-	RotationSteps = 0;
+	bLastPreviewedMirrored = bPreviewMirrored;
 
-	const ABuildablePiece* CDO = SelectedEntry.ActorClass->GetDefaultObject<ABuildablePiece>();
+	if (bClassChanged)
+	{
+		RotationSteps = 0;
+	}
+
+	const ABuildablePiece* MeshSourceCDO = (bPreviewMirrored && CDO->MirrorVariantClass)
+		? CDO->MirrorVariantClass->GetDefaultObject<ABuildablePiece>()
+		: CDO;
 	UStaticMeshComponent* MeshComp = PreviewActor->GetStaticMeshComponent();
 
-	if (!CDO || !MeshComp)
+	if (!MeshSourceCDO || !MeshComp)
 	{
 		return;
 	}
 
-	MeshComp->SetStaticMesh(CDO->GetMeshComponent() ? CDO->GetMeshComponent()->GetStaticMesh() : nullptr);
+	MeshComp->SetStaticMesh(MeshSourceCDO->GetMeshComponent() ? MeshSourceCDO->GetMeshComponent()->GetStaticMesh() : nullptr);
 	PreviewActor->SetActorScale3D(SelectedEntry.Scale);
 
 	// New mesh slots have no ghost material assigned yet - force UpdateGhostMaterial to (re)apply
@@ -347,7 +370,11 @@ void UBuildModeComponent::UpdatePreviewTransform()
 		PendingQuarterTurns = QuarterTurns;
 		PreviewActor->SetActorLocationAndRotation(CandidateLocation, CandidateRotation);
 
-		bIsBlocked = IsGridCandidateBlocked(CandidateLocation, CandidateRotation, Anchor, GridCoord, QuarterTurns);
+		// Same guard as IsGridCandidateRisky/ConfirmPlacement - a leftover RoofStepValue from a
+		// previous roof selection must not make an unrelated piece's occupancy check look at the
+		// wrong slot.
+		const int32 RoofStepForOccupancy = (SelectedCDO && SelectedCDO->PieceClass == EPieceClass::RoofTile) ? RoofStepValue : 0;
+		bIsBlocked = IsGridCandidateBlocked(CandidateLocation, CandidateRotation, Anchor, GridCoord, QuarterTurns, RoofStepForOccupancy);
 		bIsRisky = !bIsBlocked && IsGridCandidateRisky(SelectedCDO, GridCoord, QuarterTurns);
 		UpdateGhostMaterial(bIsBlocked, bIsRisky);
 		return;
@@ -690,8 +717,13 @@ bool UBuildModeComponent::TryResolveGridPlacement(const FVector& ViewLocation, c
 			}
 
 			// Manual override on top of the auto-picked side (or the sole driver, for a centered
-			// piece) - RotatePreview toggles this for Edge pieces.
-			const float ManualFlip = (RotationSteps % 2) * 180.f;
+			// piece) - RotatePreview toggles this for Edge pieces. A mirror-variant piece (e.g. a
+			// gable half) reuses that same toggle to pick which of two mirrored classes to
+			// preview/spawn instead (see RefreshPreviewMesh/ConfirmPlacement) - an extra 180 here
+			// as well would, combined with bFaceAnchoredEdge, just relocate it onto the other
+			// flanking cell rather than mirror it.
+			const bool bUsesMirrorVariant = SelectedCDO && SelectedCDO->MirrorVariantClass != nullptr;
+			const float ManualFlip = bUsesMirrorVariant ? 0.f : (RotationSteps % 2) * 180.f;
 			Yaw = FMath::Fmod(BaseYaw + PreferredFlip + ManualFlip, 360.f);
 		}
 		break;
@@ -708,7 +740,7 @@ bool UBuildModeComponent::TryResolveGridPlacement(const FVector& ViewLocation, c
 	return true;
 }
 
-bool UBuildModeComponent::IsGridCandidateBlocked(const FVector& Location, const FRotator& Rotation, EBuildAnchor Anchor, const FIntVector& GridCoord, int32 QuarterTurns) const
+bool UBuildModeComponent::IsGridCandidateBlocked(const FVector& Location, const FRotator& Rotation, EBuildAnchor Anchor, const FIntVector& GridCoord, int32 QuarterTurns, int32 RoofStepForOccupancy) const
 {
 	if (!CachedPlot)
 	{
@@ -724,7 +756,7 @@ bool UBuildModeComponent::IsGridCandidateBlocked(const FVector& Location, const 
 
 	UStructuralSupportComponent* Structural = CachedPlot->GetStructuralSupport();
 
-	if (Structural && !Structural->IsSlotFree(Anchor, GridCoord))
+	if (Structural && !Structural->IsSlotFree(Anchor, GridCoord, RoofStepForOccupancy))
 	{
 		LastBlockReason = TEXT("slot occupied");
 		return true;

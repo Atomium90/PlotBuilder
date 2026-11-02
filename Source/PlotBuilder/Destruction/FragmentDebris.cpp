@@ -51,10 +51,24 @@ void AFragmentDebris::Launch(const FVector& Impulse, const FLinearColor& Tint, f
 	SleepVelocityThreshold = InSleepVelocityThreshold;
 
 	MeshComponent->SetCustomPrimitiveDataVector3(0, FVector(Tint.R, Tint.G, Tint.B));
-	MeshComponent->AddImpulse(Impulse, NAME_None, true);
 
 	if (UWorld* World = GetWorld())
 	{
+		// Chaos's physics thread can lag a tick or more behind the game thread, especially when many
+		// pieces fracture the same frame (a batch of foundations, a cascade) - the new rigid body isn't
+		// always live in the solver yet by the next game tick, so the impulse can still be silently
+		// dropped. A fixed short delay gives the solver real margin instead of gambling on one frame.
+		TWeakObjectPtr<UStaticMeshComponent> WeakMesh(MeshComponent);
+		FTimerHandle ImpulseDelayHandle;
+
+		World->GetTimerManager().SetTimer(ImpulseDelayHandle, FTimerDelegate::CreateLambda([WeakMesh, Impulse]()
+		{
+			if (UStaticMeshComponent* Mesh = WeakMesh.Get())
+			{
+				Mesh->AddImpulse(Impulse, NAME_None, true);
+			}
+		}), 0.1f, false);
+
 		if (UDebrisSubsystem* DebrisSubsystem = World->GetSubsystem<UDebrisSubsystem>())
 		{
 			DebrisSubsystem->RegisterDebrisActor(this, DebrisCap);

@@ -160,13 +160,20 @@ public:
 	 */
 	void NotifyEnteredCritical(ABuildablePiece* Piece);
 
-	/** Occupancy table, separate from structural stability: is SlotType's slot at Cell free? Always true for SlotType == Legacy (nothing is ever tracked there). */
+	/**
+	 *  Occupancy table, separate from structural stability: is SlotType's slot at Cell free? Always
+	 *  true for SlotType == Legacy (nothing is ever tracked there). RoofStep disambiguates a Cell
+	 *  slot a roof piece occupies while climbing a slope (gable fill stacking towards the ridge) -
+	 *  several such pieces share the same spatial Cell (see ABuildablePiece::GetStructuralCell,
+	 *  which never factors RoofStep in - sockets rely on that to find each other at the same cell),
+	 *  so occupancy needs its own, separate way to tell them apart. Always 0 for anything else.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
-	bool IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell) const;
+	bool IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep = 0) const;
 
-	/** The piece occupying SlotType's slot at Cell, or nullptr if free. */
+	/** The piece occupying SlotType's slot at Cell (and RoofStep - see IsSlotFree), or nullptr if free. */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
-	ABuildablePiece* GetPieceAt(EBuildAnchor SlotType, const FIntVector& Cell) const;
+	ABuildablePiece* GetPieceAt(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep = 0) const;
 
 private:
 
@@ -216,6 +223,9 @@ private:
 	void FreeSlotsFor(ABuildablePiece* Piece);
 	TMap<FIntVector, TObjectPtr<ABuildablePiece>>* GetOccupancyMap(EBuildAnchor SlotType);
 	const TMap<FIntVector, TObjectPtr<ABuildablePiece>>* GetOccupancyMap(EBuildAnchor SlotType) const;
+
+	/** Folds RoofStep into Cell for the occupancy table only (never for GetStructuralCell/socket matching - see IsSlotFree) - same large-offset trick as elsewhere, safely outside any real BuildLevel's range. */
+	static FIntVector MakeOccupancyKey(const FIntVector& Cell, int32 RoofStep) { return Cell + FIntVector(0, 0, RoofStep * 1000); }
 
 	bool bRecomputeDirty = false;
 
