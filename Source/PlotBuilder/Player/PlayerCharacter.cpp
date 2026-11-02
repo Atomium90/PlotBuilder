@@ -16,6 +16,8 @@
 #include "Interaction/ToolbeltComponent.h"
 #include "Destruction/Damageable.h"
 #include "Destruction/DemolitionTypes.h"
+#include "Destruction/CrushDetectionComponent.h"
+#include "Destruction/DebrisSubsystem.h"
 #include "Environment/Plot.h"
 #include "Environment/StructuralSupportComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -71,6 +73,9 @@ APlayerCharacter::APlayerCharacter()
 
 	// Equipped demolition tool slot, separate from the hotbar
 	ToolbeltComponent = CreateDefaultSubobject<UToolbeltComponent>(TEXT("ToolbeltComponent"));
+
+	// Accumulated crush energy from Falling pieces, stun gating for movement/camera/tool input
+	CrushDetectionComponent = CreateDefaultSubobject<UCrushDetectionComponent>(TEXT("CrushDetectionComponent"));
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -121,11 +126,11 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		// Cycle the equipped tool (mission context only)
 		EnhancedInputComponent->BindAction(CycleToolAction, ETriggerEvent::Started, this, &APlayerCharacter::CycleToolInput);
 
-		// Equipped tool primary/secondary use (mission context only)
-		EnhancedInputComponent->BindAction(ToolPrimaryUseAction, ETriggerEvent::Started, ToolbeltComponent, &UToolbeltComponent::PrimaryUse);
-		EnhancedInputComponent->BindAction(ToolPrimaryUseAction, ETriggerEvent::Completed, ToolbeltComponent, &UToolbeltComponent::ReleasePrimaryUse);
-		EnhancedInputComponent->BindAction(ToolPrimaryUseAction, ETriggerEvent::Canceled, ToolbeltComponent, &UToolbeltComponent::ReleasePrimaryUse);
-		EnhancedInputComponent->BindAction(ToolSecondaryUseAction, ETriggerEvent::Started, ToolbeltComponent, &UToolbeltComponent::SecondaryUse);
+		// Equipped tool primary/secondary use (mission context only) - gated on CrushDetectionComponent->IsStunned() by the wrapper handlers instead of binding ToolbeltComponent directly
+		EnhancedInputComponent->BindAction(ToolPrimaryUseAction, ETriggerEvent::Started, this, &APlayerCharacter::ToolPrimaryUseInput);
+		EnhancedInputComponent->BindAction(ToolPrimaryUseAction, ETriggerEvent::Completed, this, &APlayerCharacter::ToolReleasePrimaryUseInput);
+		EnhancedInputComponent->BindAction(ToolPrimaryUseAction, ETriggerEvent::Canceled, this, &APlayerCharacter::ToolReleasePrimaryUseInput);
+		EnhancedInputComponent->BindAction(ToolSecondaryUseAction, ETriggerEvent::Started, this, &APlayerCharacter::ToolSecondaryUseInput);
 	}
 	else
 	{
@@ -156,7 +161,7 @@ void APlayerCharacter::LookInput(const FInputActionValue& Value)
 
 void APlayerCharacter::DoAim(float Yaw, float Pitch)
 {
-	if (GetController())
+	if (GetController() && (!CrushDetectionComponent || !CrushDetectionComponent->IsStunned()))
 	{
 		// pass the rotation inputs
 		AddControllerYawInput(Yaw);
@@ -166,7 +171,7 @@ void APlayerCharacter::DoAim(float Yaw, float Pitch)
 
 void APlayerCharacter::DoMove(float Right, float Forward)
 {
-	if (GetController())
+	if (GetController() && (!CrushDetectionComponent || !CrushDetectionComponent->IsStunned()))
 	{
 		// pass the move inputs
 		AddMovementInput(GetActorRightVector(), Right);
@@ -176,6 +181,11 @@ void APlayerCharacter::DoMove(float Right, float Forward)
 
 void APlayerCharacter::DoJumpStart()
 {
+	if (CrushDetectionComponent && CrushDetectionComponent->IsStunned())
+	{
+		return;
+	}
+
 	// pass Jump to the character
 	Jump();
 }
@@ -244,6 +254,11 @@ void APlayerCharacter::CycleSelectionInput(const FInputActionValue& Value)
 
 void APlayerCharacter::CycleToolInput(const FInputActionValue& Value)
 {
+	if (CrushDetectionComponent && CrushDetectionComponent->IsStunned())
+	{
+		return;
+	}
+
 	const float Raw = Value.Get<float>();
 	const int32 Direction = (Raw > 0.f) - (Raw < 0.f);
 
@@ -266,6 +281,32 @@ void APlayerCharacter::LegacyPushInput()
 	if (ToolbeltComponent && ToolbeltComponent->IsLocked() && PhysicsManipulationComponent)
 	{
 		PhysicsManipulationComponent->Push();
+	}
+}
+
+void APlayerCharacter::ToolPrimaryUseInput()
+{
+	if (ToolbeltComponent && (!CrushDetectionComponent || !CrushDetectionComponent->IsStunned()))
+	{
+		ToolbeltComponent->PrimaryUse();
+	}
+}
+
+void APlayerCharacter::ToolReleasePrimaryUseInput()
+{
+	// Never gated by the stun, unlike the press above - a continuous tool (e.g. the jackhammer)
+	// that started firing before the stun began must still be stoppable, not left looping.
+	if (ToolbeltComponent)
+	{
+		ToolbeltComponent->ReleasePrimaryUse();
+	}
+}
+
+void APlayerCharacter::ToolSecondaryUseInput()
+{
+	if (ToolbeltComponent && (!CrushDetectionComponent || !CrushDetectionComponent->IsStunned()))
+	{
+		ToolbeltComponent->SecondaryUse();
 	}
 }
 
@@ -377,5 +418,18 @@ void APlayerCharacter::DebugShowCollapseQueue(bool bShow)
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(702, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowCollapseQueue: %s"), bShow ? TEXT("on") : TEXT("off")));
+	}
+}
+
+void APlayerCharacter::DebugShowFragmentCount(bool bShow)
+{
+	if (UDebrisSubsystem* DebrisSubsystem = GetWorld()->GetSubsystem<UDebrisSubsystem>())
+	{
+		DebrisSubsystem->SetShowDebugCount(bShow);
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(703, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowFragmentCount: %s"), bShow ? TEXT("on") : TEXT("off")));
 	}
 }

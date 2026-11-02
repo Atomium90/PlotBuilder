@@ -4,6 +4,7 @@
 #include "Destruction/Damageable.h"
 #include "Destruction/DurabilityComponent.h"
 #include "Destruction/DemolitionRules.h"
+#include "Destruction/CrushDetectionComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
@@ -107,7 +108,14 @@ void AExplosiveCharge::Detonate()
 	{
 		if (FVector::Dist(PlayerPawn->GetActorLocation(), Origin) <= Radius)
 		{
-			UE_LOG(LogPlotBuilder, Log, TEXT("AExplosiveCharge::Detonate: player caught in blast radius - safety penalty stub"));
+			if (UCrushDetectionComponent* CrushDetection = PlayerPawn->FindComponentByClass<UCrushDetectionComponent>())
+			{
+				CrushDetection->RegisterSafetyPenalty(FName("Explosion"));
+			}
+			else
+			{
+				UE_LOG(LogPlotBuilder, Log, TEXT("AExplosiveCharge::Detonate: player caught in blast radius - safety penalty stub"));
+			}
 		}
 	}
 

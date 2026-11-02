@@ -16,6 +16,7 @@ class UPhysicsManipulationComponent;
 class UHotbarComponent;
 class UBuildModeComponent;
 class UToolbeltComponent;
+class UCrushDetectionComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPlayerCharacter, Log, All);
@@ -55,6 +56,10 @@ class APlayerCharacter : public ACharacter
 	/** Equipped demolition tool slot, separate from the hotbar - see GDD §18.2 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UToolbeltComponent* ToolbeltComponent;
+
+	/** Accumulated crush energy from Falling pieces, stun gating for movement/camera/tool input - see GDD §7.9 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UCrushDetectionComponent* CrushDetectionComponent;
 
 protected:
 
@@ -181,6 +186,15 @@ protected:
 	/** Push Input Action handler - same gating as LegacyGrabInput. */
 	void LegacyPushInput();
 
+	/** Tool Primary Use Input Action handler - gates on CrushDetectionComponent->IsStunned() before forwarding to ToolbeltComponent::PrimaryUse, same gate-then-forward shape as LegacyGrabInput/LegacyPushInput. */
+	void ToolPrimaryUseInput();
+
+	/** Tool Primary Use (release) Input Action handler - same stun gate as ToolPrimaryUseInput. */
+	void ToolReleasePrimaryUseInput();
+
+	/** Tool Secondary Use Input Action handler - same stun gate as ToolPrimaryUseInput. */
+	void ToolSecondaryUseInput();
+
 	/**
 	 *  Toggle Inventory Input Action handler - no C++ state to flip (nothing here owns widget
 	 *  visibility), implement in the Blueprint to show/hide the inventory widget. Call
@@ -222,6 +236,9 @@ public:
 	/** Returns ToolbeltComponent subobject **/
 	UToolbeltComponent* GetToolbeltComponent() const { return ToolbeltComponent; }
 
+	/** Returns CrushDetectionComponent subobject **/
+	UCrushDetectionComponent* GetCrushDetectionComponent() const { return CrushDetectionComponent; }
+
 	/** Debug console command (open the console with ~, type "ListShop" + Enter): prints every ShopCatalog row's index, display name and cost, so Buy's index is known without any UI. */
 	UFUNCTION(Exec, Category = "Debug")
 	void ListShop() const;
@@ -241,5 +258,9 @@ public:
 	/** Debug console command (console: "DebugShowCollapseQueue 1" or "0" + Enter): toggles the level's APlot's on-screen collapse-queue readout (UStructuralSupportComponent::SetShowCollapseQueueDebug) - see GDD §7.7's staggered collapse. */
 	UFUNCTION(Exec, Category = "Debug")
 	void DebugShowCollapseQueue(bool bShow);
+
+	/** Debug console command (console: "DebugShowFragmentCount 1" or "0" + Enter): toggles UDebrisSubsystem's on-screen active-fragments-vs-cap readout - GDD's debug table, "Fragment counter". */
+	UFUNCTION(Exec, Category = "Debug")
+	void DebugShowFragmentCount(bool bShow);
 
 };
