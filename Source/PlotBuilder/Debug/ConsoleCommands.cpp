@@ -1,8 +1,11 @@
 #include "HAL/IConsoleManager.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
+#include "PlotBuilder.h"
 #include "Player/PlayerCharacter.h"
 #include "Interaction/HotbarComponent.h"
 #include "Destruction/DemolitionTool.h"
+#include "Generation/HouseGenerator.h"
 
 // GDD §18.8's pb.* console commands - thin wrappers on debug code that already exists on
 // APlayerCharacter (DebugShowStability, DebugDamageFocus), plus the two small additions below
@@ -100,4 +103,25 @@ static FAutoConsoleCommandWithWorldAndArgs PbCollapseTestCommand(
 		{
 			Character->DebugDamageFocus(99999.f);
 		}
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbGenerateHouseCommand(
+	TEXT("pb.GenerateHouse"),
+	TEXT("pb.GenerateHouse <seed> - clears, then rebuilds the level's AHouseGenerator house from the seed (default 1). Same seed, same house."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		if (!World)
+		{
+			return;
+		}
+
+		const int32 Seed = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : 1;
+
+		for (TActorIterator<AHouseGenerator> It(World); It; ++It)
+		{
+			It->Generate(Seed);
+			return;
+		}
+
+		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.GenerateHouse: no AHouseGenerator in the level"));
 	}));
