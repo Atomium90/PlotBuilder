@@ -13,9 +13,9 @@ class ADemolitionTool;
  *  PrimaryUse Grabs, SecondaryUse Throws (no-op if nothing is held - GDD §14's grab/carry/throw,
  *  deliberately narrower than Lvl_Home's legacy Grab/Push, which also shoves an unheld focus and
  *  stays reachable there through APlayerCharacter's locked-toolbelt gate, not through this class).
- *  Slot 1 (Charge) spawns/
- *  throws an AExplosiveCharge on secondary use, then detonates it on the next press - see
- *  SpawnAndThrowCharge. Slots 2-4 (Sledgehammer/Crowbar/Jackhammer) are ADemolitionTool
+ *  Slot 1 (Charge) spawns an AExplosiveCharge: secondary use (RMB) throws it, primary use (LMB)
+ *  sticks it to the surface in reach; the next secondary use detonates it, however it got there -
+ *  see SpawnAndThrowCharge and PlaceCharge. Slots 2-4 (Sledgehammer/Crowbar/Jackhammer) are ADemolitionTool
  *  instances, spawned once in BeginPlay from MeleeToolClasses and kept for the owner's lifetime
  *  (unlike the consumable charge) - PrimaryUse for those slots just forwards to the matching
  *  instance's own ADemolitionTool::PrimaryUse.
@@ -45,6 +45,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Toolbelt")
 	float ChargeSpawnDistance = 150.f;
 
+	/** How far in cm slot 1's primary use reaches to stick a charge on a surface. Nothing in reach, nothing happens. */
+	UPROPERTY(EditAnywhere, Category = "Toolbelt")
+	float ChargePlaceReach = 250.f;
+
 	/** One ADemolitionTool class per melee slot (index 0 -> slot 2 Sledgehammer, 1 -> slot 3 Crowbar, 2 -> slot 4 Jackhammer). A slot left unset (e.g. Jackhammer before Thursday) stays a no-op. */
 	UPROPERTY(EditDefaultsOnly, Category = "Toolbelt")
 	TArray<TSubclassOf<ADemolitionTool>> MeleeToolClasses;
@@ -70,7 +74,7 @@ public:
 	int32 GetEquippedIndex() const { return EquippedIndex; }
 	bool IsHandsEquipped() const { return EquippedIndex == HandsSlotIndex; }
 
-	/** Primary use (LMB) on the currently equipped tool. Slot 0 (Hands): Grab. Slots 1-4: no-op until an actual tool exists (Tuesday onward). */
+	/** Primary use (LMB) on the currently equipped tool. Slot 0 (Hands): Grab. Slot 1 (Charge): stick a charge on the surface in reach. Melee slots: swing. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void PrimaryUse();
 
@@ -94,7 +98,14 @@ private:
 	static constexpr int32 FirstMeleeSlotIndex = 2;
 
 	void EquipSlotInternal(int32 Index);
+	/** Spawns the charge and tracks it as ActiveCharge. Null if the class is unset or there is no controller. */
+	AExplosiveCharge* SpawnCharge(const FVector& Location, const FRotator& Rotation, ESpawnActorCollisionHandlingMethod CollisionHandling);
+
 	void SpawnAndThrowCharge();
+
+	/** Traces ChargePlaceReach along the view and sticks a new charge on what it hits. No-op while a charge is already out (detonate it first) or if nothing is in reach. */
+	void PlaceCharge();
+
 	void SpawnMeleeTools();
 
 	/** SpawnedMeleeTools[Index - FirstMeleeSlotIndex] if Index is a melee slot with a spawned tool, else nullptr. */

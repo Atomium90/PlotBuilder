@@ -33,6 +33,71 @@ void AExplosiveCharge::Throw(const FVector& Velocity)
 	MeshComponent->SetPhysicsLinearVelocity(Velocity);
 }
 
+void AExplosiveCharge::PlaceOn(const FHitResult& Hit)
+{
+	UPrimitiveComponent* Surface = Hit.GetComponent();
+
+	if (!Surface)
+	{
+		return;
+	}
+
+	// Physics off first: a simulating root can't be moved or attached. Collision off too, so a
+	// charge on a wall never blocks the player, the melee traces or the grab.
+	CollisionBeforePlacement = MeshComponent->GetCollisionEnabled();
+	MeshComponent->SetSimulatePhysics(false);
+	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	SetActorLocationAndRotation(Hit.ImpactPoint + Hit.ImpactNormal * PlacementOffset, FRotationMatrix::MakeFromZ(Hit.ImpactNormal).ToQuat());
+	AttachToComponent(Surface, FAttachmentTransformRules::KeepWorldTransform);
+
+	// Every way a piece goes (tool kill, voluntary demolish, collapse fracture) ends in Destroy(), which
+	// would leave the charge attached to nothing, floating - so drop it when the surface actor dies.
+	if (AActor* SurfaceOwner = Surface->GetOwner())
+	{
+		SurfaceActor = SurfaceOwner;
+		SurfaceOwner->OnDestroyed.AddUniqueDynamic(this, &AExplosiveCharge::HandleSurfaceDestroyed);
+	}
+
+	bIsPlaced = true;
+}
+
+void AExplosiveCharge::HandleSurfaceDestroyed(AActor* DestroyedActor)
+{
+	ReleaseFromSurface();
+}
+
+void AExplosiveCharge::ReleaseFromSurface()
+{
+	if (!bIsPlaced)
+	{
+		return;
+	}
+
+	bIsPlaced = false;
+
+	if (AActor* Surface = SurfaceActor.Get())
+	{
+		Surface->OnDestroyed.RemoveDynamic(this, &AExplosiveCharge::HandleSurfaceDestroyed);
+	}
+
+	SurfaceActor.Reset();
+
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	MeshComponent->SetCollisionEnabled(CollisionBeforePlacement);
+	MeshComponent->SetSimulatePhysics(true);
+}
+
+void AExplosiveCharge::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (AActor* Surface = SurfaceActor.Get())
+	{
+		Surface->OnDestroyed.RemoveDynamic(this, &AExplosiveCharge::HandleSurfaceDestroyed);
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void AExplosiveCharge::BeginPlay()
 {
 	Super::BeginPlay();

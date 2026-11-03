@@ -107,6 +107,12 @@ void UToolbeltComponent::PrimaryUse()
 		return;
 	}
 
+	if (EquippedIndex == ChargeSlotIndex)
+	{
+		PlaceCharge();
+		return;
+	}
+
 	if (ADemolitionTool* MeleeTool = GetMeleeToolForSlot(EquippedIndex))
 	{
 		MeleeTool->PrimaryUse();
@@ -153,11 +159,54 @@ void UToolbeltComponent::ReleasePrimaryUse()
 	}
 }
 
-void UToolbeltComponent::SpawnAndThrowCharge()
+AExplosiveCharge* UToolbeltComponent::SpawnCharge(const FVector& Location, const FRotator& Rotation, ESpawnActorCollisionHandlingMethod CollisionHandling)
 {
 	if (!ExplosiveChargeClass)
 	{
-		UE_LOG(LogPlotBuilder, Warning, TEXT("UToolbeltComponent::SpawnAndThrowCharge: ExplosiveChargeClass is not set"));
+		UE_LOG(LogPlotBuilder, Warning, TEXT("UToolbeltComponent::SpawnCharge: ExplosiveChargeClass is not set"));
+		return nullptr;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = GetOwner();
+	SpawnParams.SpawnCollisionHandlingOverride = CollisionHandling;
+
+	ActiveCharge = GetWorld()->SpawnActor<AExplosiveCharge>(ExplosiveChargeClass, Location, Rotation, SpawnParams);
+
+	if (ActiveCharge)
+	{
+		ActiveCharge->OnDestroyed.AddDynamic(this, &UToolbeltComponent::HandleChargeDestroyed);
+	}
+
+	return ActiveCharge;
+}
+
+void UToolbeltComponent::SpawnAndThrowCharge()
+{
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	AController* OwnerController = OwnerPawn ? OwnerPawn->GetController() : nullptr;
+
+	if (!OwnerController)
+	{
+		return;
+	}
+
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	OwnerController->GetPlayerViewPoint(ViewLocation, ViewRotation);
+	const FVector ViewForward = ViewRotation.Vector();
+
+	if (AExplosiveCharge* Charge = SpawnCharge(ViewLocation + ViewForward * ChargeSpawnDistance, ViewRotation, ESpawnActorCollisionHandlingMethod::Undefined))
+	{
+		Charge->Throw(ViewForward * ChargeThrowSpeed);
+	}
+}
+
+void UToolbeltComponent::PlaceCharge()
+{
+	// One charge at a time, whether thrown or placed: the next RMB detonates it.
+	if (IsValid(ActiveCharge))
+	{
 		return;
 	}
 
@@ -172,17 +221,28 @@ void UToolbeltComponent::SpawnAndThrowCharge()
 	FVector ViewLocation;
 	FRotator ViewRotation;
 	OwnerController->GetPlayerViewPoint(ViewLocation, ViewRotation);
-	const FVector ViewForward = ViewRotation.Vector();
 
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.Owner = GetOwner();
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(GetOwner());
 
-	ActiveCharge = GetWorld()->SpawnActor<AExplosiveCharge>(ExplosiveChargeClass, ViewLocation + ViewForward * ChargeSpawnDistance, ViewRotation, SpawnParams);
+	// Same channel the melee tools aim with, so the charge goes where a hammer swing would land.
+	FHitResult Hit;
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, ViewLocation, ViewLocation + ViewRotation.Vector() * ChargePlaceReach, ECC_Visibility, QueryParams);
 
-	if (ActiveCharge)
+	if (!bHit)
 	{
-		ActiveCharge->Throw(ViewForward * ChargeThrowSpeed);
-		ActiveCharge->OnDestroyed.AddDynamic(this, &UToolbeltComponent::HandleChargeDestroyed);
+		if (bShowDebug && GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(901, 1.5f, FColor::Yellow, TEXT("Charge: no surface in reach"));
+		}
+
+		return;
+	}
+
+	// AlwaysSpawn: the spawn point is right on the wall, where the default adjustment would push the charge away. PlaceOn puts it exactly.
+	if (AExplosiveCharge* Charge = SpawnCharge(Hit.ImpactPoint, FRotator::ZeroRotator, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		Charge->PlaceOn(Hit);
 	}
 }
 
