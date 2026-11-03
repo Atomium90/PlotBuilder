@@ -19,6 +19,33 @@ namespace
 
 	/** How long the red boxes around unstable pieces stay up after a failed generation (the pieces themselves are cleared at once). */
 	constexpr float UnstableMarkerSeconds = 15.f;
+
+	/** The four faces of the footprint, named by the grid axis they are perpendicular to. */
+	enum class EFootprintSide : uint8
+	{
+		MinusX,
+		PlusX,
+		MinusY,
+		PlusY
+	};
+
+	const TCHAR* SideLabel(EFootprintSide Side)
+	{
+		switch (Side)
+		{
+		case EFootprintSide::MinusX: return TEXT("-X");
+		case EFootprintSide::PlusX: return TEXT("+X");
+		case EFootprintSide::MinusY: return TEXT("-Y");
+		default: return TEXT("+Y");
+		}
+	}
+
+	/** One exterior wall slot: its grid (X, Y) and the face of the footprint it is on. */
+	struct FPerimeterEdge
+	{
+		FIntPoint Cell;
+		EFootprintSide Side;
+	};
 }
 
 AHouseGenerator::AHouseGenerator()
@@ -93,8 +120,8 @@ bool AHouseGenerator::Generate(int32 InSeed)
 		return false;
 	}
 
-	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), stable, hash %08X"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), LayoutHash));
+	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), door %s, stable, hash %08X"),
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), *LastDoorSide, LayoutHash));
 	return true;
 }
 
@@ -141,7 +168,7 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		return false;
 	}
 
-	// The archetype's bounds, clamped to what the plot can hold. Draw order is part of the determinism: width, depth, X then Y origin, door.
+	// The archetype's bounds, clamped to what the plot can hold. Draw order is part of the determinism: width, depth, X then Y offset, door.
 	const auto PickSize = [&Stream](int32 MinCells, int32 MaxCells, int32 Free)
 	{
 		const int32 Low = FMath::Clamp(MinCells, 1, Free);
@@ -151,8 +178,15 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 
 	const int32 Width = PickSize(Archetype->MinRoomCells.X, Archetype->MaxRoomCells.X, FreeX);
 	const int32 Depth = PickSize(Archetype->MinRoomCells.Y, Archetype->MaxRoomCells.Y, FreeY);
-	const int32 OriginI = Stream.RandRange(MinI, MaxI - Width + 1);
-	const int32 OriginJ = Stream.RandRange(MinJ, MaxJ - Depth + 1);
+	// Centred on the plot (the spare cell goes to the lower side when it doesn't divide evenly), then moved by up to PlacementJitter cells.
+	const auto PickOrigin = [&Stream](int32 Min, int32 Max, int32 Cells, int32 Jitter)
+	{
+		const int32 Centred = Min + (Max - Min + 1 - Cells) / 2;
+		return FMath::Clamp(Centred + Stream.RandRange(-Jitter, Jitter), Min, Max - Cells + 1);
+	};
+
+	const int32 OriginI = PickOrigin(MinI, MaxI, Width, FMath::Max(0, Archetype->PlacementJitter.X));
+	const int32 OriginJ = PickOrigin(MinJ, MaxJ, Depth, FMath::Max(0, Archetype->PlacementJitter.Y));
 	const int32 Floors = FMath::Max(1, Archetype->Floors);
 	LastSize = FIntPoint(Width, Depth);
 
@@ -162,21 +196,56 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 	const int32 SouthY = 2 * OriginJ - 1;
 	const int32 NorthY = 2 * (OriginJ + Depth - 1) + 1;
 
-	TArray<FIntPoint> Perimeter;
+	TArray<FPerimeterEdge> Perimeter;
 
 	for (int32 J = 0; J < Depth; ++J)
 	{
-		Perimeter.Add(FIntPoint(WestX, 2 * (OriginJ + J)));
-		Perimeter.Add(FIntPoint(EastX, 2 * (OriginJ + J)));
+		Perimeter.Add(FPerimeterEdge{FIntPoint(WestX, 2 * (OriginJ + J)), EFootprintSide::MinusX});
+		Perimeter.Add(FPerimeterEdge{FIntPoint(EastX, 2 * (OriginJ + J)), EFootprintSide::PlusX});
 	}
 
 	for (int32 I = 0; I < Width; ++I)
 	{
-		Perimeter.Add(FIntPoint(2 * (OriginI + I), SouthY));
-		Perimeter.Add(FIntPoint(2 * (OriginI + I), NorthY));
+		Perimeter.Add(FPerimeterEdge{FIntPoint(2 * (OriginI + I), SouthY), EFootprintSide::MinusY});
+		Perimeter.Add(FPerimeterEdge{FIntPoint(2 * (OriginI + I), NorthY), EFootprintSide::PlusY});
 	}
 
-	const int32 DoorIndex = Stream.RandRange(0, Perimeter.Num() - 1);
+	// The face the player arrives at: the one the line from the house centre to FacingTarget leaves
+	// through. Offsets are divided by the half sizes so a long house doesn't favour its long sides.
+	// A target standing inside the footprint (or none at all) leaves every face open.
+	bool bHasFacingSide = false;
+	EFootprintSide FacingSide = EFootprintSide::MinusX;
+
+	if (FacingTarget)
+	{
+		const FVector GridOrigin = Plot->GetGridOrigin();
+		const float CentreX = GridOrigin.X + (2 * OriginI + Width - 1) * CellSize;
+		const float CentreY = GridOrigin.Y + (2 * OriginJ + Depth - 1) * CellSize;
+		const FVector TargetLocation = FacingTarget->GetActorLocation();
+		const float ScaledX = (TargetLocation.X - CentreX) / (Width * CellSize);
+		const float ScaledY = (TargetLocation.Y - CentreY) / (Depth * CellSize);
+
+		if (FMath::Max(FMath::Abs(ScaledX), FMath::Abs(ScaledY)) > 1.f)
+		{
+			bHasFacingSide = true;
+			FacingSide = FMath::Abs(ScaledX) >= FMath::Abs(ScaledY)
+				? (ScaledX > 0.f ? EFootprintSide::PlusX : EFootprintSide::MinusX)
+				: (ScaledY > 0.f ? EFootprintSide::PlusY : EFootprintSide::MinusY);
+		}
+	}
+
+	TArray<int32> DoorCandidates;
+
+	for (int32 Index = 0; Index < Perimeter.Num(); ++Index)
+	{
+		if (!bHasFacingSide || Perimeter[Index].Side == FacingSide)
+		{
+			DoorCandidates.Add(Index);
+		}
+	}
+
+	const int32 DoorIndex = DoorCandidates[Stream.RandRange(0, DoorCandidates.Num() - 1)];
+	LastDoorSide = FString::Printf(TEXT("%s%s"), SideLabel(Perimeter[DoorIndex].Side), bHasFacingSide ? TEXT(" toward target") : TEXT(""));
 
 	for (int32 Level = 0; Level < Floors; ++Level)
 	{
@@ -209,7 +278,7 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 
 		for (int32 Index = 0; Index < Perimeter.Num(); ++Index)
 		{
-			const FIntVector Edge(Perimeter[Index].X, Perimeter[Index].Y, Level);
+			const FIntVector Edge(Perimeter[Index].Cell.X, Perimeter[Index].Cell.Y, Level);
 			const bool bIsDoor = Level == 0 && Index == DoorIndex && Archetype->DoorWallClass;
 			const TSubclassOf<ABuildablePiece> WallToPlace = bIsDoor ? Archetype->DoorWallClass : PickWallClass(Stream);
 

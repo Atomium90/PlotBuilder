@@ -41,6 +41,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
 	int32 Seed = 1;
 
+	/**
+	 *  Where the player arrives from (the truck drop-off in a mission). When set, the door goes on the
+	 *  side of the house that faces it: the face the line from the house centre to this actor leaves
+	 *  through. Empty, or standing inside the footprint, the door can be on any side.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
+	TObjectPtr<AActor> FacingTarget;
+
 	/** Prints a one-line result on screen after Generate, and boxes the pieces that failed validation for a few seconds. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation|Debug")
 	bool bShowDebug = true;
@@ -93,4 +101,7 @@ private:
 
 	/** Footprint chosen by the last EmitHouse (room cells), for the result line. */
 	FIntPoint LastSize = FIntPoint::ZeroValue;
+
+	/** Side the last door went on ("+X", "-X", "+Y", "-Y"), and whether FacingTarget chose it, for the result line. */
+	FString LastDoorSide;
 };

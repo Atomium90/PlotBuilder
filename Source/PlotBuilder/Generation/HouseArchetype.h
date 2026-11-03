@@ -35,6 +35,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "1"))
 	FIntPoint MaxRoomCells = FIntPoint(5, 5);
 
+	/**
+	 *  The footprint is centred on the plot, then moved by a seeded random number of room cells within
+	 *  +-this on each axis (and never out of the plot). 0, 0 = always centred.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "0"))
+	FIntPoint PlacementJitter = FIntPoint(0, 0);
+
 	/** Number of storeys, the ground floor included. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "1"))
 	int32 Floors = 1;
