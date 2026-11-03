@@ -705,6 +705,32 @@ bool UStructuralSupportComponent::WouldBeBottleneck(const ABuildablePiece* Candi
 	return false;
 }
 
+void UStructuralSupportComponent::FindUnstablePieces(TArray<ABuildablePiece*>& OutUnstable) const
+{
+	OutUnstable.Reset();
+
+	TMap<const ABuildablePiece*, float> Scratch;
+	RelaxStability(nullptr, &Scratch);
+
+	const float Threshold = Rules ? Rules->CollapseThreshold : 0.1f;
+
+	// Same criterion as RecomputeStability's ToCollapse loop, on the scratch values.
+	for (ABuildablePiece* Piece : RegisteredPieces)
+	{
+		if (!Piece || Piece->IsStructuralAnchor())
+		{
+			continue;
+		}
+
+		const float* Value = Scratch.Find(Piece);
+
+		if (!Value || *Value < Threshold)
+		{
+			OutUnstable.Add(Piece);
+		}
+	}
+}
+
 void UStructuralSupportComponent::NotifyEnteredCritical(ABuildablePiece* Piece)
 {
 	if (Piece && WouldBeBottleneck(Piece))

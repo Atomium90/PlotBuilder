@@ -153,6 +153,19 @@ public:
 	bool WouldBeBottleneck(const ABuildablePiece* Candidate) const;
 
 	/**
+	 *  Whole-structure dry run of the collapse check: fills OutUnstable with every registered non-anchor
+	 *  piece whose stability is under Rules->CollapseThreshold, i.e. exactly the pieces a real
+	 *  RecomputeStability would queue to collapse, without touching any piece's real Stability or
+	 *  queuing anything (same scratch-map relaxation as WouldBeBottleneck). For the house generator,
+	 *  called once after a whole house was emitted in a single frame: at that point every piece's
+	 *  cached Stability is still 0 (RegisterPiece only marks the graph dirty, the real recompute runs
+	 *  on the next tick), so asking per piece while spawning would read stale zeros from the
+	 *  neighbours and flag everything. Relaxing the full registered set gives the answer the real
+	 *  recompute will give a tick later.
+	 */
+	void FindUnstablePieces(TArray<ABuildablePiece*>& OutUnstable) const;
+
+	/**
 	 *  Immediate D29 check for the "once when the piece enters Critical" case (HandleDurabilityStateChanged's
 	 *  transition to Critical) - RecomputeStability's own end-of-batch scan (see RecomputeStability)
 	 *  covers "again after each batch of destructions" for every other Critical load-bearing piece.
