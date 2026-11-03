@@ -221,44 +221,33 @@ void UBuildModeComponent::ConfirmPlacement()
 		? TSubclassOf<AActor>(SelectedCDO->MirrorVariantClass)
 		: ConsumedEntry.ActorClass;
 
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = (Anchor != EBuildAnchor::Legacy)
-		? ESpawnActorCollisionHandlingMethod::AlwaysSpawn
-		: ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-	if (AActor* Spawned = GetWorld()->SpawnActor<AActor>(ClassToSpawn, SpawnLocation, SpawnRotation, SpawnParams))
+	if (Anchor != EBuildAnchor::Legacy)
 	{
-		Spawned->SetActorScale3D(ConsumedEntry.Scale);
-
-		if (ABuildablePiece* NewPiece = Cast<ABuildablePiece>(Spawned))
+		// Grid piece: the shared placement function does the spawn, the corner parity bias, the
+		// grid stamp and the graph registration - the same path the house generator takes. Build
+		// mode only decided *where* (the ghost) and consumed the hotbar item.
+		if (CachedPlot)
 		{
-			NewPiece->State = EBuildablePieceState::Placed;
+			CachedPlot->PlacePiece(TSubclassOf<ABuildablePiece>(ClassToSpawn.Get()), GridCoordToApply, OrientationToApply, RoofStepToApply, ConsumedEntry.Scale);
+		}
+	}
+	else
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-			// Corner parity bias (D21, visual only): nudges this wall-class piece's length (local Y -
-			// every wall mesh's 200cm run, local X is its 20cm/10cm thickness) scale by a tiny,
-			// orientation-parity-dependent fraction so two walls meeting at a corner don't share an
-			// exactly coplanar end face/top. Never touches grid/socket math, which only ever reads
-			// GridCoordToApply/OrientationToApply, not actor scale. CornerPost is deliberately excluded:
-			// its cross-section is a symmetric 20x20cm square with no length axis to nudge.
-			const bool bIsWallClass = NewPiece->PieceClass == EPieceClass::ExteriorWall || NewPiece->PieceClass == EPieceClass::InteriorWall;
+		if (AActor* Spawned = GetWorld()->SpawnActor<AActor>(ClassToSpawn, SpawnLocation, SpawnRotation, SpawnParams))
+		{
+			Spawned->SetActorScale3D(ConsumedEntry.Scale);
 
-			if (bIsWallClass && CachedPlot && CachedPlot->GetStructuralSupport() && CachedPlot->GetStructuralSupport()->Rules)
+			if (ABuildablePiece* NewPiece = Cast<ABuildablePiece>(Spawned))
 			{
-				const float Bias = CachedPlot->GetStructuralSupport()->Rules->CornerParityBias;
-				const float Sign = (OrientationToApply % 2 == 0) ? 1.f : -1.f;
-				FVector BiasedScale = NewPiece->GetActorScale3D();
-				BiasedScale.Y *= (1.f + Sign * Bias);
-				NewPiece->SetActorScale3D(BiasedScale);
-			}
+				NewPiece->State = EBuildablePieceState::Placed;
 
-			if (Anchor != EBuildAnchor::Legacy)
-			{
-				NewPiece->SetGridPlacement(GridCoordToApply, OrientationToApply, RoofStepToApply);
-			}
-
-			if (CachedPlot && CachedPlot->GetStructuralSupport())
-			{
-				CachedPlot->GetStructuralSupport()->RegisterPiece(NewPiece);
+				if (CachedPlot && CachedPlot->GetStructuralSupport())
+				{
+					CachedPlot->GetStructuralSupport()->RegisterPiece(NewPiece);
+				}
 			}
 		}
 	}
@@ -605,8 +594,6 @@ bool UBuildModeComponent::TryResolveGridPlacement(const FVector& ViewLocation, c
 
 	const UStructuralRules* Rules = CachedPlot->GetStructuralSupport()->Rules;
 	const float CellSize = Rules ? Rules->CellSize : 100.f;
-	const float FloorHeight = Rules ? Rules->FloorHeight : 300.f;
-	const float RoofStepHeight = Rules ? Rules->RoofStepHeight : 100.f;
 
 	const ABuildablePiece* SelectedCDO = LastPreviewedClass ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
 	const float VerticalOffset = SelectedCDO ? SelectedCDO->GetVerticalOffset() : 0.f;
@@ -616,13 +603,9 @@ bool UBuildModeComponent::TryResolveGridPlacement(const FVector& ViewLocation, c
 	// selection can't float a wall or floor at an intermediate height it was never meant to occupy.
 	const bool bRoofStepApplies = SelectedCDO && SelectedCDO->PieceClass == EPieceClass::RoofTile;
 
-	// FoundationTopZ(BuildLevel): the fondation's own pivot sits 20cm above the plot's ground
-	// surface (it's buried 10cm of its 30cm thickness) - every other piece at a given level shares
-	// that same Z, one FloorHeight step apart per level (see the greybox spec doc). RoofStepValue
-	// adds a second, independent vertical term on top (RoofStepHeight per step) for a roof piece
-	// climbing a slope or stacking a gable infill - it never changes what BuildLevel itself means,
-	// and it's always 0 unless the player has actually used ChangeRoofStep.
-	const float PlaneZ = CachedPlot->GetGroundZ() + 20.f + BuildLevel * FloorHeight + (bRoofStepApplies ? RoofStepValue : 0) * RoofStepHeight + VerticalOffset;
+	// The formula (foundation pivot 20cm above ground, one FloorHeight per level, RoofStepHeight per
+	// roof step) lives on the plot, shared with APlot::PlacePiece - see APlot::GetPlaneZ.
+	const float PlaneZ = CachedPlot->GetPlaneZ(BuildLevel, bRoofStepApplies ? RoofStepValue : 0, VerticalOffset);
 
 	const FVector RayDir = ViewRotation.Vector();
 
