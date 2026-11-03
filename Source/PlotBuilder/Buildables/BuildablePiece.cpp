@@ -201,15 +201,34 @@ void ABuildablePiece::Fracture(const FVector& ScatterOrigin, const FVector& Scat
 		// offset from the actor root, and identical to the actor's rotation when it doesn't.
 		const FRotator MeshWorldRotation = MeshComponent ? MeshComponent->GetComponentRotation() : GetActorRotation();
 
-		if (AGeometryCollectionActor* GeometryCollectionActor = World->SpawnActor<AGeometryCollectionActor>(ScatterOrigin, MeshWorldRotation))
+		// Scale too: a piece rescaled in its Blueprint (the window panes share one 100 x 100 mesh and one
+		// Geometry Collection, stretched per window wall) must break at its visible size, not at the size
+		// the collection was authored at. Scale is applied from the actor origin, same as the mesh.
+		const FVector MeshWorldScale = MeshComponent ? MeshComponent->GetComponentScale() : GetActorScale3D();
+		const FTransform GeometryCollectionTransform(MeshWorldRotation, ScatterOrigin, MeshWorldScale);
+
+		if (AGeometryCollectionActor* GeometryCollectionActor = World->SpawnActor<AGeometryCollectionActor>(AGeometryCollectionActor::StaticClass(), GeometryCollectionTransform))
 		{
 			if (UGeometryCollectionComponent* GCComponent = GeometryCollectionActor->GetGeometryCollectionComponent())
 			{
 				GCComponent->SetRestCollection(Override->Collection);
 				GeometryCollectionActor->Tags.Add(FName("Fragment"));
 
-				const FVector Impulse = (ScatterBias.IsNearlyZero() ? FVector::UpVector : ScatterBias) * Rules->FragmentImpulseStrength;
-				GCComponent->AddImpulse(Impulse, NAME_None, true);
+				// Push first, then release: the chunks inherit the velocity of the cluster they break out of.
+				// Collapse direction if the piece fell, else the direction authored on the override (turned by
+				// the piece's yaw only, zero by default = no push, so a wall doesn't hop before breaking).
+				const FVector InPlaceDirection = FRotator(0.f, MeshWorldRotation.Yaw, 0.f).RotateVector(Override->InPlaceImpulseDirection.GetSafeNormal());
+				const FVector PushDirection = ScatterBias.IsNearlyZero() ? InPlaceDirection : ScatterBias;
+
+				if (!PushDirection.IsNearlyZero())
+				{
+					GCComponent->AddImpulse(PushDirection * Rules->FragmentImpulseStrength, NAME_None, true);
+				}
+
+				// Break every chunk loose now. Left alone the piece stays one rigid body and only breaks if an
+				// impact exceeds the collection's DamageThreshold (500 000 at the top level, never reached by
+				// a light plate like glass, and lowering it to 1 wasn't enough in testing) - this skips that.
+				GCComponent->CrumbleActiveClusters();
 			}
 
 			// No scale-to-zero fade here, unlike the generic path below - Chaos clusters don't have

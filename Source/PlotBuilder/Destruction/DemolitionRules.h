@@ -40,6 +40,16 @@ struct FMeshFractureOverride
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
 	int32 FragmentCount = 6;
+
+	/**
+	 *  Direction of the push given to the chunks (mesh-local, only the piece's yaw is applied) when the
+	 *  piece is destroyed in place, i.e. with no collapse direction. Zero (default) = no push: the chunks
+	 *  are released and just fall, which is what walls and slabs want. A thin plate that fills its opening
+	 *  exactly (window glass, local (1, 0, 0)) would otherwise stay wedged standing on the sill, so it is
+	 *  pushed out along its own normal. Strength is UDemolitionRules::FragmentImpulseStrength.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	FVector InPlaceImpulseDirection = FVector::ZeroVector;
 };
 
 /**

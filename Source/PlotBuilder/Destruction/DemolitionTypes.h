@@ -26,7 +26,9 @@ enum class EPieceClass : uint8
 	CornerPost,
 	Stairs,
 	RoofTile,
-	DoorLeaf
+	DoorLeaf,
+	/** Glass pane child actor of a window wall (GDD §7.3): always Glass, factor 1.0. Appended last so serialized values in existing BPs and DA_DemolitionRules stay valid. */
+	WindowPane
 };
 
 /** Readability states from GDD §7.6, driven by remaining-HP ratio against DA_DemolitionRules' thresholds. */
