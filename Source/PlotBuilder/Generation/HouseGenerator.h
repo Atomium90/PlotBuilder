@@ -95,6 +95,15 @@ public:
 	bool bShowDebug = true;
 
 	/**
+	 *  Debug: when a house fails the stability check it is left in the world instead of being cleared, and
+	 *  GenerateValid stops there without re-rolling, so the rejected house can be looked at (red boxes on the
+	 *  unstable pieces for a few seconds, pb.ShowStability for the values). The unstable pieces then fall as
+	 *  they would in the game. The next generation clears it. pb.GenerateHouse sets it from its third argument.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation|Debug")
+	bool bKeepUnstableHouse = false;
+
+	/**
 	 *  Debug, for testing GenerateValid: the first N attempts are declared failed after the house was
 	 *  built and checked (so Clear and the re-roll path really run). Counts the fallback attempt too:
 	 *  with MaxAttempts 5, 2 = built on the 3rd try, 5 = the fallback seed, 6 = nothing is built.
@@ -178,6 +187,14 @@ private:
 	bool EmitLayoutPartitions(int32 Level, const TArray<TPair<int32, int32>>& Links, FRandomStream& Stream);
 
 	/**
+	 *  Adds support posts under the slabs that would fall (see UHouseArchetype::SupportPostClass). Runs after
+	 *  the slabs and the roof are placed, before the lamps: it asks the structural graph which slabs are
+	 *  unstable, puts a post at a corner of the most useful one's neighbourhood, and asks again, until
+	 *  nothing a post can fix is left. Draws nothing from the seed. False only if a post could not be placed.
+	 */
+	bool AddSupportPosts();
+
+	/**
 	 *  Furnishes every room from Archetype->FurnishingRules (GDD §9.2, step 6), once the house is built and
 	 *  validated (a rejected house never gets a prop). Draws from Stream after everything the structure used,
 	 *  so furnishing never changes where a wall goes. Does nothing without a table.
@@ -222,6 +239,12 @@ private:
 
 	/** Kind of every wall edge placed, keyed by grid (X, Y, storey). Cleared with the house. */
 	TMap<FIntVector, EEdgeKind> Edges;
+
+	/** Grid vertex (odd X, odd Y, storey the post stands on) of every support post. The furnishing step keeps props off them. Cleared with the house. */
+	TArray<FIntVector> PostVertices;
+
+	/** Set by TryGenerate when bKeepUnstableHouse left a rejected house in the world: GenerateValid then stops instead of re-rolling. */
+	bool bKeptUnstableHouse = false;
 
 	uint32 LayoutHash = 0;
 

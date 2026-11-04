@@ -107,7 +107,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbCollapseTestCommand(
 
 static FAutoConsoleCommandWithWorldAndArgs PbGenerateHouseCommand(
 	TEXT("pb.GenerateHouse"),
-	TEXT("pb.GenerateHouse <seed> [forcedFailures] - clears, then rebuilds the level's AHouseGenerator house from the seed (default 1), re-rolling an invalid layout up to the fallback seed. Same seed, same house. forcedFailures (default 0) declares that many attempts failed, to test the re-roll: with 5 attempts, 2 = built on the 3rd try, 5 = fallback seed, 6 = nothing built."),
+	TEXT("pb.GenerateHouse <seed> [forcedFailures] [keepUnstable] - clears, then rebuilds the level's AHouseGenerator house from the seed (default 1), re-rolling an invalid layout up to the fallback seed. Same seed, same house. forcedFailures (default 0) declares that many attempts failed, to test the re-roll: with 5 attempts, 2 = built on the 3rd try, 5 = fallback seed, 6 = nothing built. keepUnstable (default 0) = 1 leaves a rejected house in the world, without re-rolling, to inspect it."),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 	{
 		if (!World)
@@ -117,11 +117,13 @@ static FAutoConsoleCommandWithWorldAndArgs PbGenerateHouseCommand(
 
 		const int32 Seed = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : 1;
 		const int32 ForcedFailures = Args.Num() > 1 ? FCString::Atoi(*Args[1]) : 0;
+		const bool bKeepUnstable = Args.Num() > 2 && FCString::Atoi(*Args[2]) != 0;
 
 		for (TActorIterator<AHouseGenerator> It(World); It; ++It)
 		{
-			// Always overwritten, so a forced-failure count never lingers into the next call.
+			// Always overwritten, so a forced-failure count or the keep flag never lingers into the next call.
 			It->DebugForcedFailures = ForcedFailures;
+			It->bKeepUnstableHouse = bKeepUnstable;
 			It->GenerateValid(Seed);
 			return;
 		}

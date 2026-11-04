@@ -92,6 +92,17 @@ public:
 	TSubclassOf<ABuildablePiece> WideWindowWallClass;
 
 	/**
+	 *  Post (BP_CornerPost, Vertex anchor) the generator adds under a slab that would otherwise fall.
+	 *  Interior walls carry nothing, so a slab more than one cell from an exterior wall has no support
+	 *  and a house needs a side of 4 cells or less. A post holds up the four slabs around its vertex.
+	 *  After the slabs are placed the generator checks stability, and for each slab that would fall it
+	 *  puts a post at one of its corners, preferring a vertex on an interior wall so the post reads as part
+	 *  of the partition. Empty = no posts: a house with a side of 5 cells or more is rejected and re-rolled.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
+	TSubclassOf<ABuildablePiece> SupportPostClass;
+
+	/**
 	 *  Ceiling lamp (a buildable with the Ceiling anchor): the generator hangs one from the slab above the
 	 *  middle cell of every room, on every storey. Empty = no lamps.
 	 */

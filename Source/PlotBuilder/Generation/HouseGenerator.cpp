@@ -508,6 +508,12 @@ bool AHouseGenerator::GenerateValid(int32 RequestedSeed, int32 MaxAttempts)
 		{
 			return true;
 		}
+
+		// Debug: the rejected house was kept for inspection, a re-roll would clear it.
+		if (bKeptUnstableHouse)
+		{
+			return false;
+		}
 	}
 
 	AttemptNote = FString::Printf(TEXT(" (requested %d, fallback seed after %d failed attempts)"), RequestedSeed, Attempts);
@@ -515,6 +521,11 @@ bool AHouseGenerator::GenerateValid(int32 RequestedSeed, int32 MaxAttempts)
 	if (Try(Archetype->FallbackSeed))
 	{
 		return true;
+	}
+
+	if (bKeptUnstableHouse)
+	{
+		return false;
 	}
 
 	AttemptNote.Reset();
@@ -531,8 +542,12 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 
 	const bool bSavedShowDebug = bShowDebug;
 	const int32 SavedForcedFailures = DebugForcedFailures;
+	const bool bSavedKeepUnstable = bKeepUnstableHouse;
 	bShowDebug = false;
 	DebugForcedFailures = 0;
+
+	// A batch has to re-roll to go on: keeping a rejected house would stop it at the first one.
+	bKeepUnstableHouse = false;
 
 	TArray<int32> Failed;
 	TArray<int32> Rerolled;
@@ -540,6 +555,8 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 	int32 HousesWithType[TypeCount] = {};
 	int32 MinProps = MAX_int32;
 	int32 MaxProps = 0;
+	int32 MinPosts = MAX_int32;
+	int32 MaxPosts = 0;
 	int32 ValidCount = 0;
 
 	for (int32 Offset = 0; Offset < Count; ++Offset)
@@ -575,6 +592,8 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 
 		MinProps = FMath::Min(MinProps, Props.Num());
 		MaxProps = FMath::Max(MaxProps, Props.Num());
+		MinPosts = FMath::Min(MinPosts, PostVertices.Num());
+		MaxPosts = FMath::Max(MaxPosts, PostVertices.Num());
 
 		// T6: asking again for the same seed must give the same house, furniture included.
 		if (!GenerateValid(TestSeed) || GetLayoutHash() != FirstHash || Seed != FirstEffectiveSeed)
@@ -585,6 +604,7 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 
 	bShowDebug = bSavedShowDebug;
 	DebugForcedFailures = SavedForcedFailures;
+	bKeepUnstableHouse = bSavedKeepUnstable;
 
 	const auto Join = [](const TArray<int32>& Seeds)
 	{
@@ -611,7 +631,7 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 	Lines.Add(FString::Printf(TEXT("Seed test %d..%d: %d of %d valid (failed: %s), re-rolled or fallback: %s"), FirstSeed, FirstSeed + Count - 1, ValidCount, Count, *Join(Failed), *Join(Rerolled)));
 	Lines.Add(FString::Printf(TEXT("Same seed twice (T6): %d of %d gave the same hash (differs: %s)"), ValidCount - HashDiffers.Num(), ValidCount, *Join(HashDiffers)));
 	Lines.Add(FString::Printf(TEXT("Houses with each room type (of %d): %s"), ValidCount, *TypeLine));
-	Lines.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d"), MinProps, MaxProps) : FString(TEXT("Props per house: no valid house")));
+	Lines.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d, support posts per house: %d to %d"), MinProps, MaxProps, MinPosts, MaxPosts) : FString(TEXT("Props per house: no valid house")));
 
 	const bool bAllGood = Failed.IsEmpty() && HashDiffers.IsEmpty() && bAllTypesSeen;
 
@@ -630,6 +650,7 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 {
 	Clear();
 	Seed = InSeed;
+	bKeptUnstableHouse = false;
 
 	if (!Plot)
 	{
@@ -685,6 +706,15 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 		}
 
 		const int32 UnstableCount = Unstable.Num();
+
+		if (bKeepUnstableHouse)
+		{
+			// Debug: the rejected house stays so it can be looked at; GenerateValid sees the flag and does not re-roll.
+			bKeptUnstableHouse = true;
+			ReportResult(false, FString::Printf(TEXT("House seed %d: %d of %d pieces unstable, KEPT for inspection (bKeepUnstableHouse), no re-roll"), Seed, UnstableCount, PlacedCount));
+			return false;
+		}
+
 		Clear();
 		ReportResult(false, FString::Printf(TEXT("House seed %d: %d of %d pieces unstable, cleared"), Seed, UnstableCount, PlacedCount));
 		return false;
@@ -701,8 +731,8 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 	FurnishRooms(Stream);
 
 	DrawRoomsDebug();
-	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) [%s] (%s), %d prop(s), door %s, stable, hash %08X"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), *LastDoorSide, LayoutHash));
+	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) [%s] (%s), %d prop(s), %d post(s), door %s, stable, hash %08X"),
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), PostVertices.Num(), *LastDoorSide, LayoutHash));
 	return true;
 }
 
@@ -737,6 +767,7 @@ void AHouseGenerator::Clear()
 	Pieces.Reset();
 	Rooms.Reset();
 	Edges.Reset();
+	PostVertices.Reset();
 	LayoutHash = 0;
 }
 
@@ -1058,6 +1089,12 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		}
 	}
 
+	// Slabs too far from an exterior wall to stand get a post (see UHouseArchetype::SupportPostClass).
+	if (Archetype->SupportPostClass && !AddSupportPosts())
+	{
+		return false;
+	}
+
 	// One ceiling lamp per room, under the slab above the room's middle cell. Placed last, once every
 	// slab exists, and drawing nothing from the seed: the lamps follow from the rooms. The lamp is in the
 	// structural graph (it hangs from the slab and falls with it) but costs no stability, so it cannot make
@@ -1281,6 +1318,118 @@ bool AHouseGenerator::EmitLayoutPartitions(int32 Level, const TArray<TPair<int32
 	return true;
 }
 
+bool AHouseGenerator::AddSupportPosts()
+{
+	UStructuralSupportComponent* Structural = Plot->GetStructuralSupport();
+
+	// A house within the plot never needs more than a handful; the cap only stops a post that fixes nothing from looping.
+	constexpr int32 MaxPosts = 24;
+
+	for (int32 Added = 0; Added < MaxPosts; ++Added)
+	{
+		TArray<ABuildablePiece*> Unstable;
+		Structural->FindUnstablePieces(Unstable);
+
+		// Slabs only: a wall or a lamp above an unstable slab is unstable because of it. Lowest storey first,
+		// since a slab above another unstable one may only be unstable because of it.
+		int32 LowestLevel = MAX_int32;
+
+		for (const ABuildablePiece* Piece : Unstable)
+		{
+			if (Piece->PieceClass == EPieceClass::FloorSlab)
+			{
+				LowestLevel = FMath::Min(LowestLevel, Piece->GetGridCoord().Z);
+			}
+		}
+
+		// Nothing a post can fix (a slab on the ground floor is a foundation, an anchor): validation decides the rest.
+		if (LowestLevel == MAX_int32 || LowestLevel < 1)
+		{
+			return true;
+		}
+
+		// Candidate vertices: the corners of the unstable slabs of that storey, each with how many of those slabs it would hold up.
+		TMap<FIntPoint, int32> Coverage;
+
+		for (const ABuildablePiece* Piece : Unstable)
+		{
+			if (Piece->PieceClass != EPieceClass::FloorSlab || Piece->GetGridCoord().Z != LowestLevel)
+			{
+				continue;
+			}
+
+			for (int32 SignX = -1; SignX <= 1; SignX += 2)
+			{
+				for (int32 SignY = -1; SignY <= 1; SignY += 2)
+				{
+					Coverage.FindOrAdd(FIntPoint(Piece->GetGridCoord().X + SignX, Piece->GetGridCoord().Y + SignY)) += 1;
+				}
+			}
+		}
+
+		// The post stands on the slab below, one storey down from the slabs it holds up.
+		const int32 PostLevel = LowestLevel - 1;
+
+		// A vertex on an interior wall wins over one in the open, so the post reads as part of the partition;
+		// then the vertex that holds up the most slabs; then the lowest grid position, so the choice never
+		// depends on the order the map is walked in.
+		const auto OnPartition = [this, PostLevel](const FIntPoint& Vertex)
+		{
+			const FIntVector Around[] = {
+				FIntVector(Vertex.X, Vertex.Y - 1, PostLevel), FIntVector(Vertex.X, Vertex.Y + 1, PostLevel),
+				FIntVector(Vertex.X - 1, Vertex.Y, PostLevel), FIntVector(Vertex.X + 1, Vertex.Y, PostLevel)};
+
+			for (const FIntVector& Edge : Around)
+			{
+				const EEdgeKind* Kind = Edges.Find(Edge);
+
+				if (Kind && *Kind == EEdgeKind::Partition)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		};
+
+		FIntPoint Best = FIntPoint::ZeroValue;
+		int32 BestScore = INDEX_NONE;
+
+		for (const TPair<FIntPoint, int32>& Candidate : Coverage)
+		{
+			if (!Structural->IsSlotFree(EBuildAnchor::Vertex, FIntVector(Candidate.Key.X, Candidate.Key.Y, PostLevel)))
+			{
+				continue;
+			}
+
+			const int32 Score = Candidate.Value + (OnPartition(Candidate.Key) ? 10 : 0);
+			const bool bLowerKey = Candidate.Key.X < Best.X || (Candidate.Key.X == Best.X && Candidate.Key.Y < Best.Y);
+
+			if (Score > BestScore || (Score == BestScore && bLowerKey))
+			{
+				Best = Candidate.Key;
+				BestScore = Score;
+			}
+		}
+
+		if (BestScore == INDEX_NONE)
+		{
+			return true;
+		}
+
+		const FIntVector PostCell(Best.X, Best.Y, PostLevel);
+
+		if (!Place(Archetype->SupportPostClass, PostCell, 0))
+		{
+			return false;
+		}
+
+		PostVertices.Add(PostCell);
+	}
+
+	return true;
+}
+
 void AHouseGenerator::FurnishRooms(FRandomStream& Stream)
 {
 	const UDataTable* Table = Archetype ? Archetype->FurnishingRules.Get() : nullptr;
@@ -1454,6 +1603,34 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 			{
 				DrawDebugBox(World, FVector(Zone.GetCenter(), FloorZ + 5.f), FVector(Zone.GetExtent(), 3.f), FColor::Red, false, UnstableMarkerSeconds, 0, 2.f);
 			}
+		}
+	}
+
+	// A support post inside or on the border of this room is solid: keep props off it. Its half width comes
+	// from the Blueprint's mesh, so a thinner post needs no change here.
+	float PostHalfWidth = 10.f;
+
+	if (const ABuildablePiece* PostDefault = Archetype->SupportPostClass ? Archetype->SupportPostClass->GetDefaultObject<ABuildablePiece>() : nullptr)
+	{
+		const UStaticMesh* PostMesh = PostDefault->GetMeshComponent() ? PostDefault->GetMeshComponent()->GetStaticMesh() : nullptr;
+
+		if (PostMesh)
+		{
+			PostHalfWidth = FMath::Max(PostMesh->GetBounds().BoxExtent.X, PostMesh->GetBounds().BoxExtent.Y);
+		}
+	}
+
+	for (const FIntVector& Vertex : PostVertices)
+	{
+		const bool bInside = Vertex.Z == Room.Level
+			&& Vertex.X >= 2 * Rect.MinI - 1 && Vertex.X <= 2 * Rect.MaxI + 1
+			&& Vertex.Y >= 2 * Rect.MinJ - 1 && Vertex.Y <= 2 * Rect.MaxJ + 1;
+
+		if (bInside)
+		{
+			const FVector2D Centre(GridOrigin.X + Vertex.X * CellSize, GridOrigin.Y + Vertex.Y * CellSize);
+			const float Reach = PostHalfWidth + PropGap;
+			Floor.Taken.Add(FBox2D(Centre - FVector2D(Reach, Reach), Centre + FVector2D(Reach, Reach)));
 		}
 	}
 
