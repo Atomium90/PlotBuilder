@@ -128,3 +128,25 @@ static FAutoConsoleCommandWithWorldAndArgs PbGenerateHouseCommand(
 
 		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.GenerateHouse: no AHouseGenerator in the level"));
 	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbTestHousesCommand(
+	TEXT("pb.TestHouses"),
+	TEXT("pb.TestHouses [firstSeed] [lastSeed] - builds every seed of the range (default 1 to 20, at most 100) twice with the level's AHouseGenerator and prints a summary: valid houses, re-rolls, same hash twice (T6), room types seen, props per house. Leaves the last house in the world."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		if (!World)
+		{
+			return;
+		}
+
+		const int32 FirstSeed = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : 1;
+		const int32 LastSeed = Args.Num() > 1 ? FCString::Atoi(*Args[1]) : FirstSeed + 19;
+
+		for (TActorIterator<AHouseGenerator> It(World); It; ++It)
+		{
+			It->TestSeeds(FirstSeed, LastSeed);
+			return;
+		}
+
+		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.TestHouses: no AHouseGenerator in the level"));
+	}));

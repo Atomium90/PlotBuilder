@@ -522,6 +522,110 @@ bool AHouseGenerator::GenerateValid(int32 RequestedSeed, int32 MaxAttempts)
 	return false;
 }
 
+void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
+{
+	// Every build spawns a whole house and its furniture, so the batch stays small enough not to freeze the editor.
+	constexpr int32 MaxSeeds = 100;
+	constexpr int32 TypeCount = 5;
+	const int32 Count = FMath::Clamp(LastSeed - FirstSeed + 1, 1, MaxSeeds);
+
+	const bool bSavedShowDebug = bShowDebug;
+	const int32 SavedForcedFailures = DebugForcedFailures;
+	bShowDebug = false;
+	DebugForcedFailures = 0;
+
+	TArray<int32> Failed;
+	TArray<int32> Rerolled;
+	TArray<int32> HashDiffers;
+	int32 HousesWithType[TypeCount] = {};
+	int32 MinProps = MAX_int32;
+	int32 MaxProps = 0;
+	int32 ValidCount = 0;
+
+	for (int32 Offset = 0; Offset < Count; ++Offset)
+	{
+		const int32 TestSeed = FirstSeed + Offset;
+
+		if (!GenerateValid(TestSeed))
+		{
+			Failed.Add(TestSeed);
+			continue;
+		}
+
+		++ValidCount;
+		const int32 FirstHash = GetLayoutHash();
+		const int32 FirstEffectiveSeed = Seed;
+
+		if (FirstEffectiveSeed != TestSeed)
+		{
+			Rerolled.Add(TestSeed);
+		}
+
+		bool bHasType[TypeCount] = {};
+
+		for (const FRoom& Room : Rooms)
+		{
+			bHasType[static_cast<int32>(Room.Type)] = true;
+		}
+
+		for (int32 Type = 0; Type < TypeCount; ++Type)
+		{
+			HousesWithType[Type] += bHasType[Type] ? 1 : 0;
+		}
+
+		MinProps = FMath::Min(MinProps, Props.Num());
+		MaxProps = FMath::Max(MaxProps, Props.Num());
+
+		// T6: asking again for the same seed must give the same house, furniture included.
+		if (!GenerateValid(TestSeed) || GetLayoutHash() != FirstHash || Seed != FirstEffectiveSeed)
+		{
+			HashDiffers.Add(TestSeed);
+		}
+	}
+
+	bShowDebug = bSavedShowDebug;
+	DebugForcedFailures = SavedForcedFailures;
+
+	const auto Join = [](const TArray<int32>& Seeds)
+	{
+		FString Text;
+
+		for (const int32 Value : Seeds)
+		{
+			Text += (Text.IsEmpty() ? TEXT("") : TEXT(", ")) + FString::FromInt(Value);
+		}
+
+		return Text.IsEmpty() ? FString(TEXT("none")) : Text;
+	};
+
+	FString TypeLine;
+	bool bAllTypesSeen = true;
+
+	for (int32 Type = 0; Type < TypeCount; ++Type)
+	{
+		TypeLine += FString::Printf(TEXT("%s%s %d"), Type == 0 ? TEXT("") : TEXT(", "), *RoomTypeName(static_cast<ERoomType>(Type)), HousesWithType[Type]);
+		bAllTypesSeen = bAllTypesSeen && HousesWithType[Type] > 0;
+	}
+
+	TArray<FString> Lines;
+	Lines.Add(FString::Printf(TEXT("Seed test %d..%d: %d of %d valid (failed: %s), re-rolled or fallback: %s"), FirstSeed, FirstSeed + Count - 1, ValidCount, Count, *Join(Failed), *Join(Rerolled)));
+	Lines.Add(FString::Printf(TEXT("Same seed twice (T6): %d of %d gave the same hash (differs: %s)"), ValidCount - HashDiffers.Num(), ValidCount, *Join(HashDiffers)));
+	Lines.Add(FString::Printf(TEXT("Houses with each room type (of %d): %s"), ValidCount, *TypeLine));
+	Lines.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d"), MinProps, MaxProps) : FString(TEXT("Props per house: no valid house")));
+
+	const bool bAllGood = Failed.IsEmpty() && HashDiffers.IsEmpty() && bAllTypesSeen;
+
+	for (const FString& Line : Lines)
+	{
+		UE_LOG(LogPlotBuilder, Log, TEXT("AHouseGenerator '%s': %s"), *GetName(), *Line);
+	}
+
+	if (bShowDebug && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(ResultMessageKey + 1, 60.f, bAllGood ? FColor::Green : FColor::Red, FString::Join(Lines, TEXT("\n")));
+	}
+}
+
 bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 {
 	Clear();

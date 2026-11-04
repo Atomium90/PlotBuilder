@@ -121,6 +121,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Generation")
 	bool GenerateValid(int32 RequestedSeed, int32 MaxAttempts = 5);
 
+	/**
+	 *  Debug, for the Gate 2 checks: runs GenerateValid on every seed from FirstSeed to LastSeed (at most
+	 *  100), each one twice, and prints a summary: how many gave a house, how many needed a re-roll or the
+	 *  fallback, how many gave the same hash both times (T6), how many houses had each room type, and the
+	 *  range of prop counts. The debug boxes are off during the run. Leaves the last house in the world.
+	 *  pb.TestHouses calls it.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Generation|Debug")
+	void TestSeeds(int32 FirstSeed, int32 LastSeed);
+
 	/** Seed the current house was really built from: the requested one, a derived one after a re-roll, or the fallback. */
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetEffectiveSeed() const { return Seed; }
