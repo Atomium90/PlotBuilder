@@ -46,6 +46,87 @@ namespace
 		FIntPoint Cell;
 		EFootprintSide Side;
 	};
+
+	/** One straight partition wall dividing a block of rooms in two: a run of edge segments along one line, one of them a door. */
+	struct FPartitionCut
+	{
+		/** True: the wall runs along Y (a vertical edge, odd grid X). False: it runs along X (odd grid Y). */
+		bool bRunsAlongY = false;
+
+		/** Grid coordinate of the line: the odd X (or odd Y) every segment sits on. */
+		int32 LineCoord = 0;
+
+		/** Room cells the wall spans along its own axis (J for a wall along Y, I for a wall along X), inclusive. */
+		int32 FirstCell = 0;
+		int32 LastCell = 0;
+
+		/** The cell, within FirstCell..LastCell, whose segment is the door. */
+		int32 DoorCell = 0;
+	};
+
+	/**
+	 *  Cuts Rect in two across its longer side (a square flips a coin), at a seeded position kept near the
+	 *  middle: a side of length L is cut after k cells with k in [ceil(L/3), floor(2L/3)], so neither half
+	 *  is a thin strip. Draw order (axis if tied, position, door) is part of the determinism.
+	 *  False, with the outputs untouched, if Rect is a single cell.
+	 */
+	bool SplitOnce(const FRoomRect& Rect, FRandomStream& Stream, FRoomRect& OutFirst, FRoomRect& OutSecond, FPartitionCut& OutCut)
+	{
+		const int32 Width = Rect.Width();
+		const int32 Depth = Rect.Depth();
+
+		if (Width < 2 && Depth < 2)
+		{
+			return false;
+		}
+
+		// Cut across X (the wall then runs along Y) when the block is wider than deep.
+		const bool bCutAcrossX = Width == Depth ? Stream.RandRange(0, 1) == 0 : Width > Depth;
+		const int32 Length = bCutAcrossX ? Width : Depth;
+		const int32 CutAfter = Stream.RandRange((Length + 2) / 3, (2 * Length) / 3);
+
+		OutFirst = Rect;
+		OutSecond = Rect;
+		OutCut.bRunsAlongY = bCutAcrossX;
+
+		if (bCutAcrossX)
+		{
+			OutFirst.MaxI = Rect.MinI + CutAfter - 1;
+			OutSecond.MinI = Rect.MinI + CutAfter;
+			OutCut.LineCoord = 2 * OutSecond.MinI - 1;
+			OutCut.FirstCell = Rect.MinJ;
+			OutCut.LastCell = Rect.MaxJ;
+		}
+		else
+		{
+			OutFirst.MaxJ = Rect.MinJ + CutAfter - 1;
+			OutSecond.MinJ = Rect.MinJ + CutAfter;
+			OutCut.LineCoord = 2 * OutSecond.MinJ - 1;
+			OutCut.FirstCell = Rect.MinI;
+			OutCut.LastCell = Rect.MaxI;
+		}
+
+		OutCut.DoorCell = Stream.RandRange(OutCut.FirstCell, OutCut.LastCell);
+		return true;
+	}
+
+	/** Recursive cut: a block already within MaxArea (or a single cell) becomes a room, any other is cut in two and both halves go again. */
+	void SplitRoom(const FRoomRect& Rect, int32 MaxArea, FRandomStream& Stream, TArray<FRoomRect>& OutRooms, TArray<FPartitionCut>& OutCuts)
+	{
+		FRoomRect First;
+		FRoomRect Second;
+		FPartitionCut Cut;
+
+		if (Rect.Area() <= MaxArea || !SplitOnce(Rect, Stream, First, Second, Cut))
+		{
+			OutRooms.Add(Rect);
+			return;
+		}
+
+		OutCuts.Add(Cut);
+		SplitRoom(First, MaxArea, Stream, OutRooms, OutCuts);
+		SplitRoom(Second, MaxArea, Stream, OutRooms, OutCuts);
+	}
 }
 
 AHouseGenerator::AHouseGenerator()
@@ -120,8 +201,9 @@ bool AHouseGenerator::Generate(int32 InSeed)
 		return false;
 	}
 
-	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), door %s, stable, hash %08X"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), *LastDoorSide, LayoutHash));
+	DrawRoomsDebug();
+	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s), door %s, stable, hash %08X"),
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *LastDoorSide, LayoutHash));
 	return true;
 }
 
@@ -144,6 +226,8 @@ void AHouseGenerator::Clear()
 	}
 
 	Pieces.Reset();
+	Rooms.Reset();
+	Edges.Reset();
 	LayoutHash = 0;
 }
 
@@ -286,6 +370,16 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 			{
 				return false;
 			}
+
+			Edges.Add(Edge, bIsDoor ? EEdgeKind::ExteriorDoor : EEdgeKind::ExteriorWall);
+		}
+
+		// Partitions after the exterior walls, still on this storey's floor.
+		const FRoomRect Footprint{OriginI, OriginJ, OriginI + Width - 1, OriginJ + Depth - 1};
+
+		if (!EmitPartitions(Level, Footprint, Stream))
+		{
+			return false;
 		}
 	}
 
@@ -304,6 +398,109 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 	}
 
 	return true;
+}
+
+bool AHouseGenerator::EmitPartitions(int32 Level, const FRoomRect& Footprint, FRandomStream& Stream)
+{
+	if (!Archetype->InteriorWallClass || !Archetype->InteriorDoorWallClass)
+	{
+		if (Archetype->InteriorWallClass || Archetype->InteriorDoorWallClass)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' sets only one of InteriorWallClass / InteriorDoorWallClass, the storey stays one room"), *GetName(), *Archetype->GetName());
+		}
+
+		Rooms.Add(FRoom{Footprint, Level});
+		return true;
+	}
+
+	TArray<FRoomRect> Leaves;
+	TArray<FPartitionCut> Cuts;
+	SplitRoom(Footprint, FMath::Max(1, Archetype->MaxRoomArea), Stream, Leaves, Cuts);
+
+	// Too few rooms (a small footprint, a generous MaxRoomArea): cut the biggest one again, first of the biggest on a tie.
+	while (Leaves.Num() < Archetype->MinRooms)
+	{
+		int32 Biggest = INDEX_NONE;
+
+		for (int32 Index = 0; Index < Leaves.Num(); ++Index)
+		{
+			if (Leaves[Index].Area() >= 2 && (Biggest == INDEX_NONE || Leaves[Index].Area() > Leaves[Biggest].Area()))
+			{
+				Biggest = Index;
+			}
+		}
+
+		FRoomRect First;
+		FRoomRect Second;
+		FPartitionCut Cut;
+
+		if (Biggest == INDEX_NONE || !SplitOnce(Leaves[Biggest], Stream, First, Second, Cut))
+		{
+			break;
+		}
+
+		Leaves[Biggest] = First;
+		Leaves.Insert(Second, Biggest + 1);
+		Cuts.Add(Cut);
+	}
+
+	for (const FPartitionCut& Cut : Cuts)
+	{
+		// A wall along Y sits on a vertical edge (turned 0), one along X on a horizontal edge (turned 1): the
+		// exterior walls' base orientation, without their +2, because a partition is centred on its edge.
+		const uint8 QuarterTurns = Cut.bRunsAlongY ? 0 : 1;
+
+		for (int32 Cell = Cut.FirstCell; Cell <= Cut.LastCell; ++Cell)
+		{
+			const bool bIsDoor = Cell == Cut.DoorCell;
+			const FIntVector Edge = Cut.bRunsAlongY ? FIntVector(Cut.LineCoord, 2 * Cell, Level) : FIntVector(2 * Cell, Cut.LineCoord, Level);
+
+			if (!Place(bIsDoor ? Archetype->InteriorDoorWallClass : Archetype->InteriorWallClass, Edge, QuarterTurns))
+			{
+				return false;
+			}
+
+			Edges.Add(Edge, bIsDoor ? EEdgeKind::PartitionDoor : EEdgeKind::Partition);
+		}
+	}
+
+	for (const FRoomRect& Leaf : Leaves)
+	{
+		Rooms.Add(FRoom{Leaf, Level});
+	}
+
+	return true;
+}
+
+void AHouseGenerator::DrawRoomsDebug() const
+{
+	UWorld* World = GetWorld();
+
+	if (!bShowDebug || !World || !Plot || !Plot->GetStructuralSupport())
+	{
+		return;
+	}
+
+	const UStructuralRules* Rules = Plot->GetStructuralSupport()->Rules;
+	const float CellSize = Rules ? Rules->CellSize : 100.f;
+	const FVector GridOrigin = Plot->GetGridOrigin();
+	const FColor Palette[] = {FColor::Cyan, FColor::Orange, FColor::Magenta, FColor::Yellow, FColor::Emerald, FColor::Turquoise, FColor::Purple};
+
+	for (int32 Index = 0; Index < Rooms.Num(); ++Index)
+	{
+		const FRoom& Room = Rooms[Index];
+		const FColor Colour = Palette[Index % UE_ARRAY_COUNT(Palette)];
+
+		// A room cell is 2 grid units wide centred on 2i, so a block spans MinI + MaxI grid units either side of the origin, Width cells * CellSize half-wide.
+		const FVector Centre(
+			GridOrigin.X + (Room.Rect.MinI + Room.Rect.MaxI) * CellSize,
+			GridOrigin.Y + (Room.Rect.MinJ + Room.Rect.MaxJ) * CellSize,
+			Plot->GetPlaneZ(Room.Level, 0, 0.f) + 10.f);
+		const FVector Extent(Room.Rect.Width() * CellSize - 15.f, Room.Rect.Depth() * CellSize - 15.f, 2.f);
+
+		DrawDebugBox(World, Centre, Extent, Colour, false, UnstableMarkerSeconds, 0, 3.f);
+		DrawDebugString(World, Centre + FVector(0.f, 0.f, 40.f), FString::Printf(TEXT("Room %d (%d x %d)"), Index, Room.Rect.Width(), Room.Rect.Depth()), nullptr, Colour, UnstableMarkerSeconds, true);
+	}
 }
 
 ABuildablePiece* AHouseGenerator::Place(TSubclassOf<ABuildablePiece> PieceClass, const FIntVector& GridCoord, uint8 QuarterTurns, int32 RoofStep)

@@ -91,6 +91,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
 	TSubclassOf<ABuildablePiece> FlatRoofClass;
 
+	/** Partition wall between two rooms, centred on the edge. Empty (with the door below) = no interior walls, the house is one big room. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rooms")
+	TSubclassOf<ABuildablePiece> InteriorWallClass;
+
+	/** Partition wall with a door opening. Every cut between two rooms gets exactly one, so all rooms are reachable. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rooms")
+	TSubclassOf<ABuildablePiece> InteriorDoorWallClass;
+
+	/**
+	 *  A block of room cells bigger than this is cut in two (recursively). 4 = at most 2 x 2 cells, 4 x 4 m.
+	 *  A smaller value gives more, smaller rooms.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rooms", meta = (ClampMin = "1"))
+	int32 MaxRoomArea = 4;
+
+	/** If the cuts above leave fewer rooms than this, the biggest rooms are cut again until there are enough (or none can be cut). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rooms", meta = (ClampMin = "1"))
+	int32 MinRooms = 4;
+
 	/**
 	 *  Chance, per exterior wall segment (door excluded), of each opening. Rolled once per segment in
 	 *  this order: wide, large, single; whatever is left is a plain wall. Keep the three below 1 in total.

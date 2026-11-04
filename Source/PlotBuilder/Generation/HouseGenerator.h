@@ -8,6 +8,35 @@ class ABuildablePiece;
 class APlot;
 class UHouseArchetype;
 
+/** Block of room cells, inclusive on both ends. Room cell i covers grid X from 2i - 1 to 2i + 1 (same on Y). */
+struct FRoomRect
+{
+	int32 MinI = 0;
+	int32 MinJ = 0;
+	int32 MaxI = 0;
+	int32 MaxJ = 0;
+
+	int32 Width() const { return MaxI - MinI + 1; }
+	int32 Depth() const { return MaxJ - MinJ + 1; }
+	int32 Area() const { return Width() * Depth(); }
+};
+
+/** What stands on one edge of the room grid: the furnishing step reads this to keep the way in front of doors clear. */
+enum class EEdgeKind : uint8
+{
+	ExteriorWall,
+	ExteriorDoor,
+	Partition,
+	PartitionDoor
+};
+
+/** One room of the generated house: a rectangle of room cells on one storey. */
+struct FRoom
+{
+	FRoomRect Rect;
+	int32 Level = 0;
+};
+
 /**
  *  Builds a house in a plot from a UHouseArchetype and a seed (GDD §9). It places every piece through
  *  APlot::PlacePiece, the same function build mode uses, so a generated house is a normal house for the
@@ -78,6 +107,18 @@ private:
 	/** Whole emission: footprint, foundation, then storey by storey the slabs and walls, then the roof. False if a piece could not be placed. */
 	bool EmitHouse(FRandomStream& Stream);
 
+	/**
+	 *  Cuts one storey's footprint into rooms and places the partition walls (GDD §9.2, step 4). The
+	 *  footprint is cut in two along its longer axis, then each half again, until no room is bigger than
+	 *  the archetype's MaxRoomArea; if that leaves fewer than MinRooms, the biggest rooms are cut again.
+	 *  Every cut gets one door, so the rooms form a tree and all of them are reachable. Without both
+	 *  interior classes in the archetype the storey stays one room. False if a piece could not be placed.
+	 */
+	bool EmitPartitions(int32 Level, const FRoomRect& Footprint, FRandomStream& Stream);
+
+	/** Draws every room as a coloured flat box with its number and size, for UnstableMarkerSeconds. */
+	void DrawRoomsDebug() const;
+
 	/** PlacePiece plus bookkeeping (owned list, layout hash). nullptr if the plot refused it. */
 	ABuildablePiece* Place(TSubclassOf<ABuildablePiece> PieceClass, const FIntVector& GridCoord, uint8 QuarterTurns, int32 RoofStep = 0);
 
@@ -96,6 +137,12 @@ private:
 	void ReportResult(bool bSuccess, const FString& Line) const;
 
 	TArray<TWeakObjectPtr<ABuildablePiece>> Pieces;
+
+	/** Rooms of the current house, every storey, in emission order. Cleared with the house. */
+	TArray<FRoom> Rooms;
+
+	/** Kind of every wall edge placed, keyed by grid (X, Y, storey). Cleared with the house. */
+	TMap<FIntVector, EEdgeKind> Edges;
 
 	uint32 LayoutHash = 0;
 
