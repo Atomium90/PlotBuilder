@@ -5,13 +5,17 @@
 #include "Buildables/BuildablePiece.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/DataTable.h"
 #include "Engine/Engine.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Environment/Plot.h"
 #include "Environment/StructuralRules.h"
 #include "Environment/StructuralSupportComponent.h"
+#include "Props/PhysicsProp.h"
 
 namespace
 {
@@ -228,6 +232,238 @@ namespace
 		SplitRoom(First, MaxArea, Stream, OutRooms, OutCuts);
 		SplitRoom(Second, MaxArea, Stream, OutRooms, OutCuts);
 	}
+
+	/** Gap kept between a prop's back and the room-side face of a wall, so a fresh physics body never starts inside it (cm). */
+	constexpr float WallGap = 2.f;
+
+	/** Gap kept between two props (cm). */
+	constexpr float PropGap = 2.f;
+
+	/** How far into the room the floor in front of a door stays empty (cm). The zone is as wide as the door segment. */
+	constexpr float DoorClearDepth = 100.f;
+
+	/** Spacing of the positions tried along a wall and around the middle of a room (cm). */
+	constexpr float SlideStep = 50.f;
+
+	/** Walls on the X sides run along Y, walls on the Y sides run along X. */
+	bool IsXSide(EFootprintSide Side)
+	{
+		return Side == EFootprintSide::MinusX || Side == EFootprintSide::PlusX;
+	}
+
+	/** World yaw a prop must face when its back is to the wall on Wall: its front points into the room. */
+	float FacingYawOf(EFootprintSide Wall)
+	{
+		switch (Wall)
+		{
+		case EFootprintSide::MinusX: return 0.f;
+		case EFootprintSide::PlusX: return 180.f;
+		case EFootprintSide::MinusY: return 90.f;
+		default: return 270.f;
+		}
+	}
+
+	/** Grid key of the wall edge on Side of Rect, at room cell Along (a J for the two X sides, an I for the two Y sides). */
+	FIntVector SideEdgeKey(const FRoomRect& Rect, EFootprintSide Side, int32 Along, int32 Level)
+	{
+		switch (Side)
+		{
+		case EFootprintSide::MinusX: return FIntVector(2 * Rect.MinI - 1, 2 * Along, Level);
+		case EFootprintSide::PlusX: return FIntVector(2 * Rect.MaxI + 1, 2 * Along, Level);
+		case EFootprintSide::MinusY: return FIntVector(2 * Along, 2 * Rect.MinJ - 1, Level);
+		default: return FIntVector(2 * Along, 2 * Rect.MaxJ + 1, Level);
+		}
+	}
+
+	/** One place for one prop: the world XY box its rotated footprint covers, and the yaws that produce it. */
+	struct FSpot
+	{
+		FBox2D Box;
+
+		/** Direction the front is meant to point, before the row's FrontYawOffset. Drawn as an arrow, so a mesh that faces the wrong way is easy to see. */
+		float FacingYaw = 0.f;
+
+		/** Yaw of the actor: FacingYaw + FrontYawOffset. */
+		float Yaw = 0.f;
+
+		/** Distance from the middle of the room (Centred spots only). */
+		float Score = 0.f;
+	};
+
+	/** The floor of one room that furniture can use: inside the walls, minus what is already taken. */
+	struct FRoomFloor
+	{
+		FBox2D Free;
+		TArray<FBox2D> Taken;
+
+		bool IsFree(const FBox2D& Box) const
+		{
+			constexpr float Tolerance = 0.5f;
+
+			if (Box.Min.X < Free.Min.X - Tolerance || Box.Min.Y < Free.Min.Y - Tolerance || Box.Max.X > Free.Max.X + Tolerance || Box.Max.Y > Free.Max.Y + Tolerance)
+			{
+				return false;
+			}
+
+			for (const FBox2D& Other : Taken)
+			{
+				if (Box.Min.X < Other.Max.X && Other.Min.X < Box.Max.X && Box.Min.Y < Other.Max.Y && Other.Min.Y < Box.Max.Y)
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+	};
+
+	/** A prop picked for a room, with what placing it needs from its mesh. */
+	struct FChosenProp
+	{
+		const FFurnishingRuleRow* Row = nullptr;
+
+		/** Mesh bounds in the actor's space, scale included, pivot wherever the artist left it. */
+		FBox Local = FBox(ForceInit);
+
+		/** Scale the Blueprint gives its mesh root: a spawn transform replaces the root's own, so it is passed back. */
+		FVector Scale = FVector::OneVector;
+
+		/** Footprint area before rotation, used to place the biggest props first. */
+		float Area = 0.f;
+	};
+
+	/** Reads the mesh bounds and scale from the Blueprint's default object. False if the Blueprint has no mesh. */
+	bool ReadProp(const FFurnishingRuleRow& Row, FChosenProp& OutProp)
+	{
+		const APhysicsProp* Default = Row.PropClass ? Row.PropClass.GetDefaultObject() : nullptr;
+		const UStaticMeshComponent* Mesh = Default ? Default->GetMeshComponent() : nullptr;
+		const UStaticMesh* StaticMesh = Mesh ? Mesh->GetStaticMesh() : nullptr;
+
+		if (!StaticMesh)
+		{
+			return false;
+		}
+
+		OutProp.Row = &Row;
+		OutProp.Scale = Mesh->GetRelativeScale3D();
+		OutProp.Local = StaticMesh->GetBounds().GetBox().TransformBy(FTransform(FQuat::Identity, FVector::ZeroVector, OutProp.Scale));
+		OutProp.Area = OutProp.Local.GetSize().X * OutProp.Local.GetSize().Y;
+		return true;
+	}
+
+	/** Start positions of a block of length Size inside [Lo, Hi]: Lo, then every SlideStep, then the last that fits. EndsOnly keeps just the two ends. Empty if it does not fit. */
+	void SlidePositions(float Lo, float Hi, float Size, bool bEndsOnly, TArray<float>& OutPositions)
+	{
+		OutPositions.Reset();
+		const float Last = Hi - Size;
+
+		if (Last < Lo - UE_KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		OutPositions.Add(Lo);
+
+		if (Last > Lo + UE_KINDA_SMALL_NUMBER)
+		{
+			for (float Position = Lo + SlideStep; !bEndsOnly && Position < Last - 1.f; Position += SlideStep)
+			{
+				OutPositions.Add(Position);
+			}
+
+			OutPositions.Add(Last);
+		}
+	}
+
+	/**
+	 *  Every place Prop can go in Floor under its row's rule. Against a wall (and NearPlumbing, which is the
+	 *  same for now): back to one of the four walls, front into the room, sliding along it. Corner: only the
+	 *  ends of that slide. Centred: around the middle of the room, in the four directions, keeping only the
+	 *  spots nearest to the middle that are free.
+	 */
+	void CollectSpots(const FChosenProp& Prop, const FRoomFloor& Floor, TArray<FSpot>& OutSpots)
+	{
+		const EFurniturePlacement Placement = Prop.Row->Placement;
+		const float YawOffset = Prop.Row->FrontYawOffset;
+
+		const auto SizeAt = [&Prop](float Yaw)
+		{
+			const FVector Size = Prop.Local.TransformBy(FTransform(FRotator(0.f, Yaw, 0.f))).GetSize();
+			return FVector2D(Size.X, Size.Y);
+		};
+
+		if (Placement == EFurniturePlacement::Centred)
+		{
+			const FVector2D Middle = Floor.Free.GetCenter();
+			const FVector2D Half = Floor.Free.GetExtent();
+			const int32 Steps = FMath::CeilToInt(FMath::Max(Half.X, Half.Y) / SlideStep);
+
+			for (int32 Turn = 0; Turn < 4; ++Turn)
+			{
+				const float FacingYaw = 90.f * Turn;
+				const FVector2D Size = SizeAt(FacingYaw + YawOffset);
+
+				for (int32 StepX = -Steps; StepX <= Steps; ++StepX)
+				{
+					for (int32 StepY = -Steps; StepY <= Steps; ++StepY)
+					{
+						const FVector2D Offset(StepX * SlideStep, StepY * SlideStep);
+						const FBox2D Box(Middle + Offset - Size * 0.5, Middle + Offset + Size * 0.5);
+
+						if (Floor.IsFree(Box))
+						{
+							OutSpots.Add(FSpot{Box, FacingYaw, FacingYaw + YawOffset, static_cast<float>(Offset.Size())});
+						}
+					}
+				}
+			}
+
+			float Nearest = TNumericLimits<float>::Max();
+
+			for (const FSpot& Spot : OutSpots)
+			{
+				Nearest = FMath::Min(Nearest, Spot.Score);
+			}
+
+			OutSpots.RemoveAll([Nearest](const FSpot& Spot) { return Spot.Score > Nearest + 1.f; });
+			return;
+		}
+
+		const EFootprintSide Walls[] = {EFootprintSide::MinusX, EFootprintSide::PlusX, EFootprintSide::MinusY, EFootprintSide::PlusY};
+		TArray<float> Along;
+
+		for (const EFootprintSide Wall : Walls)
+		{
+			const float FacingYaw = FacingYawOf(Wall);
+			const FVector2D Size = SizeAt(FacingYaw + YawOffset);
+			const bool bXWall = IsXSide(Wall);
+
+			// Along the wall: the footprint slides between the two ends of the free floor, a gap short of each.
+			const float AlongLo = (bXWall ? Floor.Free.Min.Y : Floor.Free.Min.X) + WallGap;
+			const float AlongHi = (bXWall ? Floor.Free.Max.Y : Floor.Free.Max.X) - WallGap;
+			SlidePositions(AlongLo, AlongHi, bXWall ? Size.Y : Size.X, Placement == EFurniturePlacement::Corner, Along);
+
+			for (const float Position : Along)
+			{
+				FVector2D Min;
+
+				switch (Wall)
+				{
+				case EFootprintSide::MinusX: Min = FVector2D(Floor.Free.Min.X + WallGap, Position); break;
+				case EFootprintSide::PlusX: Min = FVector2D(Floor.Free.Max.X - WallGap - Size.X, Position); break;
+				case EFootprintSide::MinusY: Min = FVector2D(Position, Floor.Free.Min.Y + WallGap); break;
+				default: Min = FVector2D(Position, Floor.Free.Max.Y - WallGap - Size.Y); break;
+				}
+
+				const FBox2D Box(Min, Min + Size);
+
+				if (Floor.IsFree(Box))
+				{
+					OutSpots.Add(FSpot{Box, FacingYaw, FacingYaw + YawOffset, 0.f});
+				}
+			}
+		}
+	}
 }
 
 AHouseGenerator::AHouseGenerator()
@@ -357,9 +593,12 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 		return false;
 	}
 
+	// Only a house that stands gets furniture, and it draws after the structure, so the walls never depend on it.
+	FurnishRooms(Stream);
+
 	DrawRoomsDebug();
-	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) [%s] (%s), door %s, stable, hash %08X"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, *LastDoorSide, LayoutHash));
+	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) [%s] (%s), %d prop(s), door %s, stable, hash %08X"),
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), *LastDoorSide, LayoutHash));
 	return true;
 }
 
@@ -381,6 +620,16 @@ void AHouseGenerator::Clear()
 		}
 	}
 
+	// A prop the player already broke is gone (HandleBroken destroys it): its weak pointer is stale, like a demolished piece's.
+	for (const TWeakObjectPtr<APhysicsProp>& WeakProp : Props)
+	{
+		if (APhysicsProp* Prop = WeakProp.Get())
+		{
+			Prop->Destroy();
+		}
+	}
+
+	Props.Reset();
 	Pieces.Reset();
 	Rooms.Reset();
 	Edges.Reset();
@@ -909,6 +1158,235 @@ bool AHouseGenerator::EmitLayoutPartitions(int32 Level, const TArray<TPair<int32
 	}
 
 	return true;
+}
+
+void AHouseGenerator::FurnishRooms(FRandomStream& Stream)
+{
+	const UDataTable* Table = Archetype ? Archetype->FurnishingRules.Get() : nullptr;
+
+	if (!GetWorld() || !Plot || !Plot->GetStructuralSupport() || !Table)
+	{
+		return;
+	}
+
+	// Rows in name order, whatever order the table stores them in: the draws below depend on it.
+	TArray<FName> RowNames = Table->GetRowNames();
+	RowNames.Sort([](const FName& A, const FName& B) { return A.Compare(B) < 0; });
+
+	TArray<const FFurnishingRuleRow*> Rows;
+
+	for (const FName& RowName : RowNames)
+	{
+		const FFurnishingRuleRow* Row = Table->FindRow<FFurnishingRuleRow>(RowName, TEXT("AHouseGenerator::FurnishRooms"));
+
+		if (Row && Row->PropClass)
+		{
+			Rows.Add(Row);
+		}
+		else if (Row)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': furnishing row '%s' has no PropClass, skipped"), *GetName(), *RowName.ToString());
+		}
+	}
+
+	for (const FRoom& Room : Rooms)
+	{
+		FurnishRoom(Room, Rows, Stream);
+	}
+}
+
+void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnishingRuleRow*>& Rows, FRandomStream& Stream)
+{
+	UWorld* World = GetWorld();
+	const UStructuralRules* StructuralRules = Plot->GetStructuralSupport()->Rules;
+	const float CellSize = StructuralRules ? StructuralRules->CellSize : 100.f;
+	const FVector GridOrigin = Plot->GetGridOrigin();
+	const FRoomRect& Rect = Room.Rect;
+	const float FloorZ = Plot->GetPlaneZ(Room.Level, 0, 0.f);
+	const EFootprintSide Sides[] = {EFootprintSide::MinusX, EFootprintSide::PlusX, EFootprintSide::MinusY, EFootprintSide::PlusY};
+
+	// 1. What to place: per group of this room type, one row by Weight, kept if its Chance roll passes.
+	TArray<FName> GroupOrder;
+	TMap<FName, TArray<const FFurnishingRuleRow*>> Groups;
+
+	for (const FFurnishingRuleRow* Row : Rows)
+	{
+		if (Row->RoomType == Room.Type)
+		{
+			TArray<const FFurnishingRuleRow*>& Variants = Groups.FindOrAdd(Row->Group);
+
+			if (Variants.IsEmpty())
+			{
+				GroupOrder.Add(Row->Group);
+			}
+
+			Variants.Add(Row);
+		}
+	}
+
+	TArray<FChosenProp> Chosen;
+
+	for (const FName& Group : GroupOrder)
+	{
+		const TArray<const FFurnishingRuleRow*>& Variants = Groups[Group];
+		float TotalWeight = 0.f;
+
+		for (const FFurnishingRuleRow* Variant : Variants)
+		{
+			TotalWeight += FMath::Max(0.f, Variant->Weight);
+		}
+
+		// Both rolls are drawn even when they decide nothing, so the number of draws depends on the table's groups, not on its weights.
+		float WeightRoll = Stream.FRand() * TotalWeight;
+		const float ChanceRoll = Stream.FRand();
+		const FFurnishingRuleRow* Picked = nullptr;
+
+		for (const FFurnishingRuleRow* Variant : Variants)
+		{
+			const float Weight = FMath::Max(0.f, Variant->Weight);
+
+			if (Weight > 0.f)
+			{
+				Picked = Variant;
+
+				if (WeightRoll < Weight)
+				{
+					break;
+				}
+
+				WeightRoll -= Weight;
+			}
+		}
+
+		if (!Picked || ChanceRoll >= Picked->Chance)
+		{
+			continue;
+		}
+
+		FChosenProp Prop;
+
+		if (ReadProp(*Picked, Prop))
+		{
+			Chosen.Add(Prop);
+		}
+		else
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': %s has no static mesh on its root component, cannot be furnished"), *GetName(), *Picked->PropClass->GetName());
+		}
+	}
+
+	// Big props first: they are the hardest to fit, and the small ones then take what is left.
+	Chosen.Sort([](const FChosenProp& A, const FChosenProp& B)
+	{
+		return A.Area != B.Area ? A.Area > B.Area : A.Row->Group.Compare(B.Row->Group) < 0;
+	});
+
+	// 2. The floor they can use: inside the walls, minus the zone in front of every door of the room.
+	const auto Inset = [&](EFootprintSide Side)
+	{
+		const int32 First = IsXSide(Side) ? Rect.MinJ : Rect.MinI;
+		const EEdgeKind* Kind = Edges.Find(SideEdgeKey(Rect, Side, First, Room.Level));
+
+		if (!Kind)
+		{
+			return 0.f;
+		}
+
+		const bool bExterior = *Kind == EEdgeKind::ExteriorWall || *Kind == EEdgeKind::ExteriorDoor;
+		return bExterior ? Archetype->ExteriorWallThickness : Archetype->InteriorWallThickness * 0.5f;
+	};
+
+	// An exterior wall is pivoted on its outer face, so its room-side face is a full thickness inside the edge line; a partition is centred, half a thickness each side.
+	FRoomFloor Floor;
+	Floor.Free = FBox2D(
+		FVector2D(GridOrigin.X + (2 * Rect.MinI - 1) * CellSize + Inset(EFootprintSide::MinusX), GridOrigin.Y + (2 * Rect.MinJ - 1) * CellSize + Inset(EFootprintSide::MinusY)),
+		FVector2D(GridOrigin.X + (2 * Rect.MaxI + 1) * CellSize - Inset(EFootprintSide::PlusX), GridOrigin.Y + (2 * Rect.MaxJ + 1) * CellSize - Inset(EFootprintSide::PlusY)));
+
+	for (const EFootprintSide Side : Sides)
+	{
+		const bool bXSide = IsXSide(Side);
+
+		for (int32 Along = bXSide ? Rect.MinJ : Rect.MinI; Along <= (bXSide ? Rect.MaxJ : Rect.MaxI); ++Along)
+		{
+			const EEdgeKind* Kind = Edges.Find(SideEdgeKey(Rect, Side, Along, Room.Level));
+
+			if (!Kind || (*Kind != EEdgeKind::ExteriorDoor && *Kind != EEdgeKind::PartitionDoor))
+			{
+				continue;
+			}
+
+			// The door segment is two grid units wide, centred on the cell.
+			const float Centre = (bXSide ? GridOrigin.Y : GridOrigin.X) + 2 * Along * CellSize;
+			FBox2D Zone;
+
+			switch (Side)
+			{
+			case EFootprintSide::MinusX: Zone = FBox2D(FVector2D(Floor.Free.Min.X, Centre - CellSize), FVector2D(Floor.Free.Min.X + DoorClearDepth, Centre + CellSize)); break;
+			case EFootprintSide::PlusX: Zone = FBox2D(FVector2D(Floor.Free.Max.X - DoorClearDepth, Centre - CellSize), FVector2D(Floor.Free.Max.X, Centre + CellSize)); break;
+			case EFootprintSide::MinusY: Zone = FBox2D(FVector2D(Centre - CellSize, Floor.Free.Min.Y), FVector2D(Centre + CellSize, Floor.Free.Min.Y + DoorClearDepth)); break;
+			default: Zone = FBox2D(FVector2D(Centre - CellSize, Floor.Free.Max.Y - DoorClearDepth), FVector2D(Centre + CellSize, Floor.Free.Max.Y)); break;
+			}
+
+			Floor.Taken.Add(Zone);
+
+			if (bShowDebug)
+			{
+				DrawDebugBox(World, FVector(Zone.GetCenter(), FloorZ + 5.f), FVector(Zone.GetExtent(), 3.f), FColor::Red, false, UnstableMarkerSeconds, 0, 2.f);
+			}
+		}
+	}
+
+	// 3. Place them: one of the free spots the rule allows, drawn from the seed; none free = skipped.
+	for (const FChosenProp& Item : Chosen)
+	{
+		TArray<FSpot> Spots;
+		CollectSpots(Item, Floor, Spots);
+
+		if (Spots.IsEmpty())
+		{
+			continue;
+		}
+
+		const FSpot& Spot = Spots[Stream.RandRange(0, Spots.Num() - 1)];
+
+		// Where the actor goes so the rotated bounds land exactly on the spot: the pivot does not matter, the bottom of the bounds rests on the floor plus 1 cm.
+		const FBox Rotated = Item.Local.TransformBy(FTransform(FRotator(0.f, Spot.Yaw, 0.f)));
+		const FVector Location(Spot.Box.Min.X - Rotated.Min.X, Spot.Box.Min.Y - Rotated.Min.Y, FloorZ + 1.f - Rotated.Min.Z);
+		const FTransform SpawnTransform(FRotator(0.f, Spot.Yaw, 0.f), Location, Item.Scale);
+
+		APhysicsProp* Prop = World->SpawnActorDeferred<APhysicsProp>(Item.Row->PropClass, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+		if (!Prop)
+		{
+			continue;
+		}
+
+		// Set before the prop starts: BeginPlay reads these. The Blueprints only carry the mesh.
+		Prop->Material = Item.Row->Material;
+		Prop->MaxHP = Item.Row->MaxHP;
+		Prop->FragmentCount = Item.Row->FragmentCount;
+		Prop->Value = Item.Row->Value;
+		Prop->FinishSpawning(SpawnTransform);
+		Prop->GetMeshComponent()->SetMassOverrideInKg(NAME_None, Item.Row->Mass, true);
+
+		Props.Add(Prop);
+		Floor.Taken.Add(FBox2D(Spot.Box.Min - FVector2D(PropGap, PropGap), Spot.Box.Max + FVector2D(PropGap, PropGap)));
+
+		LayoutHash = HashCombine(LayoutHash, GetTypeHash(Item.Row->PropClass->GetPathName()));
+		LayoutHash = HashCombine(LayoutHash, GetTypeHash(FIntVector(FMath::RoundToInt(Location.X), FMath::RoundToInt(Location.Y), FMath::RoundToInt(Location.Z))));
+		LayoutHash = HashCombine(LayoutHash, GetTypeHash(FMath::RoundToInt(FRotator::NormalizeAxis(Spot.Yaw))));
+
+		if (bShowDebug)
+		{
+			// The box is the footprint; the green arrow is where the front is meant to point, so a mesh that faces another way shows at once (fix: FrontYawOffset in the row).
+			const float Height = Rotated.GetSize().Z;
+			const FVector Centre(Spot.Box.GetCenter(), FloorZ + Height * 0.5f);
+			const FVector Front = FRotator(0.f, Spot.FacingYaw, 0.f).Vector();
+
+			DrawDebugBox(World, Centre, FVector(Spot.Box.GetExtent(), Height * 0.5f), FColor::White, false, UnstableMarkerSeconds, 0, 1.f);
+			DrawDebugDirectionalArrow(World, Centre, Centre + Front * 60.f, 20.f, FColor::Green, false, UnstableMarkerSeconds, 0, 2.f);
+		}
+	}
 }
 
 void AHouseGenerator::DrawRoomsDebug() const

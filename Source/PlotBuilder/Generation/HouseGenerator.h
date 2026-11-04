@@ -6,6 +6,7 @@
 #include "HouseGenerator.generated.h"
 
 class ABuildablePiece;
+class APhysicsProp;
 class APlot;
 class UHouseArchetype;
 
@@ -52,7 +53,11 @@ struct FRoom
  *  Deterministic: one FRandomStream seeded from Seed drives every choice (never the global random
  *  functions, which a seed can't control), so the
  *  same seed and archetype always give the same house. GetLayoutHash() is a fingerprint of the result
- *  (class, cell, orientation of every piece, in emission order) to check that.
+ *  (class, cell, orientation of every piece, then class, position, yaw of every prop, in emission
+ *  order) to check that.
+ *
+ *  Once the house stands, FurnishRooms fills each room with physics props (APhysicsProp) from the
+ *  archetype's DT_FurnishingRules. Props are plain physics actors, outside the structural graph.
  *
  *  Place one in the level, give it the plot (or leave it empty to use the first APlot found) and an
  *  archetype, then call Generate from Blueprint or with the pb.GenerateHouse console command.
@@ -127,6 +132,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetPieceCount() const { return Pieces.Num(); }
 
+	/** Furniture the current house has (props are not pieces: they are not in the structural graph). */
+	UFUNCTION(BlueprintPure, Category = "Generation")
+	int32 GetPropCount() const { return Props.Num(); }
+
 	/** Fingerprint of the current house (0 when empty): same seed and archetype, same value. */
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetLayoutHash() const { return static_cast<int32>(LayoutHash); }
@@ -158,6 +167,21 @@ private:
 	 */
 	bool EmitLayoutPartitions(int32 Level, const TArray<TPair<int32, int32>>& Links, FRandomStream& Stream);
 
+	/**
+	 *  Furnishes every room from Archetype->FurnishingRules (GDD §9.2, step 6), once the house is built and
+	 *  validated (a rejected house never gets a prop). Draws from Stream after everything the structure used,
+	 *  so furnishing never changes where a wall goes. Does nothing without a table.
+	 */
+	void FurnishRooms(FRandomStream& Stream);
+
+	/**
+	 *  One room: for each group of rows of the room's type it picks a row by Weight, rolls its Chance,
+	 *  then places the picked props biggest first. A prop goes where its rule allows, inside the walls,
+	 *  clear of the doors and of the props already placed; if nothing fits it is skipped silently.
+	 *  Rows must already be in a fixed order (they are sorted by name).
+	 */
+	void FurnishRoom(const FRoom& Room, const TArray<const FFurnishingRuleRow*>& Rows, FRandomStream& Stream);
+
 	/** Draws every room as a coloured flat box with its number and size, for UnstableMarkerSeconds. */
 	void DrawRoomsDebug() const;
 
@@ -179,6 +203,9 @@ private:
 	void ReportResult(bool bSuccess, const FString& Line) const;
 
 	TArray<TWeakObjectPtr<ABuildablePiece>> Pieces;
+
+	/** Furniture this generator spawned and still owns: Clear() destroys it with the pieces. */
+	TArray<TWeakObjectPtr<APhysicsProp>> Props;
 
 	/** Rooms of the current house, every storey, in emission order. Cleared with the house. */
 	TArray<FRoom> Rooms;
