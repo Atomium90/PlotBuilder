@@ -42,6 +42,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
 	float MaxHP = 50.f;
 
+	/** Worth of the prop at full health, in money. Set from the DT_FurnishingRules row when the house generator spawns it; the contract report reads it. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Economy")
+	int32 Value = 0;
+
 	/** How many generic AFragmentDebris shards to spawn when this prop breaks - see UDemolitionRules::SpawnGenericFragments. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
 	int32 FragmentCount = 4;

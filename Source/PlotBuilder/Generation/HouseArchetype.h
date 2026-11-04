@@ -5,6 +5,7 @@
 #include "HouseArchetype.generated.h"
 
 class ABuildablePiece;
+class UDataTable;
 
 /** Roof the generator puts on top of the last storey. Gable joins on Thursday with the two-storey house. */
 UENUM(BlueprintType)
@@ -116,6 +117,21 @@ public:
 	/** If the cuts above leave fewer rooms than this, the biggest rooms are cut again until there are enough (or none can be cut). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rooms", meta = (ClampMin = "1"))
 	int32 MinRooms = 4;
+
+	/** DT_FurnishingRules (rows of FFurnishingRuleRow): which props each room type can get. Empty = rooms are left bare. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing")
+	TObjectPtr<UDataTable> FurnishingRules;
+
+	/**
+	 *  Thickness of the exterior walls, in cm. They are pivoted on their outer face, so their room-side
+	 *  face is this far inside the edge line. Furniture is placed against that face.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing", meta = (ClampMin = "0"))
+	float ExteriorWallThickness = 20.f;
+
+	/** Thickness of the partitions, in cm. They are centred on the edge line, so half of it sits on each side. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing", meta = (ClampMin = "0"))
+	float InteriorWallThickness = 10.f;
 
 	/**
 	 *  Chance, per exterior wall segment (door excluded), of each opening. Rolled once per segment in
