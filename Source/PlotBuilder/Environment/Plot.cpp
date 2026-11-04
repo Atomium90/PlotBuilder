@@ -3,6 +3,7 @@
 #include "Buildables/BuildablePiece.h"
 #include "Components/BoxComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "StructuralRules.h"
 #include "StructuralSupportComponent.h"
@@ -118,6 +119,19 @@ ABuildablePiece* APlot::PlacePiece(TSubclassOf<ABuildablePiece> PieceClass, cons
 void APlot::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// The plot's structural Rules reference has been lost twice without any symptom (every read falls back to
+	// the code's own defaults, so the game runs without the corner parity bias or the tuned losses). Say so loudly.
+	if (StructuralSupport && !StructuralSupport->Rules)
+	{
+		const FString Message = FString::Printf(TEXT("APlot '%s': the structural support has no Rules (DA_StructuralRules), the graph runs on code defaults. Reassign it on the plot's StructuralSupport component."), *GetName());
+		UE_LOG(LogPlotBuilder, Warning, TEXT("%s"), *Message);
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(7200, 20.f, FColor::Red, Message);
+		}
+	}
 
 	// Sanity check for the GetGroundZ()/GetGridOrigin() authoring convention (plot pivot = ground
 	// surface, at the center of a grid cell) - a warning here is the first thing to check if grid
