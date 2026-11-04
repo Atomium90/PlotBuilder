@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Math/RandomStream.h"
 #include "FurnishingRuleRow.h"
 #include "HouseLayout.generated.h"
 
@@ -97,6 +98,25 @@ struct FParsedLayout
 };
 
 /**
+ *  A layout after the seed's choices: grown to a size and with its types swapped, but not mirrored yet
+ *  (the generator may still flip it so the front door faces the truck). Rooms are in the same order as
+ *  FParsedLayout::Rooms, with their rects in the grown grid.
+ */
+struct FResolvedLayout
+{
+	int32 Rows = 0;
+	int32 Columns = 0;
+
+	TArray<FParsedLayoutRoom> Rooms;
+	TArray<TPair<int32, int32>> Links;
+	int32 EntranceRoom = INDEX_NONE;
+
+	/** The seed's mirror choice, already limited to the flips the plan allows. */
+	bool bMirrorX = false;
+	bool bMirrorY = false;
+};
+
+/**
  *  A hand-written house plan (GDD §9.1, §9.2 step 4): the rooms of each storey as a grid of letters, which
  *  rooms are joined by a door, and which room has the front door. AHouseGenerator reads it instead of
  *  cutting the footprint at random, so the hall, the wings and the way through the house are the
@@ -160,6 +180,15 @@ public:
 	 *  (all of them, not just the first), if it cannot be built; OutLayout is then incomplete.
 	 */
 	bool Parse(FParsedLayout& OutLayout, TArray<FString>& OutErrors) const;
+
+	/**
+	 *  Applies the seed's choices to a parsed plan. Draw order, part of the determinism: mirror X, mirror
+	 *  Y, the size along X, the size along Y, which rows then which columns grow, then the type swaps,
+	 *  group by group. The size is drawn in MinCells..MaxCells (X = rows, Y = columns), kept between the
+	 *  plan's own size and the most its stretch allows, and never above FreeCells (what the plot can hold;
+	 *  the plan itself must already fit it).
+	 */
+	void Resolve(const FParsedLayout& Parsed, FIntPoint MinCells, FIntPoint MaxCells, FIntPoint FreeCells, FRandomStream& Stream, FResolvedLayout& OutLayout) const;
 
 #if WITH_EDITOR
 	/** Runs Parse so the editor's Validate Assets reports a broken plan before a house is generated from it. */

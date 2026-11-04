@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "FurnishingRuleRow.h"
 #include "HouseGenerator.generated.h"
 
 class ABuildablePiece;
@@ -35,6 +36,12 @@ struct FRoom
 {
 	FRoomRect Rect;
 	int32 Level = 0;
+
+	/** What the room is for. Set from the plan's legend; rooms of the random split are not typed yet. */
+	ERoomType Type = ERoomType::LivingRoom;
+
+	/** The plan's letter for this room, empty for a room of the random split. */
+	FString Label;
 };
 
 /**
@@ -141,6 +148,14 @@ private:
 	 */
 	bool EmitPartitions(int32 Level, const FRoomRect& Footprint, FRandomStream& Stream);
 
+	/**
+	 *  Places the partition walls of one storey of a hand-written plan (GDD §9.2, step 4). Rooms must
+	 *  already hold the plan's rooms, in world cells. Every boundary between two rooms gets a wall; each
+	 *  pair in Links (indices into Rooms) gets one door, on a segment of their shared wall picked by the
+	 *  seed. Without both interior classes in the archetype no wall is placed. False if a piece could not be placed.
+	 */
+	bool EmitLayoutPartitions(int32 Level, const TArray<TPair<int32, int32>>& Links, FRandomStream& Stream);
+
 	/** Draws every room as a coloured flat box with its number and size, for UnstableMarkerSeconds. */
 	void DrawRoomsDebug() const;
 
@@ -179,4 +194,7 @@ private:
 
 	/** Side the last door went on ("+X", "-X", "+Y", "-Y"), and whether FacingTarget chose it, for the result line. */
 	FString LastDoorSide;
+
+	/** Which plan the last EmitHouse built, and how it was mirrored, or "random split", for the result line. */
+	FString LastLayoutNote;
 };

@@ -1,5 +1,6 @@
 #include "HouseGenerator.h"
 #include "HouseArchetype.h"
+#include "HouseLayout.h"
 #include "PlotBuilder.h"
 #include "Buildables/BuildablePiece.h"
 #include "Components/BoxComponent.h"
@@ -108,6 +109,21 @@ namespace
 
 		OutCut.DoorCell = Stream.RandRange(OutCut.FirstCell, OutCut.LastCell);
 		return true;
+	}
+
+	/**
+	 *  A block of a plan's text grid, in world room cells. Row 0 of the text is the highest X and column 0
+	 *  the lowest Y (the Top viewport), so row r is cell OriginI + Rows - 1 - r and column c is cell
+	 *  OriginJ + c. Mirroring reverses the rows (X) and/or the columns (Y) first.
+	 */
+	FRoomRect MapLayoutRect(const FLayoutRect& Rect, int32 Rows, int32 Columns, bool bMirrorX, bool bMirrorY, int32 OriginI, int32 OriginJ)
+	{
+		const int32 MinRow = bMirrorX ? Rows - 1 - Rect.MaxRow : Rect.MinRow;
+		const int32 MaxRow = bMirrorX ? Rows - 1 - Rect.MinRow : Rect.MaxRow;
+		const int32 MinCol = bMirrorY ? Columns - 1 - Rect.MaxCol : Rect.MinCol;
+		const int32 MaxCol = bMirrorY ? Columns - 1 - Rect.MinCol : Rect.MaxCol;
+
+		return FRoomRect{OriginI + Rows - 1 - MaxRow, OriginJ + MinCol, OriginI + Rows - 1 - MinRow, OriginJ + MaxCol};
 	}
 
 	/** Recursive cut: a block already within MaxArea (or a single cell) becomes a room, any other is cut in two and both halves go again. */
@@ -257,8 +273,8 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 	}
 
 	DrawRoomsDebug();
-	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s), door %s, stable, hash %08X"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *LastDoorSide, LayoutHash));
+	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) (%s), door %s, stable, hash %08X"),
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *LastLayoutNote, *LastDoorSide, LayoutHash));
 	return true;
 }
 
@@ -307,16 +323,76 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		return false;
 	}
 
-	// The archetype's bounds, clamped to what the plot can hold. Draw order is part of the determinism: width, depth, X then Y offset, door.
-	const auto PickSize = [&Stream](int32 MinCells, int32 MaxCells, int32 Free)
-	{
-		const int32 Low = FMath::Clamp(MinCells, 1, Free);
-		const int32 High = FMath::Clamp(MaxCells, Low, Free);
-		return Stream.RandRange(Low, High);
-	};
+	const int32 Floors = FMath::Max(1, Archetype->Floors);
 
-	const int32 Width = PickSize(Archetype->MinRoomCells.X, Archetype->MaxRoomCells.X, FreeX);
-	const int32 Depth = PickSize(Archetype->MinRoomCells.Y, Archetype->MaxRoomCells.Y, FreeY);
+	// Hand-written plans the archetype offers that can be built here: valid, one grid per storey, small enough for the plot.
+	TArray<TPair<const UHouseLayout*, FParsedLayout>> UsableLayouts;
+
+	for (const TObjectPtr<UHouseLayout>& Candidate : Archetype->Layouts)
+	{
+		if (!Candidate)
+		{
+			continue;
+		}
+
+		FParsedLayout Parsed;
+		TArray<FString> Errors;
+
+		if (!Candidate->Parse(Parsed, Errors))
+		{
+			for (const FString& Error : Errors)
+			{
+				UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: %s"), *GetName(), *Candidate->GetName(), *Error);
+			}
+		}
+		else if (Candidate->Levels.Num() != Floors)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: it has %d storey(s), the archetype has %d"), *GetName(), *Candidate->GetName(), Candidate->Levels.Num(), Floors);
+		}
+		else if (Parsed.Rows > FreeX || Parsed.Columns > FreeY)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: it is %d x %d cells, the plot holds %d x %d"), *GetName(), *Candidate->GetName(), Parsed.Rows, Parsed.Columns, FreeX, FreeY);
+		}
+		else
+		{
+			UsableLayouts.Emplace(Candidate.Get(), MoveTemp(Parsed));
+		}
+	}
+
+	if (!Archetype->Layouts.IsEmpty() && UsableLayouts.IsEmpty())
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' has layouts but none is usable, cutting the footprint at random instead"), *GetName(), *Archetype->GetName());
+	}
+
+	// Draw order is part of the determinism. With a plan: which plan, then its own draws (mirrors, size, growth,
+	// swaps), then the X then Y offset, door. Without: width, depth, then the same.
+	const UHouseLayout* Layout = nullptr;
+	FResolvedLayout Resolved;
+	int32 Width = 0;
+	int32 Depth = 0;
+
+	if (!UsableLayouts.IsEmpty())
+	{
+		const int32 Pick = Stream.RandRange(0, UsableLayouts.Num() - 1);
+		Layout = UsableLayouts[Pick].Key;
+		Layout->Resolve(UsableLayouts[Pick].Value, Archetype->MinRoomCells, Archetype->MaxRoomCells, FIntPoint(FreeX, FreeY), Stream, Resolved);
+		Width = Resolved.Rows;
+		Depth = Resolved.Columns;
+	}
+	else
+	{
+		// The archetype's bounds, clamped to what the plot can hold.
+		const auto PickSize = [&Stream](int32 MinCells, int32 MaxCells, int32 Free)
+		{
+			const int32 Low = FMath::Clamp(MinCells, 1, Free);
+			const int32 High = FMath::Clamp(MaxCells, Low, Free);
+			return Stream.RandRange(Low, High);
+		};
+
+		Width = PickSize(Archetype->MinRoomCells.X, Archetype->MaxRoomCells.X, FreeX);
+		Depth = PickSize(Archetype->MinRoomCells.Y, Archetype->MaxRoomCells.Y, FreeY);
+	}
+
 	// Centred on the plot (the spare cell goes to the lower side when it doesn't divide evenly), then moved by up to PlacementJitter cells.
 	const auto PickOrigin = [&Stream](int32 Min, int32 Max, int32 Cells, int32 Jitter)
 	{
@@ -326,7 +402,6 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 
 	const int32 OriginI = PickOrigin(MinI, MaxI, Width, FMath::Max(0, Archetype->PlacementJitter.X));
 	const int32 OriginJ = PickOrigin(MinJ, MaxJ, Depth, FMath::Max(0, Archetype->PlacementJitter.Y));
-	const int32 Floors = FMath::Max(1, Archetype->Floors);
 	LastSize = FIntPoint(Width, Depth);
 
 	// Perimeter edges as grid (X, Y): a vertical edge sits at an odd X, a horizontal one at an odd Y.
@@ -373,18 +448,111 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		}
 	}
 
+	// With a plan: the rooms in world cells, the mirror, and the room the front door belongs to.
+	TArray<TPair<int32, int32>> LayoutLinks;
+
+	if (Layout)
+	{
+		bool bMirrorX = Resolved.bMirrorX;
+		bool bMirrorY = Resolved.bMirrorY;
+		const FLayoutRect& EntranceRect = Resolved.Rooms[Resolved.EntranceRoom].Rect;
+
+		const auto Faces = [&](bool bTryX, bool bTryY)
+		{
+			const FRoomRect Entrance = MapLayoutRect(EntranceRect, Resolved.Rows, Resolved.Columns, bTryX, bTryY, OriginI, OriginJ);
+
+			switch (FacingSide)
+			{
+			case EFootprintSide::MinusX: return Entrance.MinI == OriginI;
+			case EFootprintSide::PlusX: return Entrance.MaxI == OriginI + Width - 1;
+			case EFootprintSide::MinusY: return Entrance.MinJ == OriginJ;
+			default: return Entrance.MaxJ == OriginJ + Depth - 1;
+			}
+		};
+
+		// The seed picked the mirror; if that leaves the entrance room off the face the player arrives at, try the flips the plan allows.
+		if (bHasFacingSide && !Faces(bMirrorX, bMirrorY))
+		{
+			const bool Flips[3][2] = {{true, false}, {false, true}, {true, true}};
+
+			for (const bool (&Flip)[2] : Flips)
+			{
+				const bool bTryX = bMirrorX != Flip[0];
+				const bool bTryY = bMirrorY != Flip[1];
+
+				if ((!Flip[0] || Layout->bAllowMirrorX) && (!Flip[1] || Layout->bAllowMirrorY) && Faces(bTryX, bTryY))
+				{
+					bMirrorX = bTryX;
+					bMirrorY = bTryY;
+					break;
+				}
+			}
+		}
+
+		for (const FParsedLayoutRoom& Room : Resolved.Rooms)
+		{
+			Rooms.Add(FRoom{MapLayoutRect(Room.Rect, Resolved.Rows, Resolved.Columns, bMirrorX, bMirrorY, OriginI, OriginJ), Room.Level, Room.Type, Room.Letter});
+		}
+
+		LayoutLinks = Resolved.Links;
+		LastLayoutNote = FString::Printf(TEXT("plan %s%s%s"), *Layout->GetName(), bMirrorX ? TEXT(" mirrored X") : TEXT(""), bMirrorY ? TEXT(" mirrored Y") : TEXT(""));
+	}
+	else
+	{
+		LastLayoutNote = TEXT("random split");
+	}
+
+	// The cell just inside a perimeter edge: with a plan, the door can only go on an edge of the entrance room.
+	const auto InsideCellOf = [&](const FPerimeterEdge& Edge)
+	{
+		switch (Edge.Side)
+		{
+		case EFootprintSide::MinusX: return FIntPoint(OriginI, Edge.Cell.Y / 2);
+		case EFootprintSide::PlusX: return FIntPoint(OriginI + Width - 1, Edge.Cell.Y / 2);
+		case EFootprintSide::MinusY: return FIntPoint(Edge.Cell.X / 2, OriginJ);
+		default: return FIntPoint(Edge.Cell.X / 2, OriginJ + Depth - 1);
+		}
+	};
+
+	const FRoomRect EntranceWorld = Layout ? Rooms[Resolved.EntranceRoom].Rect : FRoomRect();
+
+	const auto IsEntranceEdge = [&](const FPerimeterEdge& Edge)
+	{
+		if (!Layout)
+		{
+			return true;
+		}
+
+		const FIntPoint Inside = InsideCellOf(Edge);
+		return Inside.X >= EntranceWorld.MinI && Inside.X <= EntranceWorld.MaxI && Inside.Y >= EntranceWorld.MinJ && Inside.Y <= EntranceWorld.MaxJ;
+	};
+
 	TArray<int32> DoorCandidates;
 
 	for (int32 Index = 0; Index < Perimeter.Num(); ++Index)
 	{
-		if (!bHasFacingSide || Perimeter[Index].Side == FacingSide)
+		if ((!bHasFacingSide || Perimeter[Index].Side == FacingSide) && IsEntranceEdge(Perimeter[Index]))
 		{
 			DoorCandidates.Add(Index);
 		}
 	}
 
+	// A plan whose entrance room cannot face the target (even mirrored): the door goes on the entrance room's own wall anyway.
+	const bool bDoorFacesTarget = bHasFacingSide && !DoorCandidates.IsEmpty();
+
+	if (DoorCandidates.IsEmpty())
+	{
+		for (int32 Index = 0; Index < Perimeter.Num(); ++Index)
+		{
+			if (IsEntranceEdge(Perimeter[Index]))
+			{
+				DoorCandidates.Add(Index);
+			}
+		}
+	}
+
 	const int32 DoorIndex = DoorCandidates[Stream.RandRange(0, DoorCandidates.Num() - 1)];
-	LastDoorSide = FString::Printf(TEXT("%s%s"), SideLabel(Perimeter[DoorIndex].Side), bHasFacingSide ? TEXT(" toward target") : TEXT(""));
+	LastDoorSide = FString::Printf(TEXT("%s%s"), SideLabel(Perimeter[DoorIndex].Side), bDoorFacesTarget ? TEXT(" toward target") : (bHasFacingSide ? TEXT(" (entrance room does not face the target)") : TEXT("")));
 
 	for (int32 Level = 0; Level < Floors; ++Level)
 	{
@@ -432,7 +600,7 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		// Partitions after the exterior walls, still on this storey's floor.
 		const FRoomRect Footprint{OriginI, OriginJ, OriginI + Width - 1, OriginJ + Depth - 1};
 
-		if (!EmitPartitions(Level, Footprint, Stream))
+		if (Layout ? !EmitLayoutPartitions(Level, LayoutLinks, Stream) : !EmitPartitions(Level, Footprint, Stream))
 		{
 			return false;
 		}
@@ -527,6 +695,135 @@ bool AHouseGenerator::EmitPartitions(int32 Level, const FRoomRect& Footprint, FR
 	return true;
 }
 
+bool AHouseGenerator::EmitLayoutPartitions(int32 Level, const TArray<TPair<int32, int32>>& Links, FRandomStream& Stream)
+{
+	if (!Archetype->InteriorWallClass || !Archetype->InteriorDoorWallClass)
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' lacks InteriorWallClass or InteriorDoorWallClass, the plan's rooms get no walls"), *GetName(), *Archetype->GetName());
+		return true;
+	}
+
+	// Which room owns each cell of this storey.
+	TMap<FIntPoint, int32> OwnerOf;
+
+	for (int32 Index = 0; Index < Rooms.Num(); ++Index)
+	{
+		if (Rooms[Index].Level != Level)
+		{
+			continue;
+		}
+
+		const FRoomRect& Rect = Rooms[Index].Rect;
+
+		for (int32 I = Rect.MinI; I <= Rect.MaxI; ++I)
+		{
+			for (int32 J = Rect.MinJ; J <= Rect.MaxJ; ++J)
+			{
+				OwnerOf.Add(FIntPoint(I, J), Index);
+			}
+		}
+	}
+
+	// Every boundary between two rooms, grouped by the pair of rooms it separates. Each boundary is met once,
+	// from the cell on its low side (looking at the +X and +Y neighbours), in room then cell order: a fixed order, so the seed decides alone.
+	struct FWallSegment
+	{
+		FIntVector Edge;
+		uint8 QuarterTurns = 0;
+	};
+
+	TMap<FIntPoint, TArray<FWallSegment>> SegmentsOf;
+	TArray<FIntPoint> PairOrder;
+
+	const auto AddSegment = [&SegmentsOf, &PairOrder](int32 RoomA, int32 RoomB, const FWallSegment& Segment)
+	{
+		const FIntPoint Pair(FMath::Min(RoomA, RoomB), FMath::Max(RoomA, RoomB));
+		TArray<FWallSegment>* Found = SegmentsOf.Find(Pair);
+
+		if (!Found)
+		{
+			PairOrder.Add(Pair);
+			Found = &SegmentsOf.Add(Pair);
+		}
+
+		Found->Add(Segment);
+	};
+
+	for (int32 Index = 0; Index < Rooms.Num(); ++Index)
+	{
+		if (Rooms[Index].Level != Level)
+		{
+			continue;
+		}
+
+		const FRoomRect& Rect = Rooms[Index].Rect;
+
+		for (int32 I = Rect.MinI; I <= Rect.MaxI; ++I)
+		{
+			for (int32 J = Rect.MinJ; J <= Rect.MaxJ; ++J)
+			{
+				// Cell (I, J) spans grid 2I - 1 .. 2I + 1: its +X boundary is the vertical edge at 2I + 1 (a wall along Y, turned 0),
+				// its +Y boundary the horizontal edge at 2J + 1 (a wall along X, turned 1), as for the random split's cuts.
+				const int32* NextInX = OwnerOf.Find(FIntPoint(I + 1, J));
+
+				if (NextInX && *NextInX != Index)
+				{
+					AddSegment(Index, *NextInX, FWallSegment{FIntVector(2 * I + 1, 2 * J, Level), 0});
+				}
+
+				const int32* NextInY = OwnerOf.Find(FIntPoint(I, J + 1));
+
+				if (NextInY && *NextInY != Index)
+				{
+					AddSegment(Index, *NextInY, FWallSegment{FIntVector(2 * I, 2 * J + 1, Level), 1});
+				}
+			}
+		}
+	}
+
+	// One door per link of this storey, on a seeded segment of the shared wall, drawn in the plan's link order.
+	TMap<FIntPoint, int32> DoorOf;
+
+	for (const TPair<int32, int32>& Link : Links)
+	{
+		if (!Rooms.IsValidIndex(Link.Key) || !Rooms.IsValidIndex(Link.Value) || Rooms[Link.Key].Level != Level)
+		{
+			continue;
+		}
+
+		const FIntPoint Pair(FMath::Min(Link.Key, Link.Value), FMath::Max(Link.Key, Link.Value));
+		const TArray<FWallSegment>* Segments = SegmentsOf.Find(Pair);
+
+		if (!Segments || Segments->IsEmpty())
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': rooms %d and %d are linked but share no wall, no door between them"), *GetName(), Link.Key, Link.Value);
+			continue;
+		}
+
+		DoorOf.Add(Pair, Stream.RandRange(0, Segments->Num() - 1));
+	}
+
+	for (const FIntPoint& Pair : PairOrder)
+	{
+		const TArray<FWallSegment>& Segments = SegmentsOf[Pair];
+		const int32* Door = DoorOf.Find(Pair);
+
+		for (int32 Index = 0; Index < Segments.Num(); ++Index)
+		{
+			const bool bIsDoor = Door && *Door == Index;
+
+			if (!Place(bIsDoor ? Archetype->InteriorDoorWallClass : Archetype->InteriorWallClass, Segments[Index].Edge, Segments[Index].QuarterTurns))
+			{
+				return false;
+			}
+
+			Edges.Add(Segments[Index].Edge, bIsDoor ? EEdgeKind::PartitionDoor : EEdgeKind::Partition);
+		}
+	}
+
+	return true;
+}
+
 void AHouseGenerator::DrawRoomsDebug() const
 {
 	UWorld* World = GetWorld();
@@ -554,7 +851,9 @@ void AHouseGenerator::DrawRoomsDebug() const
 		const FVector Extent(Room.Rect.Width() * CellSize - 15.f, Room.Rect.Depth() * CellSize - 15.f, 2.f);
 
 		DrawDebugBox(World, Centre, Extent, Colour, false, UnstableMarkerSeconds, 0, 3.f);
-		DrawDebugString(World, Centre + FVector(0.f, 0.f, 40.f), FString::Printf(TEXT("Room %d (%d x %d)"), Index, Room.Rect.Width(), Room.Rect.Depth()), nullptr, Colour, UnstableMarkerSeconds, true);
+		// A room of a plan also shows its letter and type, to check the plan reads the way it was written.
+		const FString PlanInfo = Room.Label.IsEmpty() ? FString() : FString::Printf(TEXT(" '%s' %s"), *Room.Label, *StaticEnum<ERoomType>()->GetNameStringByValue(static_cast<int64>(Room.Type)));
+		DrawDebugString(World, Centre + FVector(0.f, 0.f, 40.f), FString::Printf(TEXT("Room %d%s (%d x %d)"), Index, *PlanInfo, Room.Rect.Width(), Room.Rect.Depth()), nullptr, Colour, UnstableMarkerSeconds, true);
 	}
 }
 

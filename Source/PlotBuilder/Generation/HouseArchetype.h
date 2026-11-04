@@ -6,6 +6,7 @@
 
 class ABuildablePiece;
 class UDataTable;
+class UHouseLayout;
 
 /** Roof the generator puts on top of the last storey. Gable joins on Thursday with the two-storey house. */
 UENUM(BlueprintType)
@@ -98,6 +99,15 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
 	TSubclassOf<ABuildablePiece> FlatRoofClass;
+
+	/**
+	 *  Hand-written plans (UHouseLayout) the generator picks from by seed. With one, the rooms, doors and
+	 *  front door are the plan's, and the size is the plan's stretched towards MinRoomCells..MaxRoomCells
+	 *  as far as the plan allows. Empty, or none usable (wrong number of storeys, too big for the plot,
+	 *  failing validation) = the footprint is cut at random using MaxRoomArea and MinRooms below.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rooms")
+	TArray<TObjectPtr<UHouseLayout>> Layouts;
 
 	/** Partition wall between two rooms, centred on the edge. Empty (with the door below) = no interior walls, the house is one big room. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rooms")

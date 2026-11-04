@@ -4,6 +4,67 @@
 #include "Misc/DataValidation.h"
 #endif
 
+namespace
+{
+	/**
+	 *  Decides how many copies each row (or column) of an axis gets. The size is drawn in MinCells..MaxCells,
+	 *  clamped to [Base, the most Stretch allows] and to Free; the extra cells then go to rows picked at
+	 *  random from a pool that holds each row as many times as its Stretch (a row with 2 may grow by 2).
+	 *  OutExtra gets one entry per row: how many copies to add after it.
+	 */
+	void DrawGrowth(int32 Base, int32 MinCells, int32 MaxCells, int32 Free, const TArray<int32>& Stretch, FRandomStream& Stream, TArray<int32>& OutExtra)
+	{
+		OutExtra.Init(0, Base);
+
+		TArray<int32> Pool;
+
+		if (Stretch.Num() == Base)
+		{
+			for (int32 Index = 0; Index < Base; ++Index)
+			{
+				for (int32 Copy = 0; Copy < Stretch[Index]; ++Copy)
+				{
+					Pool.Add(Index);
+				}
+			}
+		}
+
+		const int32 Reach = FMath::Min(Free, Base + Pool.Num());
+
+		if (Reach <= Base)
+		{
+			return;
+		}
+
+		const int32 Low = FMath::Clamp(MinCells, Base, Reach);
+		const int32 High = FMath::Clamp(MaxCells, Low, Reach);
+		const int32 Extra = Stream.RandRange(Low, High) - Base;
+
+		// Partial shuffle: the first Extra entries of the pool are the rows that grow.
+		for (int32 Draw = 0; Draw < Extra; ++Draw)
+		{
+			const int32 Pick = Stream.RandRange(Draw, Pool.Num() - 1);
+			Pool.Swap(Draw, Pick);
+			++OutExtra[Pool[Draw]];
+		}
+	}
+
+	/** Where each original row (or column) starts in the grown grid: every row takes 1 + its copies. */
+	TArray<int32> StartsFromExtra(const TArray<int32>& Extra)
+	{
+		TArray<int32> Starts;
+		int32 Next = 0;
+
+		for (const int32 Copies : Extra)
+		{
+			Starts.Add(Next);
+			Next += 1 + Copies;
+		}
+
+		return Starts;
+	}
+}
+
 bool UHouseLayout::Parse(FParsedLayout& OutLayout, TArray<FString>& OutErrors) const
 {
 	OutLayout = FParsedLayout();
@@ -307,6 +368,81 @@ bool UHouseLayout::Parse(FParsedLayout& OutLayout, TArray<FString>& OutErrors) c
 	}
 
 	return OutErrors.IsEmpty();
+}
+
+void UHouseLayout::Resolve(const FParsedLayout& Parsed, FIntPoint MinCells, FIntPoint MaxCells, FIntPoint FreeCells, FRandomStream& Stream, FResolvedLayout& OutLayout) const
+{
+	OutLayout = FResolvedLayout();
+
+	// Both mirrors are always drawn, so the rest of the stream does not depend on which flips a plan allows.
+	OutLayout.bMirrorX = Stream.RandRange(0, 1) == 1 && bAllowMirrorX;
+	OutLayout.bMirrorY = Stream.RandRange(0, 1) == 1 && bAllowMirrorY;
+
+	TArray<int32> RowExtra;
+	TArray<int32> ColumnExtra;
+	DrawGrowth(Parsed.Rows, MinCells.X, MaxCells.X, FreeCells.X, RowStretch, Stream, RowExtra);
+	DrawGrowth(Parsed.Columns, MinCells.Y, MaxCells.Y, FreeCells.Y, ColumnStretch, Stream, ColumnExtra);
+
+	const TArray<int32> RowStart = StartsFromExtra(RowExtra);
+	const TArray<int32> ColumnStart = StartsFromExtra(ColumnExtra);
+
+	OutLayout.Rows = Parsed.Rows;
+	OutLayout.Columns = Parsed.Columns;
+
+	for (const int32 Copies : RowExtra)
+	{
+		OutLayout.Rows += Copies;
+	}
+
+	for (const int32 Copies : ColumnExtra)
+	{
+		OutLayout.Columns += Copies;
+	}
+
+	// A copied row repeats its letters, so a room that crosses it grows with it and stays a rectangle.
+	OutLayout.Rooms = Parsed.Rooms;
+
+	for (FParsedLayoutRoom& Room : OutLayout.Rooms)
+	{
+		const FLayoutRect Grown{
+			RowStart[Room.Rect.MinRow],
+			ColumnStart[Room.Rect.MinCol],
+			RowStart[Room.Rect.MaxRow] + RowExtra[Room.Rect.MaxRow],
+			ColumnStart[Room.Rect.MaxCol] + ColumnExtra[Room.Rect.MaxCol]};
+		Room.Rect = Grown;
+	}
+
+	OutLayout.Links = Parsed.Links;
+	OutLayout.EntranceRoom = Parsed.EntranceRoom;
+
+	// Type swaps, group by group in order of first appearance: a Fisher-Yates shuffle of the group's types.
+	TArray<FName> Groups;
+
+	for (const FParsedLayoutRoom& Room : OutLayout.Rooms)
+	{
+		if (!Room.SwapGroup.IsNone())
+		{
+			Groups.AddUnique(Room.SwapGroup);
+		}
+	}
+
+	for (const FName& Group : Groups)
+	{
+		TArray<int32> Members;
+
+		for (int32 Index = 0; Index < OutLayout.Rooms.Num(); ++Index)
+		{
+			if (OutLayout.Rooms[Index].SwapGroup == Group)
+			{
+				Members.Add(Index);
+			}
+		}
+
+		for (int32 Last = Members.Num() - 1; Last > 0; --Last)
+		{
+			Swap(OutLayout.Rooms[Members[Last]].Type, OutLayout.Rooms[Members[Stream.RandRange(0, Last)]].Type);
+		}
+	}
 }
 
 #if WITH_EDITOR
