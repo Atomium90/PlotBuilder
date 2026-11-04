@@ -83,13 +83,35 @@ public:
 	bool bShowDebug = true;
 
 	/**
+	 *  Debug, for testing GenerateValid: the first N attempts are declared failed after the house was
+	 *  built and checked (so Clear and the re-roll path really run). Counts the fallback attempt too:
+	 *  with MaxAttempts 5, 2 = built on the 3rd try, 5 = the fallback seed, 6 = nothing is built.
+	 *  pb.GenerateHouse sets it from its second argument.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation|Debug", meta = (ClampMin = "0"))
+	int32 DebugForcedFailures = 0;
+
+	/**
 	 *  Clear(), then builds a house from InSeed. Once everything is placed, the whole structure is
 	 *  checked with UStructuralSupportComponent::FindUnstablePieces. Returns true if the house stands;
-	 *  false if it could not be placed or would collapse, in which case nothing is left in the world
-	 *  (retrying with another seed is the caller's job for now).
+	 *  false if it could not be placed or would collapse, in which case nothing is left in the world.
+	 *  One attempt, no retry: use GenerateValid for a house that must exist.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Generation")
 	bool Generate(int32 InSeed);
+
+	/**
+	 *  A house that is certain to exist (GDD §9.5): tries RequestedSeed, then up to MaxAttempts - 1
+	 *  seeds derived from it (hash of the requested seed and the attempt number), then the archetype's
+	 *  FallbackSeed. The derivation is deterministic, so the same requested seed always ends on the same
+	 *  house, whatever it took to get there. Returns false only if every attempt failed, leaving the world empty.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Generation")
+	bool GenerateValid(int32 RequestedSeed, int32 MaxAttempts = 5);
+
+	/** Seed the current house was really built from: the requested one, a derived one after a re-roll, or the fallback. */
+	UFUNCTION(BlueprintPure, Category = "Generation")
+	int32 GetEffectiveSeed() const { return Seed; }
 
 	/** Unregisters from the structural graph, then destroys, every piece this generator created and still owns. */
 	UFUNCTION(BlueprintCallable, Category = "Generation")
@@ -103,6 +125,9 @@ public:
 	int32 GetLayoutHash() const { return static_cast<int32>(LayoutHash); }
 
 private:
+
+	/** One generation attempt: Generate and every GenerateValid try go through here. bForceFailure = the DebugForcedFailures case. */
+	bool TryGenerate(int32 InSeed, bool bForceFailure);
 
 	/** Whole emission: footprint, foundation, then storey by storey the slabs and walls, then the roof. False if a piece could not be placed. */
 	bool EmitHouse(FRandomStream& Stream);
@@ -145,6 +170,9 @@ private:
 	TMap<FIntVector, EEdgeKind> Edges;
 
 	uint32 LayoutHash = 0;
+
+	/** Appended to every result line of the current attempt: which attempt of a GenerateValid this is. Empty for a plain Generate. */
+	FString AttemptNote;
 
 	/** Footprint chosen by the last EmitHouse (room cells), for the result line. */
 	FIntPoint LastSize = FIntPoint::ZeroValue;

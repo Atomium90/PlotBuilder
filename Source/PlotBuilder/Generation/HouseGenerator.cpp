@@ -139,6 +139,54 @@ AHouseGenerator::AHouseGenerator()
 
 bool AHouseGenerator::Generate(int32 InSeed)
 {
+	AttemptNote.Reset();
+	return TryGenerate(InSeed, false);
+}
+
+bool AHouseGenerator::GenerateValid(int32 RequestedSeed, int32 MaxAttempts)
+{
+	if (!Archetype)
+	{
+		// Nothing to re-roll with: Generate reports the missing archetype once instead of once per attempt.
+		return Generate(RequestedSeed);
+	}
+
+	const int32 Attempts = FMath::Max(1, MaxAttempts);
+	int32 ForcedLeft = FMath::Max(0, DebugForcedFailures);
+
+	const auto Try = [this, &ForcedLeft](int32 AttemptSeed)
+	{
+		const bool bForceFailure = ForcedLeft > 0;
+		ForcedLeft = FMath::Max(0, ForcedLeft - 1);
+		return TryGenerate(AttemptSeed, bForceFailure);
+	};
+
+	for (int32 Attempt = 0; Attempt < Attempts; ++Attempt)
+	{
+		// Attempt 0 is the requested seed itself, so a seed that already works gives exactly what Generate would.
+		const int32 AttemptSeed = Attempt == 0 ? RequestedSeed : static_cast<int32>(HashCombine(GetTypeHash(RequestedSeed), GetTypeHash(Attempt)));
+		AttemptNote = FString::Printf(TEXT(" (requested %d, attempt %d of %d)"), RequestedSeed, Attempt + 1, Attempts);
+
+		if (Try(AttemptSeed))
+		{
+			return true;
+		}
+	}
+
+	AttemptNote = FString::Printf(TEXT(" (requested %d, fallback seed after %d failed attempts)"), RequestedSeed, Attempts);
+
+	if (Try(Archetype->FallbackSeed))
+	{
+		return true;
+	}
+
+	AttemptNote.Reset();
+	ReportResult(false, FString::Printf(TEXT("Requested seed %d: no valid house after %d attempts and the fallback seed %d"), RequestedSeed, Attempts, Archetype->FallbackSeed));
+	return false;
+}
+
+bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
+{
 	Clear();
 	Seed = InSeed;
 
@@ -198,6 +246,13 @@ bool AHouseGenerator::Generate(int32 InSeed)
 		const int32 UnstableCount = Unstable.Num();
 		Clear();
 		ReportResult(false, FString::Printf(TEXT("House seed %d: %d of %d pieces unstable, cleared"), Seed, UnstableCount, PlacedCount));
+		return false;
+	}
+
+	if (bForceFailure)
+	{
+		Clear();
+		ReportResult(false, FString::Printf(TEXT("House seed %d: built and stable, but this attempt is a forced failure (DebugForcedFailures), cleared"), Seed));
 		return false;
 	}
 
@@ -570,17 +625,19 @@ uint8 AHouseGenerator::ResolveWallQuarterTurns(const FIntVector& Edge) const
 
 void AHouseGenerator::ReportResult(bool bSuccess, const FString& Line) const
 {
+	const FString FullLine = Line + AttemptNote;
+
 	if (bSuccess)
 	{
-		UE_LOG(LogPlotBuilder, Log, TEXT("AHouseGenerator '%s': %s"), *GetName(), *Line);
+		UE_LOG(LogPlotBuilder, Log, TEXT("AHouseGenerator '%s': %s"), *GetName(), *FullLine);
 	}
 	else
 	{
-		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': %s"), *GetName(), *Line);
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': %s"), *GetName(), *FullLine);
 	}
 
 	if (bShowDebug && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(ResultMessageKey, UnstableMarkerSeconds, bSuccess ? FColor::Green : FColor::Red, Line);
+		GEngine->AddOnScreenDebugMessage(ResultMessageKey, UnstableMarkerSeconds, bSuccess ? FColor::Green : FColor::Red, FullLine);
 	}
 }

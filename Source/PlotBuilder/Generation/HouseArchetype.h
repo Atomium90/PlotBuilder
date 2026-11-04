@@ -42,6 +42,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "0"))
 	FIntPoint PlacementJitter = FIntPoint(0, 0);
 
+	/**
+	 *  Known-good seed AHouseGenerator::GenerateValid builds when every re-roll of the requested seed
+	 *  failed validation. Pick one that validates for this archetype (the default is only a guess).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size")
+	int32 FallbackSeed = 1;
+
 	/** Number of storeys, the ground floor included. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "1"))
 	int32 Floors = 1;
