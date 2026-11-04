@@ -30,7 +30,9 @@ enum class EPieceClass : uint8
 	/** Glass pane child actor of a window wall (GDD §7.3): always Glass, factor 1.0. Appended last so serialized values in existing BPs and DA_DemolitionRules stay valid. */
 	WindowPane,
 	/** Ceiling lamp (a buildable hanging from a slab): fragile, no structural role. Appended last for the same reason as WindowPane. */
-	Light
+	Light,
+	/** Low balcony wall (concrete or glass, about 1 m): its own HP factor, since it is not a full-height wall. Takes the corner parity bias like the other wall classes. Appended last for the same reason as WindowPane. */
+	Parapet
 };
 
 /** Readability states from GDD §7.6, driven by remaining-HP ratio against DA_DemolitionRules' thresholds. */

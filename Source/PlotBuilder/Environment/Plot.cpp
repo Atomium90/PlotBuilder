@@ -100,7 +100,7 @@ ABuildablePiece* APlot::PlacePiece(TSubclassOf<ABuildablePiece> PieceClass, cons
 	// exactly coplanar end face/top. Never touches grid/socket math, which only ever reads
 	// GridCoord/Orientation, not actor scale. CornerPost is deliberately excluded: its
 	// cross-section is a symmetric 20x20cm square with no length axis to nudge.
-	const bool bIsWallClass = Piece->PieceClass == EPieceClass::ExteriorWall || Piece->PieceClass == EPieceClass::InteriorWall;
+	const bool bIsWallClass = Piece->PieceClass == EPieceClass::ExteriorWall || Piece->PieceClass == EPieceClass::InteriorWall || Piece->PieceClass == EPieceClass::Parapet;
 
 	if (bIsWallClass && Rules)
 	{
