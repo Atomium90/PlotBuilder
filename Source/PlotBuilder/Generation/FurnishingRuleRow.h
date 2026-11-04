@@ -74,6 +74,10 @@ struct FFurnishingRuleRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing", meta = (ClampMin = "0"))
 	int32 Value = 0;
 
+	/** Mass in kg, applied to the prop's physics body when the generator spawns it (replaces the Blueprint's own mass). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing", meta = (ClampMin = "1"))
+	float Mass = 30.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing")
 	EFurniturePlacement Placement = EFurniturePlacement::AgainstWall;
 
