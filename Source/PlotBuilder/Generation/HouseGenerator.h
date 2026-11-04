@@ -37,7 +37,7 @@ struct FRoom
 	FRoomRect Rect;
 	int32 Level = 0;
 
-	/** What the room is for. Set from the plan's legend; rooms of the random split are not typed yet. */
+	/** What the room is for: the plan's legend (after the seed's swaps), or for the random split the room's rank by area. */
 	ERoomType Type = ERoomType::LivingRoom;
 
 	/** The plan's letter for this room, empty for a room of the random split. */
@@ -144,7 +144,9 @@ private:
 	 *  footprint is cut in two along its longer axis, then each half again, until no room is bigger than
 	 *  the archetype's MaxRoomArea; if that leaves fewer than MinRooms, the biggest rooms are cut again.
 	 *  Every cut gets one door, so the rooms form a tree and all of them are reachable. Without both
-	 *  interior classes in the archetype the storey stays one room. False if a piece could not be placed.
+	 *  interior classes in the archetype the storey stays one room. The rooms are then typed by area
+	 *  (biggest living room, smallest bathroom, second kitchen, third bedroom, then office and bedrooms).
+	 *  False if a piece could not be placed.
 	 */
 	bool EmitPartitions(int32 Level, const FRoomRect& Footprint, FRandomStream& Stream);
 

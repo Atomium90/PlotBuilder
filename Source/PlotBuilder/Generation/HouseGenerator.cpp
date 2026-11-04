@@ -126,6 +126,91 @@ namespace
 		return FRoomRect{OriginI + Rows - 1 - MaxRow, OriginJ + MinCol, OriginI + Rows - 1 - MinRow, OriginJ + MaxCol};
 	}
 
+	FString RoomTypeName(ERoomType Type)
+	{
+		return StaticEnum<ERoomType>()->GetNameStringByValue(static_cast<int64>(Type));
+	}
+
+	/** "Bathroom 1, Kitchen 1, Bedroom 2": how many rooms of each type the house has, for the result line. Types with no room are left out. */
+	FString RoomTypeTally(const TArray<FRoom>& Rooms)
+	{
+		const ERoomType AllTypes[] = {ERoomType::Bathroom, ERoomType::Kitchen, ERoomType::LivingRoom, ERoomType::Bedroom, ERoomType::Office};
+		FString Tally;
+
+		for (const ERoomType Type : AllTypes)
+		{
+			int32 Count = 0;
+
+			for (const FRoom& Room : Rooms)
+			{
+				Count += Room.Type == Type ? 1 : 0;
+			}
+
+			if (Count > 0)
+			{
+				Tally += FString::Printf(TEXT("%s%s %d"), Tally.IsEmpty() ? TEXT("") : TEXT(", "), *RoomTypeName(Type), Count);
+			}
+		}
+
+		return Tally;
+	}
+
+	/**
+	 *  Types the rooms of a random split. No seed is drawn (the hash of a house does not move): the rooms are
+	 *  ranked by area, the biggest is the living room, the smallest the bathroom, the second biggest the
+	 *  kitchen, the third a bedroom; any room left gets the office first, then bedrooms. A tie goes to the room
+	 *  emitted first. Four rooms or more always give the four core types; the office only exists when a room is spare.
+	 *  Returns one type per leaf, in the leaves' order.
+	 */
+	TArray<ERoomType> TypeRooms(const TArray<FRoomRect>& Leaves)
+	{
+		TArray<int32> Ranking;
+		Ranking.Reserve(Leaves.Num());
+
+		for (int32 Index = 0; Index < Leaves.Num(); ++Index)
+		{
+			Ranking.Add(Index);
+		}
+
+		Ranking.Sort([&Leaves](int32 A, int32 B)
+		{
+			const int32 AreaA = Leaves[A].Area();
+			const int32 AreaB = Leaves[B].Area();
+			return AreaA != AreaB ? AreaA > AreaB : A < B;
+		});
+
+		TArray<ERoomType> Types;
+		Types.Init(ERoomType::Bedroom, Leaves.Num());
+		bool bOfficeGiven = false;
+
+		for (int32 Rank = 0; Rank < Ranking.Num(); ++Rank)
+		{
+			ERoomType Type = ERoomType::Bedroom;
+
+			if (Rank == 0)
+			{
+				Type = ERoomType::LivingRoom;
+			}
+			else if (Rank == Ranking.Num() - 1)
+			{
+				Type = ERoomType::Bathroom;
+			}
+			else if (Rank == 1)
+			{
+				Type = ERoomType::Kitchen;
+			}
+			else if (Rank > 2 && !bOfficeGiven)
+			{
+				Type = ERoomType::Office;
+				bOfficeGiven = true;
+			}
+
+			Types[Ranking[Rank]] = Type;
+		}
+
+		return Types;
+	}
+
 	/** Recursive cut: a block already within MaxArea (or a single cell) becomes a room, any other is cut in two and both halves go again. */
 	void SplitRoom(const FRoomRect& Rect, int32 MaxArea, FRandomStream& Stream, TArray<FRoomRect>& OutRooms, TArray<FPartitionCut>& OutCuts)
 	{
@@ -273,8 +358,8 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 	}
 
 	DrawRoomsDebug();
-	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) (%s), door %s, stable, hash %08X"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *LastLayoutNote, *LastDoorSide, LayoutHash));
+	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) [%s] (%s), door %s, stable, hash %08X"),
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, *LastDoorSide, LayoutHash));
 	return true;
 }
 
@@ -687,9 +772,11 @@ bool AHouseGenerator::EmitPartitions(int32 Level, const FRoomRect& Footprint, FR
 		}
 	}
 
-	for (const FRoomRect& Leaf : Leaves)
+	const TArray<ERoomType> Types = TypeRooms(Leaves);
+
+	for (int32 Index = 0; Index < Leaves.Num(); ++Index)
 	{
-		Rooms.Add(FRoom{Leaf, Level});
+		Rooms.Add(FRoom{Leaves[Index], Level, Types[Index]});
 	}
 
 	return true;
@@ -851,9 +938,9 @@ void AHouseGenerator::DrawRoomsDebug() const
 		const FVector Extent(Room.Rect.Width() * CellSize - 15.f, Room.Rect.Depth() * CellSize - 15.f, 2.f);
 
 		DrawDebugBox(World, Centre, Extent, Colour, false, UnstableMarkerSeconds, 0, 3.f);
-		// A room of a plan also shows its letter and type, to check the plan reads the way it was written.
-		const FString PlanInfo = Room.Label.IsEmpty() ? FString() : FString::Printf(TEXT(" '%s' %s"), *Room.Label, *StaticEnum<ERoomType>()->GetNameStringByValue(static_cast<int64>(Room.Type)));
-		DrawDebugString(World, Centre + FVector(0.f, 0.f, 40.f), FString::Printf(TEXT("Room %d%s (%d x %d)"), Index, *PlanInfo, Room.Rect.Width(), Room.Rect.Depth()), nullptr, Colour, UnstableMarkerSeconds, true);
+		// Every room shows its type; a room of a plan also shows its letter, to check the plan reads the way it was written.
+		const FString Info = Room.Label.IsEmpty() ? RoomTypeName(Room.Type) : FString::Printf(TEXT("'%s' %s"), *Room.Label, *RoomTypeName(Room.Type));
+		DrawDebugString(World, Centre + FVector(0.f, 0.f, 40.f), FString::Printf(TEXT("Room %d %s (%d x %d)"), Index, *Info, Room.Rect.Width(), Room.Rect.Depth()), nullptr, Colour, UnstableMarkerSeconds, true);
 	}
 }
 
