@@ -11,6 +11,10 @@
  *  cell (foundation, floor slab), Edge for pieces centered on a cell edge (walls, partitions),
  *  Vertex for pieces at a grid corner (posts). Also doubles as the occupancy slot type in
  *  UStructuralSupportComponent - Legacy pieces never occupy a slot.
+ *
+ *  Ceiling is placed like a Cell piece (centred on a room cell) but has a slot table of its own: a lamp
+ *  hangs under the slab above its cell, and the cell's own slot is already taken by the floor slab.
+ *  Appended last so serialized values in existing Blueprints stay valid.
  */
 UENUM(BlueprintType)
 enum class EBuildAnchor : uint8
@@ -19,4 +23,5 @@ enum class EBuildAnchor : uint8
 	Cell,
 	Edge,
 	Vertex,
+	Ceiling,
 };

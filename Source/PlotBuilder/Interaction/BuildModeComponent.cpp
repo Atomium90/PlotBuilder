@@ -129,7 +129,8 @@ void UBuildModeComponent::RotatePreview(int32 Direction)
 	const EBuildAnchor Anchor = SelectedCDO ? SelectedCDO->GetBuildAnchor() : EBuildAnchor::Legacy;
 
 	// Vertex pieces (posts) don't rotate - they look the same from every side at a grid vertex.
-	if (Anchor == EBuildAnchor::Vertex)
+	// Neither do ceiling lamps, which are round and hang at the centre of a cell.
+	if (Anchor == EBuildAnchor::Vertex || Anchor == EBuildAnchor::Ceiling)
 	{
 		return;
 	}
@@ -646,6 +647,14 @@ bool UBuildModeComponent::TryResolveGridPlacement(const FVector& ViewLocation, c
 	case EBuildAnchor::Vertex:
 		CellX = NearestOdd(GridX);
 		CellY = NearestOdd(GridY);
+		Yaw = 0.f;
+		break;
+
+	case EBuildAnchor::Ceiling:
+		// Centred on a room cell like a floor, but aimed at the ceiling: PlaneZ already includes the
+		// piece's VerticalOffset (the room's height), so the player looks up at it. It never rotates.
+		CellX = NearestEven(GridX);
+		CellY = NearestEven(GridY);
 		Yaw = 0.f;
 		break;
 

@@ -1058,6 +1058,23 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		}
 	}
 
+	// One ceiling lamp per room, under the slab above the room's middle cell. Placed last, once every
+	// slab exists, and drawing nothing from the seed: the lamps follow from the rooms. The lamp is in the
+	// structural graph (it hangs from the slab and falls with it) but costs no stability, so it cannot make
+	// a house fail validation by itself.
+	if (Archetype->CeilingLightClass)
+	{
+		for (const FRoom& Room : Rooms)
+		{
+			const FIntVector Cell(2 * ((Room.Rect.MinI + Room.Rect.MaxI) / 2), 2 * ((Room.Rect.MinJ + Room.Rect.MaxJ) / 2), Room.Level);
+
+			if (!Place(Archetype->CeilingLightClass, Cell, 0))
+			{
+				return false;
+			}
+		}
+	}
+
 	return true;
 }
 

@@ -25,6 +25,8 @@ enum class EStructuralSocketType : uint8
 	RoofLow,
 	RoofHigh,
 	RoofSide,
+	/** A fixture hanging from the slab above (a ceiling lamp): pairs only with FloorBottom, at no stability cost, so the fixture is exactly as stable as the slab and falls with it. Appended last so serialized values stay valid. */
+	CeilingMount,
 };
 
 /**

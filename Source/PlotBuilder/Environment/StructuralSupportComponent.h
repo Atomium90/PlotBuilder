@@ -197,9 +197,12 @@ private:
 	 *  (cheap, resting on top of something), roof-lateral (a roof tile's edge touching another roof
 	 *  tile's matching edge - cheaper than a generic horizontal contact, since there's no framing/
 	 *  truss piece underneath a roof skin to anchor every tile individually), or generic horizontal
-	 *  (OutIsVertical and OutIsRoofLateral both false - a wall or floor touching sideways).
+	 *  (OutIsVertical and OutIsRoofLateral both false - a wall or floor touching sideways). A fixture
+	 *  hanging under a slab (CeilingMount on FloorBottom) is reported vertical, and also hanging when
+	 *  OutIsHanging is passed: that link costs no stability at all. Callers that only need to know whether
+	 *  two pieces are neighbours leave OutIsHanging out.
 	 */
-	static bool AreSocketsLinked(EStructuralSocketType A, EStructuralSocketType B, bool& OutIsVertical, bool& OutIsRoofLateral);
+	static bool AreSocketsLinked(EStructuralSocketType A, EStructuralSocketType B, bool& OutIsVertical, bool& OutIsRoofLateral, bool* OutIsHanging = nullptr);
 
 	void RecomputeStability();
 
@@ -250,6 +253,7 @@ private:
 	TMap<FIntVector, TObjectPtr<ABuildablePiece>> FloorSlotOccupancy;
 	TMap<FIntVector, TObjectPtr<ABuildablePiece>> EdgeSlotOccupancy;
 	TMap<FIntVector, TObjectPtr<ABuildablePiece>> VertexSlotOccupancy;
+	TMap<FIntVector, TObjectPtr<ABuildablePiece>> CeilingSlotOccupancy;
 
 	/**
 	 *  Cells vacated by UnregisterPiece since the last RecomputeStability - seeds the hop-distance BFS

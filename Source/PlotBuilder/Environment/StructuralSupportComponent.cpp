@@ -204,14 +204,35 @@ FIntVector UStructuralSupportComponent::RotateCellOffset(const FIntVector& Offse
 	return Result;
 }
 
-bool UStructuralSupportComponent::AreSocketsLinked(EStructuralSocketType A, EStructuralSocketType B, bool& OutIsVertical, bool& OutIsRoofLateral)
+bool UStructuralSupportComponent::AreSocketsLinked(EStructuralSocketType A, EStructuralSocketType B, bool& OutIsVertical, bool& OutIsRoofLateral, bool* OutIsHanging)
 {
 	OutIsRoofLateral = false;
+
+	if (OutIsHanging)
+	{
+		*OutIsHanging = false;
+	}
 
 	const auto Matches = [A, B](EStructuralSocketType X, EStructuralSocketType Y)
 	{
 		return (A == X && B == Y) || (A == Y && B == X);
 	};
+
+	// A fixture hanging under a slab (a ceiling lamp). It carries no load and costs no stability: it is
+	// exactly as stable as the slab it hangs from, so it never makes a house fail validation on its own
+	// and it falls when the slab does. Reported as vertical so the neighbour and hop searches treat it as
+	// an ordinary resting link; only the loss differs, which the callers read from OutIsHanging.
+	if (Matches(EStructuralSocketType::CeilingMount, EStructuralSocketType::FloorBottom))
+	{
+		OutIsVertical = true;
+
+		if (OutIsHanging)
+		{
+			*OutIsHanging = true;
+		}
+
+		return true;
+	}
 
 	if (Matches(EStructuralSocketType::WallBottom, EStructuralSocketType::FloorEdge)
 		|| Matches(EStructuralSocketType::WallBottom, EStructuralSocketType::FloorCorner)
@@ -269,6 +290,7 @@ TMap<FIntVector, TObjectPtr<ABuildablePiece>>* UStructuralSupportComponent::GetO
 	case EBuildAnchor::Cell: return &FloorSlotOccupancy;
 	case EBuildAnchor::Edge: return &EdgeSlotOccupancy;
 	case EBuildAnchor::Vertex: return &VertexSlotOccupancy;
+	case EBuildAnchor::Ceiling: return &CeilingSlotOccupancy;
 	default: return nullptr;
 	}
 }
@@ -419,10 +441,11 @@ float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSock
 		{
 			bool bIsVertical = false;
 			bool bIsRoofLateral = false;
+			bool bIsHanging = false;
 
-			if (Entry.Owner && Entry.Owner->IsLoadBearing() && Entry.RoofStep == AbsoluteRoofStep && AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical, bIsRoofLateral))
+			if (Entry.Owner && Entry.Owner->IsLoadBearing() && Entry.RoofStep == AbsoluteRoofStep && AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical, bIsRoofLateral, &bIsHanging))
 			{
-				const float Loss = bIsVertical ? VerticalLoss : (bIsRoofLateral ? RoofLateralLoss : HorizontalLoss);
+				const float Loss = bIsHanging ? 0.f : (bIsVertical ? VerticalLoss : (bIsRoofLateral ? RoofLateralLoss : HorizontalLoss));
 				const UDurabilityComponent* EntryDurability = Entry.Owner->GetDurabilityComponent();
 				const float Coupling = EntryDurability ? EntryDurability->GetStabilityCoupling() : 1.f;
 				BestStability = FMath::Max(BestStability, Entry.Owner->GetStability() * Coupling - Loss);
@@ -649,10 +672,11 @@ void UStructuralSupportComponent::RelaxStability(const ABuildablePiece* Excluded
 
 					bool bIsVertical = false;
 					bool bIsRoofLateral = false;
+					bool bIsHanging = false;
 
-					if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical, bIsRoofLateral))
+					if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical, bIsRoofLateral, &bIsHanging))
 					{
-						const float Loss = bIsVertical ? VerticalLoss : (bIsRoofLateral ? RoofLateralLoss : HorizontalLoss);
+						const float Loss = bIsHanging ? 0.f : (bIsVertical ? VerticalLoss : (bIsRoofLateral ? RoofLateralLoss : HorizontalLoss));
 						const UDurabilityComponent* EntryDurability = Entry.Owner->GetDurabilityComponent();
 						const float Coupling = EntryDurability ? EntryDurability->GetStabilityCoupling() : 1.f;
 						BestStability = FMath::Max(BestStability, ReadStability(Entry.Owner) * Coupling - Loss);

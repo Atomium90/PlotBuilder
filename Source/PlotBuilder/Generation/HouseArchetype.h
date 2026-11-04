@@ -92,6 +92,13 @@ public:
 	TSubclassOf<ABuildablePiece> WideWindowWallClass;
 
 	/**
+	 *  Ceiling lamp (a buildable with the Ceiling anchor): the generator hangs one from the slab above the
+	 *  middle cell of every room, on every storey. Empty = no lamps.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
+	TSubclassOf<ABuildablePiece> CeilingLightClass;
+
+	/**
 	 *  Piece laid on every room cell above the last storey for RoofVariant = Flat: use the floor slab.
 	 *  Its FloorBottom sockets rest on the walls' WallTop. The roof tiles don't work here: even the flat
 	 *  one (BP_Roof_Flat) has its RoofLow sockets at RoofStep 1, made to join the RoofHigh of a slope
