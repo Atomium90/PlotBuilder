@@ -186,6 +186,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetPropCount() const { return Props.Num(); }
 
+	/**
+	 *  The current house's standing, 1 (basic) to 3 (high end), rolled from the seed when it was furnished: it
+	 *  tilts every room's furniture towards rows of that quality tier. 0 for an empty house, or one with no
+	 *  furnishing table. The contract's tier can read it later.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Generation")
+	int32 GetStanding() const { return Standing; }
+
 	/** Fingerprint of the current house (0 when empty): same seed and archetype, same value. */
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetLayoutHash() const { return static_cast<int32>(LayoutHash); }
@@ -240,6 +248,9 @@ private:
 	 */
 	void FurnishRoom(const FRoom& Room, const TArray<const FFurnishingRuleRow*>& Rows, FRandomStream& Stream);
 
+	/** Rolls the house's standing from Archetype->StandingWeights: always one draw, so the stream after it does not depend on the weights. */
+	int32 RollStanding(FRandomStream& Stream) const;
+
 	/** Draws every room as a coloured flat box with its number and size, and every stair flight with its approach, stairwell and landing, for UnstableMarkerSeconds. */
 	void DrawRoomsDebug() const;
 
@@ -285,6 +296,13 @@ private:
 
 	/** Stair flights of the current house, from the plan's Stairs. Cleared with the house. */
 	TArray<FStairRun> StairRuns;
+
+	/** See GetStanding. Cleared with the house. */
+	int32 Standing = 0;
+
+	/** Debug (pb.TestHouses): quality tiers of the furniture picked from groups that have several rows, and how many there were. Cleared with the house. */
+	int32 VariantTierSum = 0;
+	int32 VariantPropCount = 0;
 
 	/** Set by TryGenerate when bKeepUnstableHouse left a rejected house in the world: GenerateValid then stops instead of re-rolling. */
 	bool bKeptUnstableHouse = false;

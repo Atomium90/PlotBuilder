@@ -553,6 +553,12 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 	TArray<int32> Rerolled;
 	TArray<int32> HashDiffers;
 	int32 HousesWithType[TypeCount] = {};
+
+	// Per standing (1 to 3): houses, and the tiers of the furniture picked from groups that have several rows.
+	constexpr int32 StandingCount = 3;
+	int32 HousesAtStanding[StandingCount] = {};
+	int32 VariantTierSumAt[StandingCount] = {};
+	int32 VariantPropsAt[StandingCount] = {};
 	int32 MinProps = MAX_int32;
 	int32 MaxProps = 0;
 	int32 MinPosts = MAX_int32;
@@ -588,6 +594,13 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 		for (int32 Type = 0; Type < TypeCount; ++Type)
 		{
 			HousesWithType[Type] += bHasType[Type] ? 1 : 0;
+		}
+
+		if (Standing >= 1 && Standing <= StandingCount)
+		{
+			++HousesAtStanding[Standing - 1];
+			VariantTierSumAt[Standing - 1] += VariantTierSum;
+			VariantPropsAt[Standing - 1] += VariantPropCount;
 		}
 
 		MinProps = FMath::Min(MinProps, Props.Num());
@@ -632,6 +645,17 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 	Lines.Add(FString::Printf(TEXT("Same seed twice (T6): %d of %d gave the same hash (differs: %s)"), ValidCount - HashDiffers.Num(), ValidCount, *Join(HashDiffers)));
 	Lines.Add(FString::Printf(TEXT("Houses with each room type (of %d): %s"), ValidCount, *TypeLine));
 	Lines.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d, support posts per house: %d to %d"), MinProps, MaxProps, MinPosts, MaxPosts) : FString(TEXT("Props per house: no valid house")));
+
+	// The standing leans the furniture: the average tier of the props that had a choice should rise with it.
+	FString StandingLine;
+
+	for (int32 Index = 0; Index < StandingCount; ++Index)
+	{
+		const FString Average = VariantPropsAt[Index] > 0 ? FString::Printf(TEXT("%.2f"), static_cast<float>(VariantTierSumAt[Index]) / VariantPropsAt[Index]) : FString(TEXT("-"));
+		StandingLine += FString::Printf(TEXT("%sstanding %d: %d house(s), average tier %s"), Index == 0 ? TEXT("") : TEXT(" | "), Index + 1, HousesAtStanding[Index], *Average);
+	}
+
+	Lines.Add(StandingLine);
 
 	// Red is a real failure (a seed that gave no house, a house that changed the second time). A room type nobody
 	// has is yellow: it only means this archetype's plans do not contain it (a two-storey plan with no office, say).
@@ -733,8 +757,8 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 	FurnishRooms(Stream);
 
 	DrawRoomsDebug();
-	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) [%s] (%s), %d prop(s), %d post(s), %d stair flight(s), door %s, stable, hash %08X"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), PostVertices.Num(), StairRuns.Num(), *LastDoorSide, LayoutHash));
+	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) [%s] (%s), %d prop(s), standing %d, %d post(s), %d stair flight(s), door %s, stable, hash %08X"),
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), Standing, PostVertices.Num(), StairRuns.Num(), *LastDoorSide, LayoutHash));
 	return true;
 }
 
@@ -771,7 +795,49 @@ void AHouseGenerator::Clear()
 	Edges.Reset();
 	PostVertices.Reset();
 	StairRuns.Reset();
+	Standing = 0;
+	VariantTierSum = 0;
+	VariantPropCount = 0;
 	LayoutHash = 0;
+}
+
+int32 AHouseGenerator::RollStanding(FRandomStream& Stream) const
+{
+	// Drawn before anything is read, so the number of draws never depends on the weights.
+	const float Roll = Stream.FRand();
+	float Total = 0.f;
+
+	for (const float Weight : Archetype->StandingWeights)
+	{
+		Total += FMath::Max(0.f, Weight);
+	}
+
+	if (Total <= 0.f)
+	{
+		return 2;
+	}
+
+	float Remaining = Roll * Total;
+	int32 Picked = 1;
+
+	for (int32 Index = 0; Index < Archetype->StandingWeights.Num(); ++Index)
+	{
+		const float Weight = FMath::Max(0.f, Archetype->StandingWeights[Index]);
+
+		if (Weight > 0.f)
+		{
+			Picked = Index + 1;
+
+			if (Remaining < Weight)
+			{
+				break;
+			}
+
+			Remaining -= Weight;
+		}
+	}
+
+	return Picked;
 }
 
 bool AHouseGenerator::IsFlightCell(int32 I, int32 J, int32 Level) const
@@ -1641,6 +1707,9 @@ void AHouseGenerator::FurnishRooms(FRandomStream& Stream)
 		}
 	}
 
+	// One standing for the whole house, drawn before the first room so every room leans the same way.
+	Standing = RollStanding(Stream);
+
 	for (const FRoom& Room : Rooms)
 	{
 		FurnishRoom(Room, Rows, Stream);
@@ -1678,6 +1747,14 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 
 	TArray<FChosenProp> Chosen;
 
+	// The row's Weight, scaled down by how many tiers its quality is from the house's standing. Only the odds between the
+	// rows of one group move: a group with a single row keeps all of its weight and is furnished at any standing.
+	const float TierFalloff = FMath::Clamp(Archetype->TierMismatchFalloff, 0.01f, 1.f);
+	const auto EffectiveWeight = [this, TierFalloff](const FFurnishingRuleRow& Row)
+	{
+		return FMath::Max(0.f, Row.Weight) * FMath::Pow(TierFalloff, static_cast<float>(FMath::Abs(Row.QualityTier - Standing)));
+	};
+
 	for (const FName& Group : GroupOrder)
 	{
 		const TArray<const FFurnishingRuleRow*>& Variants = Groups[Group];
@@ -1685,7 +1762,7 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 
 		for (const FFurnishingRuleRow* Variant : Variants)
 		{
-			TotalWeight += FMath::Max(0.f, Variant->Weight);
+			TotalWeight += EffectiveWeight(*Variant);
 		}
 
 		// Both rolls are drawn even when they decide nothing, so the number of draws depends on the table's groups, not on its weights.
@@ -1695,7 +1772,7 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 
 		for (const FFurnishingRuleRow* Variant : Variants)
 		{
-			const float Weight = FMath::Max(0.f, Variant->Weight);
+			const float Weight = EffectiveWeight(*Variant);
 
 			if (Weight > 0.f)
 			{
@@ -1720,6 +1797,13 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 		if (ReadProp(*Picked, Prop))
 		{
 			Chosen.Add(Prop);
+
+			// Debug: only a group with several rows really chooses a tier, so only those say whether the standing leans the house.
+			if (Variants.Num() > 1)
+			{
+				VariantTierSum += Picked->QualityTier;
+				++VariantPropCount;
+			}
 		}
 		else
 		{

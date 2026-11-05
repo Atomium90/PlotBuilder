@@ -158,6 +158,23 @@ public:
 	TObjectPtr<UDataTable> FurnishingRules;
 
 	/**
+	 *  Relative chance of each standing of a house: entry 0 is standing 1 (basic), entry 1 standing 2, entry 2
+	 *  standing 3 (high end). The seed rolls one standing per house, and it decides which rows of the furnishing
+	 *  table a room leans towards (see TierMismatchFalloff), so a house is coherently modest or well off.
+	 *  Empty, or no positive weight = standing 2.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing")
+	TArray<float> StandingWeights = {1.f, 2.f, 1.f};
+
+	/**
+	 *  Multiplier on a furnishing row's Weight for each tier its QualityTier is away from the house's standing:
+	 *  a row of the same tier keeps its Weight, one tier off gets this fraction, two tiers off its square. Only
+	 *  the odds inside a group change: a group with a single row is always furnished, whatever the standing.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing", meta = (ClampMin = "0.01", ClampMax = "1"))
+	float TierMismatchFalloff = 0.3f;
+
+	/**
 	 *  Thickness of the exterior walls, in cm. They are pivoted on their outer face, so their room-side
 	 *  face is this far inside the edge line. Furniture is placed against that face.
 	 */
