@@ -467,6 +467,179 @@ bool UHouseLayout::Parse(FParsedLayout& OutLayout, TArray<FString>& OutErrors) c
 		}
 	}
 
+	// Walking. The flights and the stairwells they open take their cells, and that can cut a plan in two: a corridor
+	// one cell wide with a stairwell in it, or a band two cells wide with the stairwell on one row and a flight on the
+	// other. Every cell left must be reachable from the front door (ground floor) or from the first landing (upper
+	// storeys), moving freely inside a room and from one room to another only where the two are linked, since that is
+	// where a door can go. The plan is checked as drawn: stretching only copies rows and columns, it never takes a cell away.
+	if (OutErrors.IsEmpty())
+	{
+		TSet<FIntPoint> LinkedRooms;
+
+		for (const TPair<int32, int32>& Link : OutLayout.Links)
+		{
+			LinkedRooms.Add(FIntPoint(FMath::Min(Link.Key, Link.Value), FMath::Max(Link.Key, Link.Value)));
+		}
+
+		const FIntPoint Directions[] = {FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1)};
+
+		for (int32 Level = 0; Level < Levels.Num(); ++Level)
+		{
+			// Taken on this storey: the two cells of each flight that starts here, and the open stairwell of each flight from below.
+			TSet<FIntPoint> Taken;
+			FIntPoint Start(INDEX_NONE, INDEX_NONE);
+
+			for (const FLayoutStair& Stair : OutLayout.Stairs)
+			{
+				const FIntPoint Step = LayoutClimbStep(Stair.Climb);
+
+				if (Stair.Level == Level || Stair.Level + 1 == Level)
+				{
+					Taken.Add(FIntPoint(Stair.Row, Stair.Column));
+					Taken.Add(FIntPoint(Stair.Row + Step.X, Stair.Column + Step.Y));
+				}
+
+				if (Stair.Level + 1 == Level && Start.X == INDEX_NONE)
+				{
+					Start = FIntPoint(Stair.Row + 2 * Step.X, Stair.Column + 2 * Step.Y);
+				}
+			}
+
+			for (int32 Row = 0; Level == 0 && Row < RowCount && Start.X == INDEX_NONE; ++Row)
+			{
+				for (int32 Column = 0; Column < ColumnCount && Start.X == INDEX_NONE; ++Column)
+				{
+					if (RoomAt(0, Row, Column) == OutLayout.EntranceRoom && !Taken.Contains(FIntPoint(Row, Column)))
+					{
+						Start = FIntPoint(Row, Column);
+					}
+				}
+			}
+
+			// A storey no flight reaches is the generator's to refuse, not a walking problem.
+			if (Start.X == INDEX_NONE || Taken.Contains(Start))
+			{
+				continue;
+			}
+
+			TSet<FIntPoint> Reached;
+			TArray<FIntPoint> Pending;
+			Reached.Add(Start);
+			Pending.Add(Start);
+
+			while (!Pending.IsEmpty())
+			{
+				const FIntPoint Cell = Pending.Pop();
+				const int32 Room = RoomAt(Level, Cell.X, Cell.Y);
+
+				for (const FIntPoint& Direction : Directions)
+				{
+					const FIntPoint Next = Cell + Direction;
+					const int32 NextRoom = RoomAt(Level, Next.X, Next.Y);
+
+					if (NextRoom == INDEX_NONE || Taken.Contains(Next) || Reached.Contains(Next))
+					{
+						continue;
+					}
+
+					if (NextRoom != Room && !LinkedRooms.Contains(FIntPoint(FMath::Min(Room, NextRoom), FMath::Max(Room, NextRoom))))
+					{
+						continue;
+					}
+
+					Reached.Add(Next);
+					Pending.Add(Next);
+				}
+			}
+
+			// Cells nobody can walk to, room by room (the first one is where to look).
+			TMap<int32, FIntPoint> FirstCut;
+			TMap<int32, int32> CutCount;
+
+			for (int32 Row = 0; Row < RowCount; ++Row)
+			{
+				for (int32 Column = 0; Column < ColumnCount; ++Column)
+				{
+					const FIntPoint Cell(Row, Column);
+					const int32 Room = RoomAt(Level, Row, Column);
+
+					if (Room != INDEX_NONE && !Taken.Contains(Cell) && !Reached.Contains(Cell))
+					{
+						FirstCut.FindOrAdd(Room, Cell);
+						++CutCount.FindOrAdd(Room);
+					}
+				}
+			}
+
+			for (int32 Room = 0; Room < OutLayout.Rooms.Num(); ++Room)
+			{
+				if (const FIntPoint* Cell = FirstCut.Find(Room))
+				{
+					OutErrors.Add(FString::Printf(TEXT("Levels[%d]: %d cell(s) of room '%s' (the first at row %d, column %d) cannot be walked to once the flights and stairwells take their cells: widen the passage or move a flight"),
+						Level, CutCount[Room], *OutLayout.Rooms[Room].Letter, Cell->X, Cell->Y));
+				}
+			}
+
+			for (int32 Index = 0; Index < OutLayout.Stairs.Num(); ++Index)
+			{
+				const FLayoutStair& Stair = OutLayout.Stairs[Index];
+				const FIntPoint Step = LayoutClimbStep(Stair.Climb);
+				const FIntPoint Approach(Stair.Row - Step.X, Stair.Column - Step.Y);
+				const FIntPoint Landing(Stair.Row + 2 * Step.X, Stair.Column + 2 * Step.Y);
+
+				if (Stair.Level == Level && !Reached.Contains(Approach))
+				{
+					OutErrors.Add(FString::Printf(TEXT("Stairs[%d]: nobody can walk to its approach cell (row %d, column %d) on Levels[%d]"), Index, Approach.X, Approach.Y, Level));
+				}
+				else if (Stair.Level + 1 == Level && !Reached.Contains(Landing))
+				{
+					OutErrors.Add(FString::Printf(TEXT("Stairs[%d]: its landing cell (row %d, column %d) on Levels[%d] is cut off from the other flights and the doors"), Index, Landing.X, Landing.Y, Level));
+				}
+			}
+
+			// A link needs two walkable cells facing each other across the shared wall, or its door has nowhere to go.
+			for (const TPair<int32, int32>& Link : OutLayout.Links)
+			{
+				const FParsedLayoutRoom& RoomA = OutLayout.Rooms[Link.Key];
+
+				if (RoomA.Level != Level)
+				{
+					continue;
+				}
+
+				bool bDoorPossible = false;
+
+				for (int32 Row = RoomA.Rect.MinRow; Row <= RoomA.Rect.MaxRow && !bDoorPossible; ++Row)
+				{
+					for (int32 Column = RoomA.Rect.MinCol; Column <= RoomA.Rect.MaxCol && !bDoorPossible; ++Column)
+					{
+						if (!Reached.Contains(FIntPoint(Row, Column)))
+						{
+							continue;
+						}
+
+						for (const FIntPoint& Direction : Directions)
+						{
+							const FIntPoint Next = FIntPoint(Row, Column) + Direction;
+
+							if (RoomAt(Level, Next.X, Next.Y) == Link.Value && Reached.Contains(Next))
+							{
+								bDoorPossible = true;
+								break;
+							}
+						}
+					}
+				}
+
+				if (!bDoorPossible)
+				{
+					OutErrors.Add(FString::Printf(TEXT("Levels[%d]: no door can go between rooms '%s' and '%s': every cell along their shared wall is a stairwell or a flight, or cut off"),
+						Level, *RoomA.Letter, *OutLayout.Rooms[Link.Value].Letter));
+				}
+			}
+		}
+	}
+
 	return OutErrors.IsEmpty();
 }
 

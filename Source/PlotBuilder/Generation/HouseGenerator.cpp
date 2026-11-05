@@ -619,18 +619,6 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 	DebugForcedFailures = SavedForcedFailures;
 	bKeepUnstableHouse = bSavedKeepUnstable;
 
-	const auto Join = [](const TArray<int32>& Seeds)
-	{
-		FString Text;
-
-		for (const int32 Value : Seeds)
-		{
-			Text += (Text.IsEmpty() ? TEXT("") : TEXT(", ")) + FString::FromInt(Value);
-		}
-
-		return Text.IsEmpty() ? FString(TEXT("none")) : Text;
-	};
-
 	FString TypeLine;
 	bool bAllTypesSeen = true;
 
@@ -640,35 +628,57 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 		bAllTypesSeen = bAllTypesSeen && HousesWithType[Type] > 0;
 	}
 
-	TArray<FString> Lines;
-	Lines.Add(FString::Printf(TEXT("Seed test %d..%d: %d of %d valid (failed: %s), re-rolled or fallback: %s"), FirstSeed, FirstSeed + Count - 1, ValidCount, Count, *Join(Failed), *Join(Rerolled)));
-	Lines.Add(FString::Printf(TEXT("Same seed twice (T6): %d of %d gave the same hash (differs: %s)"), ValidCount - HashDiffers.Num(), ValidCount, *Join(HashDiffers)));
-	Lines.Add(FString::Printf(TEXT("Houses with each room type (of %d): %s"), ValidCount, *TypeLine));
-	Lines.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d, support posts per house: %d to %d"), MinProps, MaxProps, MinPosts, MaxPosts) : FString(TEXT("Props per house: no valid house")));
-
-	// The standing leans the furniture: the average tier of the props that had a choice should rise with it.
-	FString StandingLine;
-
-	for (int32 Index = 0; Index < StandingCount; ++Index)
+	// One line per fact, and on screen the seed lists are cut short: a line that is too long runs off the edge. The log keeps every seed.
+	const auto BuildLines = [&](int32 MaxSeedsShown)
 	{
-		const FString Average = VariantPropsAt[Index] > 0 ? FString::Printf(TEXT("%.2f"), static_cast<float>(VariantTierSumAt[Index]) / VariantPropsAt[Index]) : FString(TEXT("-"));
-		StandingLine += FString::Printf(TEXT("%sstanding %d: %d house(s), average tier %s"), Index == 0 ? TEXT("") : TEXT(" | "), Index + 1, HousesAtStanding[Index], *Average);
-	}
+		const auto Join = [MaxSeedsShown](const TArray<int32>& Seeds)
+		{
+			FString Text;
 
-	Lines.Add(StandingLine);
+			for (int32 Index = 0; Index < Seeds.Num() && Index < MaxSeedsShown; ++Index)
+			{
+				Text += (Text.IsEmpty() ? TEXT("") : TEXT(", ")) + FString::FromInt(Seeds[Index]);
+			}
+
+			if (Seeds.Num() > MaxSeedsShown)
+			{
+				Text += FString::Printf(TEXT(", ... (%d more)"), Seeds.Num() - MaxSeedsShown);
+			}
+
+			return Text.IsEmpty() ? FString(TEXT("none")) : Text;
+		};
+
+		TArray<FString> Result;
+		Result.Add(FString::Printf(TEXT("Seed test %d..%d: %d of %d valid"), FirstSeed, FirstSeed + Count - 1, ValidCount, Count));
+		Result.Add(FString::Printf(TEXT("Failed: %s"), *Join(Failed)));
+		Result.Add(FString::Printf(TEXT("Re-rolled or fallback: %s"), *Join(Rerolled)));
+		Result.Add(FString::Printf(TEXT("Same seed twice (T6): %d of %d gave the same hash (differs: %s)"), ValidCount - HashDiffers.Num(), ValidCount, *Join(HashDiffers)));
+		Result.Add(FString::Printf(TEXT("Houses with each room type (of %d): %s"), ValidCount, *TypeLine));
+		Result.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d | support posts per house: %d to %d"), MinProps, MaxProps, MinPosts, MaxPosts) : FString(TEXT("Props per house: no valid house")));
+
+		// The standing leans the furniture: the average tier of the props that had a choice should rise with it.
+		for (int32 Index = 0; Index < StandingCount; ++Index)
+		{
+			const FString Average = VariantPropsAt[Index] > 0 ? FString::Printf(TEXT("%.2f"), static_cast<float>(VariantTierSumAt[Index]) / VariantPropsAt[Index]) : FString(TEXT("-"));
+			Result.Add(FString::Printf(TEXT("Standing %d: %d house(s), average tier %s"), Index + 1, HousesAtStanding[Index], *Average));
+		}
+
+		return Result;
+	};
 
 	// Red is a real failure (a seed that gave no house, a house that changed the second time). A room type nobody
 	// has is yellow: it only means this archetype's plans do not contain it (a two-storey plan with no office, say).
 	const FColor SummaryColor = (!Failed.IsEmpty() || !HashDiffers.IsEmpty()) ? FColor::Red : (bAllTypesSeen ? FColor::Green : FColor::Yellow);
 
-	for (const FString& Line : Lines)
+	for (const FString& Line : BuildLines(MAX_int32))
 	{
 		UE_LOG(LogPlotBuilder, Log, TEXT("AHouseGenerator '%s': %s"), *GetName(), *Line);
 	}
 
 	if (bShowDebug && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(ResultMessageKey + 1, 60.f, SummaryColor, FString::Join(Lines, TEXT("\n")));
+		constexpr int32 MaxSeedsOnScreen = 12;
+		GEngine->AddOnScreenDebugMessage(ResultMessageKey + 1, 60.f, SummaryColor, FString::Join(BuildLines(MaxSeedsOnScreen), TEXT("\n")));
 	}
 }
 
@@ -757,8 +767,9 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 	FurnishRooms(Stream);
 
 	DrawRoomsDebug();
-	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) [%s] (%s), %d prop(s), standing %d, %d post(s), %d stair flight(s), door %s, stable, hash %08X"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), Standing, PostVertices.Num(), StairRuns.Num(), *LastDoorSide, LayoutHash));
+	// Three lines: on screen a line that is too long runs off the edge, and the end (the hash) is what one reads it for.
+	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), stable, hash %08X\n%d room(s) [%s], %s\n%d prop(s), standing %d | %d post(s) | %d stair flight(s) | door %s"),
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), LayoutHash, Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), Standing, PostVertices.Num(), StairRuns.Num(), *LastDoorSide));
 	return true;
 }
 
@@ -1524,9 +1535,9 @@ bool AHouseGenerator::EmitLayoutPartitions(int32 Level, const TArray<TPair<int32
 			continue;
 		}
 
-		// A door must not open onto the side of a flight of stairs: the stairs are solid, so a link whose only door
-		// did would cut two rooms apart. The other segments of the shared wall are preferred; the draw is still one,
-		// and without stairs every segment is usable, so it is the same draw as before.
+		// A door must not open onto the side of a flight of stairs (solid) or onto a stairwell (a hole in the floor): a
+		// link whose only door did would cut two rooms apart, or lead into the void. The other segments of the shared
+		// wall are preferred; the draw is still one, and without stairs every segment is usable, so it is the same draw as before.
 		TArray<int32> UsableSegments;
 
 		for (int32 SegmentIndex = 0; SegmentIndex < Segments->Num(); ++SegmentIndex)
@@ -1536,7 +1547,10 @@ bool AHouseGenerator::EmitLayoutPartitions(int32 Level, const TArray<TPair<int32
 			const FIntPoint CellA = bVerticalEdge ? FIntPoint((Edge.X - 1) / 2, Edge.Y / 2) : FIntPoint(Edge.X / 2, (Edge.Y - 1) / 2);
 			const FIntPoint CellB = bVerticalEdge ? FIntPoint((Edge.X + 1) / 2, Edge.Y / 2) : FIntPoint(Edge.X / 2, (Edge.Y + 1) / 2);
 
-			if (!IsFlightCell(CellA.X, CellA.Y, Level) && !IsFlightCell(CellB.X, CellB.Y, Level))
+			const bool bBlockedA = IsFlightCell(CellA.X, CellA.Y, Level) || IsStairwellCell(CellA.X, CellA.Y, Level);
+			const bool bBlockedB = IsFlightCell(CellB.X, CellB.Y, Level) || IsStairwellCell(CellB.X, CellB.Y, Level);
+
+			if (!bBlockedA && !bBlockedB)
 			{
 				UsableSegments.Add(SegmentIndex);
 			}
@@ -2102,19 +2116,21 @@ uint8 AHouseGenerator::ResolveWallQuarterTurns(const FIntVector& Edge) const
 
 void AHouseGenerator::ReportResult(bool bSuccess, const FString& Line) const
 {
-	const FString FullLine = Line + AttemptNote;
+	// A line may hold several ("\n"): they stay one line in the log, one per row on screen, where the attempt note gets its own.
+	const FString LogLine = (Line + AttemptNote).Replace(TEXT("\n"), TEXT(" | "));
+	const FString ScreenText = AttemptNote.IsEmpty() ? Line : Line + TEXT("\n") + AttemptNote.TrimStart();
 
 	if (bSuccess)
 	{
-		UE_LOG(LogPlotBuilder, Log, TEXT("AHouseGenerator '%s': %s"), *GetName(), *FullLine);
+		UE_LOG(LogPlotBuilder, Log, TEXT("AHouseGenerator '%s': %s"), *GetName(), *LogLine);
 	}
 	else
 	{
-		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': %s"), *GetName(), *FullLine);
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': %s"), *GetName(), *LogLine);
 	}
 
 	if (bShowDebug && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(ResultMessageKey, UnstableMarkerSeconds, bSuccess ? FColor::Green : FColor::Red, FullLine);
+		GEngine->AddOnScreenDebugMessage(ResultMessageKey, UnstableMarkerSeconds, bSuccess ? FColor::Green : FColor::Red, ScreenText);
 	}
 }
