@@ -239,6 +239,10 @@ bool UStructuralSupportComponent::AreSocketsLinked(EStructuralSocketType A, EStr
 		|| Matches(EStructuralSocketType::WallBottom, EStructuralSocketType::FloorCorner)
 		|| Matches(EStructuralSocketType::WallTop, EStructuralSocketType::FloorBottom)
 		|| Matches(EStructuralSocketType::WallTop, EStructuralSocketType::RoofLow)
+		// A roof tile resting on the edge of a slab: the first row of a pitched roof (and the gable pieces) sit on the
+		// exterior edge of the ceiling slab as much as on the wall top below it. Lets a reinforcement slab at the base
+		// of the roof pass its reset stability up the slope, so a wide roof on a tall house still holds.
+		|| Matches(EStructuralSocketType::FloorEdge, EStructuralSocketType::RoofLow)
 		// Stairwell wall link (GDD §8, D28): a wall stacked directly on another wall, with no floor
 		// between them because a stairwell hole has none at any level by design. Without this, such
 		// walls have no socket pair to pass stability through at all. Only passes a value along - a
@@ -301,11 +305,16 @@ const TMap<FIntVector, TObjectPtr<ABuildablePiece>>* UStructuralSupportComponent
 	return const_cast<UStructuralSupportComponent*>(this)->GetOccupancyMap(SlotType);
 }
 
+bool UStructuralSupportComponent::IsRoofLayerPiece(const ABuildablePiece* Piece)
+{
+	return Piece && Piece->GetBuildAnchor() == EBuildAnchor::Cell && Piece->PieceClass == EPieceClass::RoofTile;
+}
+
 void UStructuralSupportComponent::OccupySlot(EBuildAnchor SlotType, const FIntVector& Cell, ABuildablePiece* Piece)
 {
 	if (TMap<FIntVector, TObjectPtr<ABuildablePiece>>* Map = GetOccupancyMap(SlotType))
 	{
-		Map->Add(MakeOccupancyKey(Cell, Piece ? Piece->GetRoofStep() : 0), Piece);
+		Map->Add(MakeOccupancyKey(Cell, Piece ? Piece->GetRoofStep() : 0, IsRoofLayerPiece(Piece)), Piece);
 	}
 }
 
@@ -318,16 +327,16 @@ void UStructuralSupportComponent::FreeSlotsFor(ABuildablePiece* Piece)
 
 	if (TMap<FIntVector, TObjectPtr<ABuildablePiece>>* Map = GetOccupancyMap(Piece->GetBuildAnchor()))
 	{
-		Map->Remove(MakeOccupancyKey(Piece->GetGridCoord(), Piece->GetRoofStep()));
+		Map->Remove(MakeOccupancyKey(Piece->GetGridCoord(), Piece->GetRoofStep(), IsRoofLayerPiece(Piece)));
 	}
 }
 
-bool UStructuralSupportComponent::IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep) const
+bool UStructuralSupportComponent::IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep, bool bRoofLayer) const
 {
-	return GetPieceAt(SlotType, Cell, RoofStep) == nullptr;
+	return GetPieceAt(SlotType, Cell, RoofStep, bRoofLayer) == nullptr;
 }
 
-ABuildablePiece* UStructuralSupportComponent::GetPieceAt(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep) const
+ABuildablePiece* UStructuralSupportComponent::GetPieceAt(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep, bool bRoofLayer) const
 {
 	const TMap<FIntVector, TObjectPtr<ABuildablePiece>>* Map = GetOccupancyMap(SlotType);
 
@@ -336,7 +345,8 @@ ABuildablePiece* UStructuralSupportComponent::GetPieceAt(EBuildAnchor SlotType, 
 		return nullptr;
 	}
 
-	const TObjectPtr<ABuildablePiece>* Found = Map->Find(MakeOccupancyKey(Cell, RoofStep));
+	// Only the Cell table has a roof layer.
+	const TObjectPtr<ABuildablePiece>* Found = Map->Find(MakeOccupancyKey(Cell, RoofStep, bRoofLayer && SlotType == EBuildAnchor::Cell));
 	return Found ? Found->Get() : nullptr;
 }
 

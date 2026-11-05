@@ -74,7 +74,8 @@ ABuildablePiece* APlot::PlacePiece(TSubclassOf<ABuildablePiece> PieceClass, cons
 		return nullptr;
 	}
 
-	if (!StructuralSupport->IsSlotFree(Anchor, GridCoord, AppliedRoofStep))
+	// A roof tile has its own layer in the Cell table, so it can rest on walls that also carry a ceiling slab.
+	if (!StructuralSupport->IsSlotFree(Anchor, GridCoord, AppliedRoofStep, ClassDefaults->PieceClass == EPieceClass::RoofTile))
 	{
 		UE_LOG(LogPlotBuilder, Warning, TEXT("APlot::PlacePiece: %s at cell (%d, %d, %d) is already occupied"), *PieceClass->GetName(), GridCoord.X, GridCoord.Y, GridCoord.Z);
 		return nullptr;

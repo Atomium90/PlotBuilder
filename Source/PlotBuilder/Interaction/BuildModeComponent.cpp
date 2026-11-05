@@ -692,8 +692,14 @@ bool UBuildModeComponent::TryResolveGridPlacement(const FVector& ViewLocation, c
 				const FIntVector MinusNeighbor = bVerticalEdge ? FIntVector(CellX - 1, CellY, BuildLevel) : FIntVector(CellX, CellY - 1, BuildLevel);
 				const FIntVector PlusNeighbor = bVerticalEdge ? FIntVector(CellX + 1, CellY, BuildLevel) : FIntVector(CellX, CellY + 1, BuildLevel);
 
-				const bool bMinusHasFloor = Structural->GetPieceAt(EBuildAnchor::Cell, MinusNeighbor) != nullptr;
-				const bool bPlusHasFloor = Structural->GetPieceAt(EBuildAnchor::Cell, PlusNeighbor) != nullptr;
+				// A roof tile counts as floor here too (a gable stands on the side of the roof): both layers of the Cell table.
+				const auto HasFloorOrRoof = [Structural](const FIntVector& Neighbor)
+				{
+					return Structural->GetPieceAt(EBuildAnchor::Cell, Neighbor) != nullptr || Structural->GetPieceAt(EBuildAnchor::Cell, Neighbor, 0, true) != nullptr;
+				};
+
+				const bool bMinusHasFloor = HasFloorOrRoof(MinusNeighbor);
+				const bool bPlusHasFloor = HasFloorOrRoof(PlusNeighbor);
 
 				if (bMinusHasFloor != bPlusHasFloor)
 				{
@@ -748,7 +754,10 @@ bool UBuildModeComponent::IsGridCandidateBlocked(const FVector& Location, const 
 
 	UStructuralSupportComponent* Structural = CachedPlot->GetStructuralSupport();
 
-	if (Structural && !Structural->IsSlotFree(Anchor, GridCoord, RoofStepForOccupancy))
+	const ABuildablePiece* PreviewedCDO = LastPreviewedClass ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
+	const bool bRoofLayer = PreviewedCDO && PreviewedCDO->PieceClass == EPieceClass::RoofTile;
+
+	if (Structural && !Structural->IsSlotFree(Anchor, GridCoord, RoofStepForOccupancy, bRoofLayer))
 	{
 		LastBlockReason = TEXT("slot occupied");
 		return true;

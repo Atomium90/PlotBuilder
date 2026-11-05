@@ -180,13 +180,17 @@ public:
 	 *  several such pieces share the same spatial Cell (see ABuildablePiece::GetStructuralCell,
 	 *  which never factors RoofStep in - sockets rely on that to find each other at the same cell),
 	 *  so occupancy needs its own, separate way to tell them apart. Always 0 for anything else.
+	 *
+	 *  bRoofLayer only matters for the Cell slot: a roof tile lives in its own layer there (see IsRoofLayerPiece),
+	 *  so a ceiling slab and the first row of roof tiles resting on the same walls, both at (cell, level, step 0),
+	 *  do not fight over one slot. Pass true when asking about a roof tile, false (the default) for a floor piece.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
-	bool IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep = 0) const;
+	bool IsSlotFree(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep = 0, bool bRoofLayer = false) const;
 
-	/** The piece occupying SlotType's slot at Cell (and RoofStep - see IsSlotFree), or nullptr if free. */
+	/** The piece occupying SlotType's slot at Cell (and RoofStep, and roof layer - see IsSlotFree), or nullptr if free. */
 	UFUNCTION(BlueprintCallable, Category = "Structural")
-	ABuildablePiece* GetPieceAt(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep = 0) const;
+	ABuildablePiece* GetPieceAt(EBuildAnchor SlotType, const FIntVector& Cell, int32 RoofStep = 0, bool bRoofLayer = false) const;
 
 private:
 
@@ -254,8 +258,15 @@ private:
 	TMap<FIntVector, TObjectPtr<ABuildablePiece>>* GetOccupancyMap(EBuildAnchor SlotType);
 	const TMap<FIntVector, TObjectPtr<ABuildablePiece>>* GetOccupancyMap(EBuildAnchor SlotType) const;
 
-	/** Folds RoofStep into Cell for the occupancy table only (never for GetStructuralCell/socket matching - see IsSlotFree) - same large-offset trick as elsewhere, safely outside any real BuildLevel's range. */
-	static FIntVector MakeOccupancyKey(const FIntVector& Cell, int32 RoofStep) { return Cell + FIntVector(0, 0, RoofStep * 1000); }
+	/**
+	 *  Folds RoofStep into Cell for the occupancy table only (never for GetStructuralCell/socket matching - see IsSlotFree) - same
+	 *  large-offset trick as elsewhere, safely outside any real BuildLevel's range. The roof layer adds 500, which no multiple
+	 *  of 1000 (a RoofStep) can reach, so a roof tile and a floor piece never share a key.
+	 */
+	static FIntVector MakeOccupancyKey(const FIntVector& Cell, int32 RoofStep, bool bRoofLayer = false) { return Cell + FIntVector(0, 0, RoofStep * 1000 + (bRoofLayer ? 500 : 0)); }
+
+	/** A roof tile that sits in a Cell slot: the only pieces that live in the Cell table's roof layer. Edge roof pieces (gables) have their own table and no layer. */
+	static bool IsRoofLayerPiece(const ABuildablePiece* Piece);
 
 	bool bRecomputeDirty = false;
 
