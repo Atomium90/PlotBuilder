@@ -53,6 +53,24 @@ struct FMeshFractureOverride
 };
 
 /**
+ *  The fracture variants of one mesh (one value of UDemolitionRules::MeshFractureOverrides). A TMap cannot hold a TArray
+ *  directly, so the list is wrapped. Each variant is a separate authored cut of the same mesh; when the piece breaks one
+ *  of them is picked at random, so two walls of the same type no longer break identically. Meshes are independent: one can
+ *  have a single variant (always the same cut), another two, another three.
+ */
+USTRUCT(BlueprintType)
+struct FMeshFractureVariants
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
+	TArray<FMeshFractureOverride> Variants;
+
+	/** A variant picked at random among those that have a Geometry Collection, or nullptr if none does (the piece then breaks into the generic shards, as a mesh with no entry). Runtime randomness, never part of the generator's seeded stream. */
+	const FMeshFractureOverride* PickVariant() const;
+};
+
+/**
  *  Tunable constants for demolition (UDurabilityComponent, AExplosiveCharge, ADemolitionTool),
  *  kept off to the side so they're editable without recompiling - same philosophy as
  *  UStructuralRules. Covers HP and damage-state thresholds (GDD §7.3/§7.6) and the tool x
@@ -166,9 +184,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
 	float FragmentSleepVelocityThreshold = 15.f;
 
-	/** Piece mesh -> authored Geometry Collection override (Chaos Fracture Mode, 3-6 chunks) for the handful of common meshes worth a real per-mesh fracture - GDD §7.8. Falls back to the generic per-class AFragmentDebris shards (above) for any mesh without an entry here. */
+	/**
+	 *  Piece mesh -> its authored Geometry Collection overrides (Chaos Fracture Mode, 3-10 chunks) for the common meshes worth
+	 *  a real per-mesh fracture - GDD §7.8. A mesh can have several variants, one of which is picked at random each time a
+	 *  piece breaks; a single variant always gives the same cut. Falls back to the generic per-class AFragmentDebris shards
+	 *  (above) for any mesh without an entry here, or whose variants have no Geometry Collection.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
-	TMap<TObjectPtr<UStaticMesh>, FMeshFractureOverride> MeshFractureOverrides;
+	TMap<TObjectPtr<UStaticMesh>, FMeshFractureVariants> MeshFractureOverrides;
 
 	/** Accumulated crush energy (mass x relative speed of a Falling piece hitting the player) above which a crush event fires - GDD §7.9. Tuned by feel, not a physically meaningful unit. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Crush")

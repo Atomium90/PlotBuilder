@@ -189,9 +189,11 @@ void ABuildablePiece::Fracture(const FVector& ScatterOrigin, const FVector& Scat
 	}
 
 	const UStaticMesh* OwnMesh = MeshComponent ? MeshComponent->GetStaticMesh() : nullptr;
-	const FMeshFractureOverride* Override = OwnMesh ? Rules->MeshFractureOverrides.Find(OwnMesh) : nullptr;
+	// One of the mesh's authored cuts, picked at random (null if the mesh has none, or none with a Geometry Collection).
+	const FMeshFractureVariants* Variants = OwnMesh ? Rules->MeshFractureOverrides.Find(OwnMesh) : nullptr;
+	const FMeshFractureOverride* Override = Variants ? Variants->PickVariant() : nullptr;
 
-	if (Override && Override->Collection)
+	if (Override)
 	{
 		// Match the destroyed mesh's own world rotation, not a fixed zero - the Geometry Collection
 		// was authored against this mesh's unrotated orientation, so spawning it at the mesh's actual

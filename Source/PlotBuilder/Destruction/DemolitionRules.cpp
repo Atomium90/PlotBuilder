@@ -4,6 +4,22 @@
 #include "FragmentDebris.h"
 #include "Engine/World.h"
 
+const FMeshFractureOverride* FMeshFractureVariants::PickVariant() const
+{
+	// An empty slot (no Geometry Collection yet, or a variant being authored) is never picked.
+	TArray<const FMeshFractureOverride*, TInlineAllocator<8>> Usable;
+
+	for (const FMeshFractureOverride& Variant : Variants)
+	{
+		if (Variant.Collection)
+		{
+			Usable.Add(&Variant);
+		}
+	}
+
+	return Usable.IsEmpty() ? nullptr : Usable[FMath::RandRange(0, Usable.Num() - 1)];
+}
+
 float UDemolitionRules::ComputeMaxHP(EDemolitionMaterial Material, EPieceClass PieceClass) const
 {
 	const float* BaseHP = MaterialBaseHP.Find(Material);
