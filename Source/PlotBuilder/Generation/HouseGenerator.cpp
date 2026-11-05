@@ -1645,7 +1645,13 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		{
 			const FIntVector Edge(Perimeter[Index].Cell.X, Perimeter[Index].Cell.Y, Level);
 			const bool bIsDoor = Level == 0 && Index == DoorIndex && Archetype->DoorWallClass;
-			const TSubclassOf<ABuildablePiece> WallToPlace = bIsDoor ? Archetype->DoorWallClass : PickWallClass(Stream);
+			const TSubclassOf<ABuildablePiece> RolledWall = bIsDoor ? Archetype->DoorWallClass : PickWallClass(Stream);
+
+			// A window beside a flight of stairs only looks at the flank of the steps. The roll is still drawn (the stream
+			// stays where it was), the plain wall just replaces its result on the edges of a flight's cells.
+			const FIntPoint Inside = InsideCellOf(Perimeter[Index]);
+			const bool bBesideFlight = !bIsDoor && IsFlightCell(Inside.X, Inside.Y, Level);
+			const TSubclassOf<ABuildablePiece> WallToPlace = bBesideFlight ? Archetype->WallClass : RolledWall;
 
 			if (!Place(WallToPlace, Edge, ResolveWallQuarterTurns(Edge)))
 			{
