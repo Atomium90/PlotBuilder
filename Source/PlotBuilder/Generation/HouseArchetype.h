@@ -7,14 +7,19 @@
 class ABuildablePiece;
 class UDataTable;
 class UHouseLayout;
+class URoofKit;
 
-/** Roof the generator puts on top of the last storey. Gable joins on Thursday with the two-storey house. */
+/** Roof the generator puts on top of the last storey. The values are stored: only ever append. */
 UENUM(BlueprintType)
 enum class EHouseRoof : uint8
 {
 	None,
-	/** One slab (FlatRoofClass) per room cell, straight on the walls. */
-	Flat
+	/** Only the ceiling slab, one per room cell, straight on the walls. */
+	Flat,
+	/** Two slopes meeting at a ridge along the longer side, a gable on each end wall. */
+	Gable,
+	/** Four slopes: a hip at each corner, a ridge along the longer side or a point on a square. */
+	Hip
 };
 
 /**
@@ -67,7 +72,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
 	TSubclassOf<ABuildablePiece> FloorSlabClass;
 
-	/** Reinforcement slab used instead of FloorSlabClass every SubAnchorInterval storeys. */
+	/**
+	 *  Reinforcement slab used instead of FloorSlabClass every SubAnchorInterval storeys. It is also the ceiling slab
+	 *  under every roof (whatever SubAnchorInterval says), so a roof always starts from a stability reset: the first
+	 *  row of roof tiles rests on its edge. Empty = FlatRoofClass is used for the ceiling.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
 	TSubclassOf<ABuildablePiece> SubAnchorSlabClass;
 
@@ -117,10 +126,10 @@ public:
 	TSubclassOf<ABuildablePiece> CeilingLightClass;
 
 	/**
-	 *  Piece laid on every room cell above the last storey for RoofVariant = Flat: use the floor slab.
-	 *  Its FloorBottom sockets rest on the walls' WallTop. The roof tiles don't work here: even the flat
-	 *  one (BP_Roof_Flat) has its RoofLow sockets at RoofStep 1, made to join the RoofHigh of a slope
-	 *  tile, not to sit on a wall top.
+	 *  Ceiling slab laid on every room cell above the last storey, under any roof (flat or pitched), when SubAnchorSlabClass
+	 *  is empty: use the floor slab. Its FloorBottom sockets rest on the walls' WallTop, and the ceiling lamps of the last
+	 *  storey hang from it. The roof tiles don't work here: even the flat one (BP_Roof_Flat) has its RoofLow sockets at
+	 *  RoofStep 1, made to join the RoofHigh of a slope tile, not to sit on a wall top.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
 	TSubclassOf<ABuildablePiece> FlatRoofClass;
@@ -198,6 +207,29 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Openings", meta = (ClampMin = "0", ClampMax = "1"))
 	float WindowChance = 0.3f;
 
+	/** The pieces a pitched roof is built from (URoofKit). Empty = every house gets a flat roof, whatever the weights say. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Roof")
-	EHouseRoof RoofVariant = EHouseRoof::Flat;
+	TObjectPtr<URoofKit> RoofKit;
+
+	/**
+	 *  Relative chance of each roof shape: the seed rolls one per house. All three at 0 = no roof at all. A pitched roof
+	 *  needs RoofKit and a footprint at least 2 cells across the ridge, or the house falls back to the flat roof.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Roof", meta = (ClampMin = "0"))
+	float FlatRoofWeight = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Roof", meta = (ClampMin = "0"))
+	float GableRoofWeight = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Roof", meta = (ClampMin = "0"))
+	float HipRoofWeight = 0.f;
+
+	/**
+	 *  How much the footprint tilts the roll, without ever deciding it: with s = short side / long side (1 = square), the
+	 *  four-sided roof is weighted by 1 + Bias * (2s - 1) and the two-sided one by 1 - Bias * (2s - 1). A square favours the
+	 *  four-sided roof, a 2:1 rectangle is neutral, a long thin one favours the two-sided roof. The flat roof is not affected.
+	 *  0 = the weights alone; capped at 0.9 so no shape is ever ruled out.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Roof", meta = (ClampMin = "0", ClampMax = "0.9"))
+	float RoofShapeBias = 0.4f;
 };

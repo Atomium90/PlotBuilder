@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "FurnishingRuleRow.h"
+#include "HouseArchetype.h"
 #include "HouseGenerator.generated.h"
 
 class ABuildablePiece;
@@ -137,6 +138,16 @@ public:
 	int32 DebugForcedFailures = 0;
 
 	/**
+	 *  Debug: build ForcedRoof on every house instead of the shape the seed rolls. The roll is still drawn, so the rest of
+	 *  the house is exactly the one the seed gives. A pitched shape the footprint or the kit cannot make still falls back to flat.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation|Debug")
+	bool bForceRoof = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation|Debug", meta = (EditCondition = "bForceRoof"))
+	EHouseRoof ForcedRoof = EHouseRoof::Gable;
+
+	/**
 	 *  Clear(), then builds a house from InSeed. Once everything is placed, the whole structure is
 	 *  checked with UStructuralSupportComponent::FindUnstablePieces. Returns true if the house stands;
 	 *  false if it could not be placed or would collapse, in which case nothing is left in the world.
@@ -193,6 +204,10 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetStanding() const { return Standing; }
+
+	/** Roof shape the current house really got (a pitched roll that could not be built shows as Flat). None for an empty house or a roofless one. */
+	UFUNCTION(BlueprintPure, Category = "Generation")
+	EHouseRoof GetRoofShape() const { return RoofShape; }
 
 	/** Fingerprint of the current house (0 when empty): same seed and archetype, same value. */
 	UFUNCTION(BlueprintPure, Category = "Generation")
@@ -251,6 +266,21 @@ private:
 	/** Rolls the house's standing from Archetype->StandingWeights: always one draw, so the stream after it does not depend on the weights. */
 	int32 RollStanding(FRandomStream& Stream) const;
 
+	/**
+	 *  Rolls the roof shape from the archetype's weights, tilted by the footprint (RoofShapeBias), then the axis a square
+	 *  footprint's gable would take. Always two draws, so the stream after the roof does not depend on the weights or the
+	 *  shape. bOutRidgeAlongX is the ridge's axis for a two-sided roof: the longer side, a draw on a square.
+	 */
+	EHouseRoof RollRoof(FRandomStream& Stream, int32 Width, int32 Depth, bool& bOutRidgeAlongX) const;
+
+	/**
+	 *  The ceiling slab on every cell above the last storey (a reinforcement slab, so the roof starts from a stability
+	 *  reset), then the roof the seed rolled: nothing more for a flat roof, tiles and gables for a pitched one. A pitched
+	 *  shape that cannot be built (no kit, a missing required piece, fewer than 2 cells across) becomes flat, with a log.
+	 *  False only if a piece could not be placed.
+	 */
+	bool EmitRoof(FRandomStream& Stream, const FRoomRect& Footprint);
+
 	/** Draws every room as a coloured flat box with its number and size, and every stair flight with its approach, stairwell and landing, for UnstableMarkerSeconds. */
 	void DrawRoomsDebug() const;
 
@@ -299,6 +329,10 @@ private:
 
 	/** See GetStanding. Cleared with the house. */
 	int32 Standing = 0;
+
+	/** See GetRoofShape, and a few words on how it got built (ridge axis, a fallback), for the result line. Cleared with the house. */
+	EHouseRoof RoofShape = EHouseRoof::None;
+	FString RoofNote;
 
 	/** Debug (pb.TestHouses): quality tiers of the furniture picked from groups that have several rows, and how many there were. Cleared with the house. */
 	int32 VariantTierSum = 0;

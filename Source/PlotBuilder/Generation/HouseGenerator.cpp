@@ -1,6 +1,7 @@
 #include "HouseGenerator.h"
 #include "HouseArchetype.h"
 #include "HouseLayout.h"
+#include "HouseRoofKit.h"
 #include "PlotBuilder.h"
 #include "Buildables/BuildablePiece.h"
 #include "Components/BoxComponent.h"
@@ -466,6 +467,133 @@ namespace
 	}
 }
 
+namespace
+{
+	/** What a cell of a pitched roof holds. Slope and Hip climb; the other three are flat-like tiles (mesh 100 cm above the pivot) that close the top strip. */
+	enum class ERoofTile : uint8
+	{
+		Slope,
+		Hip,
+		Tent,
+		Pyramid,
+		HipEnd
+	};
+
+	/** One cell of a pitched roof: what goes there, turned how, at which RoofStep. */
+	struct FRoofTile
+	{
+		ERoofTile Kind = ERoofTile::Slope;
+		uint8 QuarterTurns = 0;
+		int32 Step = 0;
+	};
+
+	/** The four sides of the footprint, in the order of the distance table. A side's opposite is Side ^ 1. */
+	enum ERoofSide : int32
+	{
+		RoofWest,
+		RoofEast,
+		RoofSouth,
+		RoofNorth
+	};
+
+	/**
+	 *  The rule of a pitched roof, for the cell (I, J) of a Width x Depth footprint: its rank is the distance to the nearest
+	 *  side that slopes (the two across the ridge for a two-sided roof, all four for a four-sided one). One side at that
+	 *  distance = a slope climbing away from it; two adjacent sides = a hip at the corner; anything else (two opposite sides,
+	 *  three, four) is the top strip of an odd width, a flat-like tile one step lower than its rank. Quarter turns: a slope
+	 *  climbing towards +X is 0, +Y 1, -X 2, -Y 3; a hip has its high corner at (+X,+Y), (-X,+Y), (-X,-Y), (+X,-Y) for 0..3;
+	 *  a tent has its ridge along X for 0 and along Y for 1; a hip end is closed on its -X local side. Pure and testable.
+	 */
+	FRoofTile RoofTileAt(int32 I, int32 J, int32 Width, int32 Depth, bool bFourSided, bool bRidgeAlongX)
+	{
+		const int32 Distance[4] = {I, Width - 1 - I, J, Depth - 1 - J};
+		const bool bAcrossX = bFourSided || !bRidgeAlongX;
+		const bool bAcrossY = bFourSided || bRidgeAlongX;
+		const bool bCounts[4] = {bAcrossX, bAcrossX, bAcrossY, bAcrossY};
+
+		int32 Rank = MAX_int32;
+
+		for (int32 Side = 0; Side < 4; ++Side)
+		{
+			if (bCounts[Side])
+			{
+				Rank = FMath::Min(Rank, Distance[Side]);
+			}
+		}
+
+		bool bAtRank[4];
+		int32 Count = 0;
+
+		for (int32 Side = 0; Side < 4; ++Side)
+		{
+			bAtRank[Side] = bCounts[Side] && Distance[Side] == Rank;
+			Count += bAtRank[Side] ? 1 : 0;
+		}
+
+		// A slope climbs away from its low side (west climbs towards +X, east -X, south +Y, north -Y); a hip end closes towards its odd side the same way.
+		static const uint8 TurnsAway[4] = {0, 2, 1, 3};
+		FRoofTile Tile;
+
+		if (Count == 1)
+		{
+			for (int32 Side = 0; Side < 4; ++Side)
+			{
+				if (bAtRank[Side])
+				{
+					Tile.Kind = ERoofTile::Slope;
+					Tile.QuarterTurns = TurnsAway[Side];
+					Tile.Step = Rank;
+				}
+			}
+
+			return Tile;
+		}
+
+		const bool bWestOrEast = bAtRank[RoofWest] || bAtRank[RoofEast];
+		const bool bSouthOrNorth = bAtRank[RoofSouth] || bAtRank[RoofNorth];
+
+		if (Count == 2 && bWestOrEast && bSouthOrNorth)
+		{
+			Tile.Kind = ERoofTile::Hip;
+			Tile.Step = Rank;
+			Tile.QuarterTurns = bAtRank[RoofWest] ? (bAtRank[RoofSouth] ? 0 : 3) : (bAtRank[RoofSouth] ? 1 : 2);
+			return Tile;
+		}
+
+		// The top strip: flat-like tiles whose mesh is a step above their pivot, so they sit one step lower than the rank.
+		Tile.Step = Rank - 1;
+
+		if (!bFourSided)
+		{
+			Tile.Kind = ERoofTile::Tent;
+			Tile.QuarterTurns = bRidgeAlongX ? 0 : 1;
+		}
+		else if (Count == 4)
+		{
+			Tile.Kind = ERoofTile::Pyramid;
+		}
+		else if (Count == 3)
+		{
+			Tile.Kind = ERoofTile::HipEnd;
+
+			for (int32 Side = 0; Side < 4; ++Side)
+			{
+				if (bAtRank[Side] && !bAtRank[Side ^ 1])
+				{
+					Tile.QuarterTurns = TurnsAway[Side];
+				}
+			}
+		}
+		else
+		{
+			Tile.Kind = ERoofTile::Tent;
+			Tile.QuarterTurns = bAtRank[RoofSouth] ? 0 : 1;
+		}
+
+		return Tile;
+	}
+}
+
 AHouseGenerator::AHouseGenerator()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -559,6 +687,8 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 	int32 HousesAtStanding[StandingCount] = {};
 	int32 VariantTierSumAt[StandingCount] = {};
 	int32 VariantPropsAt[StandingCount] = {};
+	// Houses per roof shape, indexed by EHouseRoof (none, flat, gable, hip).
+	int32 HousesWithRoof[4] = {};
 	int32 MinProps = MAX_int32;
 	int32 MaxProps = 0;
 	int32 MinPosts = MAX_int32;
@@ -602,6 +732,8 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 			VariantTierSumAt[Standing - 1] += VariantTierSum;
 			VariantPropsAt[Standing - 1] += VariantPropCount;
 		}
+
+		++HousesWithRoof[FMath::Clamp(static_cast<int32>(RoofShape), 0, 3)];
 
 		MinProps = FMath::Min(MinProps, Props.Num());
 		MaxProps = FMath::Max(MaxProps, Props.Num());
@@ -662,6 +794,9 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 			const FString Average = VariantPropsAt[Index] > 0 ? FString::Printf(TEXT("%.2f"), static_cast<float>(VariantTierSumAt[Index]) / VariantPropsAt[Index]) : FString(TEXT("-"));
 			Result.Add(FString::Printf(TEXT("Standing %d: %d house(s), average tier %s"), Index + 1, HousesAtStanding[Index], *Average));
 		}
+
+		// The shape the seed rolled and the house really got: a pitched roll the kit or footprint could not build counts as flat.
+		Result.Add(FString::Printf(TEXT("Roofs: flat %d | gable %d | hip %d | none %d"), HousesWithRoof[1], HousesWithRoof[2], HousesWithRoof[3], HousesWithRoof[0]));
 
 		return Result;
 	};
@@ -767,9 +902,9 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 	FurnishRooms(Stream);
 
 	DrawRoomsDebug();
-	// Three lines: on screen a line that is too long runs off the edge, and the end (the hash) is what one reads it for.
-	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), stable, hash %08X\n%d room(s) [%s], %s\n%d prop(s), standing %d | %d post(s) | %d stair flight(s) | door %s"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), LayoutHash, Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), Standing, PostVertices.Num(), StairRuns.Num(), *LastDoorSide));
+	// Four short lines: on screen a line that is too long runs off the edge, and the end (the hash) is what one reads it for.
+	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), stable, hash %08X\n%d room(s) [%s], %s\n%d prop(s), standing %d | %d post(s) | %d stair flight(s) | door %s\nroof %s"),
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), LayoutHash, Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), Standing, PostVertices.Num(), StairRuns.Num(), *LastDoorSide, *RoofNote));
 	return true;
 }
 
@@ -807,6 +942,8 @@ void AHouseGenerator::Clear()
 	PostVertices.Reset();
 	StairRuns.Reset();
 	Standing = 0;
+	RoofShape = EHouseRoof::None;
+	RoofNote.Reset();
 	VariantTierSum = 0;
 	VariantPropCount = 0;
 	LayoutHash = 0;
@@ -849,6 +986,247 @@ int32 AHouseGenerator::RollStanding(FRandomStream& Stream) const
 	}
 
 	return Picked;
+}
+
+EHouseRoof AHouseGenerator::RollRoof(FRandomStream& Stream, int32 Width, int32 Depth, bool& bOutRidgeAlongX) const
+{
+	// Both draws first, whatever the weights and the footprint say, so the stream after the roof is always at the same point.
+	const float Roll = Stream.FRand();
+	const bool bSquareCoin = Stream.RandRange(0, 1) == 1;
+
+	// The ridge runs along the longer side, which keeps the gables on the short walls (smaller, lower); a square is a coin.
+	bOutRidgeAlongX = Width > Depth ? true : (Width < Depth ? false : bSquareCoin);
+
+	// A square leans towards four sides, a long thin house towards two; a 2:1 rectangle is neutral. Never rules a shape out.
+	const float Squareness = static_cast<float>(FMath::Min(Width, Depth)) / static_cast<float>(FMath::Max(1, FMath::Max(Width, Depth)));
+	const float Lean = FMath::Clamp(Archetype->RoofShapeBias, 0.f, 0.9f) * (2.f * Squareness - 1.f);
+
+	const float FlatWeight = FMath::Max(0.f, Archetype->FlatRoofWeight);
+	const float GableWeight = FMath::Max(0.f, Archetype->GableRoofWeight) * (1.f - Lean);
+	const float HipWeight = FMath::Max(0.f, Archetype->HipRoofWeight) * (1.f + Lean);
+	const float Total = FlatWeight + GableWeight + HipWeight;
+
+	if (Total <= 0.f)
+	{
+		return EHouseRoof::None;
+	}
+
+	float Remaining = Roll * Total;
+
+	if (FlatWeight > 0.f && Remaining < FlatWeight)
+	{
+		return EHouseRoof::Flat;
+	}
+
+	Remaining -= FlatWeight;
+
+	if (GableWeight > 0.f && Remaining < GableWeight)
+	{
+		return EHouseRoof::Gable;
+	}
+
+	Remaining -= GableWeight;
+
+	// The last shape with a weight takes what rounding leaves.
+	return HipWeight > 0.f ? EHouseRoof::Hip : (GableWeight > 0.f ? EHouseRoof::Gable : EHouseRoof::Flat);
+}
+
+bool AHouseGenerator::EmitRoof(FRandomStream& Stream, const FRoomRect& Footprint)
+{
+	const int32 Floors = FMath::Max(1, Archetype->Floors);
+	const int32 Width = Footprint.Width();
+	const int32 Depth = Footprint.Depth();
+
+	bool bRidgeAlongX = true;
+	EHouseRoof Shape = RollRoof(Stream, Width, Depth, bRidgeAlongX);
+
+	if (bForceRoof)
+	{
+		Shape = ForcedRoof;
+	}
+
+	RoofShape = Shape;
+	RoofNote = Shape == EHouseRoof::None ? TEXT("none") : TEXT("flat");
+
+	if (Shape == EHouseRoof::None)
+	{
+		return true;
+	}
+
+	// A pitched roof the kit or the footprint cannot make is a flat one, never a house without a roof.
+	const URoofKit* Kit = Archetype->RoofKit;
+	const bool bFourSided = Shape == EHouseRoof::Hip;
+
+	if (Shape == EHouseRoof::Gable || Shape == EHouseRoof::Hip)
+	{
+		const int32 CellsAcross = bFourSided ? FMath::Min(Width, Depth) : (bRidgeAlongX ? Depth : Width);
+		const ABuildablePiece* HalfDefault = (Kit && Kit->GableHalf) ? Kit->GableHalf->GetDefaultObject<ABuildablePiece>() : nullptr;
+		const TCHAR* Reason = nullptr;
+
+		if (!Kit)
+		{
+			Reason = TEXT("the archetype has no RoofKit");
+		}
+		else if (!Kit->Slope || !Kit->Filler)
+		{
+			Reason = TEXT("the kit lacks Slope or Filler");
+		}
+		else if (bFourSided && !Kit->Hip)
+		{
+			Reason = TEXT("the kit lacks Hip");
+		}
+		else if (!bFourSided && (!Kit->GableFill || !HalfDefault))
+		{
+			Reason = TEXT("the kit lacks GableFill or GableHalf");
+		}
+		else if (!bFourSided && !HalfDefault->MirrorVariantClass)
+		{
+			Reason = TEXT("GableHalf has no MirrorVariantClass");
+		}
+		else if (CellsAcross < 2)
+		{
+			Reason = TEXT("fewer than 2 cells across");
+		}
+
+		if (Reason)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': a %s roof was rolled for seed %d but %s, the house gets a flat roof"), *GetName(), bFourSided ? TEXT("four-sided") : TEXT("two-sided"), Seed, Reason);
+			RoofNote = FString::Printf(TEXT("flat (%s rolled: %s)"), bFourSided ? TEXT("hip") : TEXT("gable"), Reason);
+			Shape = EHouseRoof::Flat;
+		}
+	}
+
+	RoofShape = Shape;
+
+	// The ceiling slab: a reinforcement slab on every cell above the last storey, whatever the roof, and independent of SubAnchorInterval.
+	// The ceiling lamps hang from it, and the roof's first row rests on its edge, so a wide roof starts from a stability reset.
+	const TSubclassOf<ABuildablePiece> CeilingClass = Archetype->SubAnchorSlabClass ? Archetype->SubAnchorSlabClass : Archetype->FlatRoofClass;
+
+	if (CeilingClass)
+	{
+		for (int32 J = 0; J < Depth; ++J)
+		{
+			for (int32 I = 0; I < Width; ++I)
+			{
+				if (!Place(CeilingClass, FIntVector(2 * (Footprint.MinI + I), 2 * (Footprint.MinJ + J), Floors), 0))
+				{
+					return false;
+				}
+			}
+		}
+	}
+	else
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' has neither SubAnchorSlabClass nor FlatRoofClass, the last storey has no ceiling"), *GetName(), *Archetype->GetName());
+	}
+
+	if (Shape == EHouseRoof::Flat)
+	{
+		return true;
+	}
+
+	// The tiles, cell by cell.
+	for (int32 J = 0; J < Depth; ++J)
+	{
+		for (int32 I = 0; I < Width; ++I)
+		{
+			const FRoofTile Tile = RoofTileAt(I, J, Width, Depth, bFourSided, bRidgeAlongX);
+			TSubclassOf<ABuildablePiece> TileClass = Kit->Filler;
+
+			switch (Tile.Kind)
+			{
+			case ERoofTile::Slope: TileClass = Kit->Slope; break;
+			case ERoofTile::Hip: TileClass = Kit->Hip; break;
+			case ERoofTile::Tent: TileClass = Kit->Tent ? Kit->Tent : Kit->Filler; break;
+			case ERoofTile::Pyramid: TileClass = Kit->Pyramid ? Kit->Pyramid : Kit->Filler; break;
+			case ERoofTile::HipEnd: TileClass = Kit->HipEnd ? Kit->HipEnd : Kit->Filler; break;
+			}
+
+			if (!Place(TileClass, FIntVector(2 * (Footprint.MinI + I), 2 * (Footprint.MinJ + J), Floors), Tile.QuarterTurns, Tile.Step))
+			{
+				return false;
+			}
+		}
+	}
+
+	if (bFourSided)
+	{
+		RoofNote = TEXT("hip");
+		return true;
+	}
+
+	RoofNote = FString::Printf(TEXT("gable (ridge along %s)"), bRidgeAlongX ? TEXT("X") : TEXT("Y"));
+
+	// The gables: on each wall at the end of the ridge, one column per cell of that wall. A column d cells from the nearest side
+	// holds d fills (steps 0 to d - 1), then a half at step d that climbs towards the middle of the wall; the middle column of an
+	// odd width has no half, the peak closes it. The pieces take the orientation of the exterior wall below them on the same edge.
+	const UStructuralSupportComponent* Structural = Plot->GetStructuralSupport();
+	const TSubclassOf<ABuildablePiece> MirrorHalf = Kit->GableHalf->GetDefaultObject<ABuildablePiece>()->MirrorVariantClass;
+
+	// World direction of an edge piece's +Y local for 0 to 3 quarter turns, which is the way a GableHalf climbs.
+	static const FIntPoint HalfClimbs[4] = {FIntPoint(0, 1), FIntPoint(-1, 0), FIntPoint(0, -1), FIntPoint(1, 0)};
+
+	const auto PlaceColumn = [&](const FIntVector& Edge, bool bColumnsAlongY, int32 Index, int32 Count) -> bool
+	{
+		const ABuildablePiece* Wall = Structural ? Structural->GetPieceAt(EBuildAnchor::Edge, FIntVector(Edge.X, Edge.Y, Floors - 1)) : nullptr;
+
+		if (!Wall)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': no exterior wall under the gable edge (%d, %d), the roof cannot be built"), *GetName(), Edge.X, Edge.Y);
+			return false;
+		}
+
+		const uint8 Turns = Wall->GetOrientation();
+		const int32 Distance = FMath::Min(Index, Count - 1 - Index);
+
+		for (int32 Step = 0; Step < Distance; ++Step)
+		{
+			if (!Place(Kit->GableFill, Edge, Turns, Step))
+			{
+				return false;
+			}
+		}
+
+		if (Index == Count - 1 - Index)
+		{
+			return !Kit->GablePeak || Place(Kit->GablePeak, Edge, Turns, Distance) != nullptr;
+		}
+
+		const int32 TowardsMiddle = Index < Count - 1 - Index ? 1 : -1;
+		const FIntPoint Direction = bColumnsAlongY ? FIntPoint(0, TowardsMiddle) : FIntPoint(TowardsMiddle, 0);
+		const bool bHalfClimbsThere = HalfClimbs[Turns % 4] == Direction;
+
+		return Place(bHalfClimbsThere ? Kit->GableHalf : MirrorHalf, Edge, Turns, Distance) != nullptr;
+	};
+
+	if (bRidgeAlongX)
+	{
+		for (const int32 EdgeX : {2 * Footprint.MinI - 1, 2 * Footprint.MaxI + 1})
+		{
+			for (int32 J = 0; J < Depth; ++J)
+			{
+				if (!PlaceColumn(FIntVector(EdgeX, 2 * (Footprint.MinJ + J), Floors), true, J, Depth))
+				{
+					return false;
+				}
+			}
+		}
+	}
+	else
+	{
+		for (const int32 EdgeY : {2 * Footprint.MinJ - 1, 2 * Footprint.MaxJ + 1})
+		{
+			for (int32 I = 0; I < Width; ++I)
+			{
+				if (!PlaceColumn(FIntVector(2 * (Footprint.MinI + I), EdgeY, Floors), false, I, Width))
+				{
+					return false;
+				}
+			}
+		}
+	}
+
+	return true;
 }
 
 bool AHouseGenerator::IsFlightCell(int32 I, int32 J, int32 Level) const
@@ -1296,18 +1674,10 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		}
 	}
 
-	if (Archetype->RoofVariant == EHouseRoof::Flat && Archetype->FlatRoofClass)
+	// The ceiling slab and the roof: the roof shape is rolled here, after the structure and before the furniture.
+	if (!EmitRoof(Stream, FRoomRect{OriginI, OriginJ, OriginI + Width - 1, OriginJ + Depth - 1}))
 	{
-		for (int32 J = 0; J < Depth; ++J)
-		{
-			for (int32 I = 0; I < Width; ++I)
-			{
-				if (!Place(Archetype->FlatRoofClass, FIntVector(2 * (OriginI + I), 2 * (OriginJ + J), Floors), 0))
-				{
-					return false;
-				}
-			}
-		}
+		return false;
 	}
 
 	// Slabs too far from an exterior wall to stand get a post (see UHouseArchetype::SupportPostClass).
