@@ -102,11 +102,30 @@ ABuildablePiece* APlot::PlacePiece(TSubclassOf<ABuildablePiece> PieceClass, cons
 	// cross-section is a symmetric 20x20cm square with no length axis to nudge.
 	const bool bIsWallClass = Piece->PieceClass == EPieceClass::ExteriorWall || Piece->PieceClass == EPieceClass::InteriorWall || Piece->PieceClass == EPieceClass::Parapet;
 
-	if (bIsWallClass && Rules)
+	// Top face bias (D21, visual only): a full-height wall (300cm) ends exactly at the top plane of the slab
+	// above it, so over the strip where they overlap the two top faces are coplanar and flicker. Taking a
+	// tiny fraction off the wall's height (local Z, pivot at the foot) keeps the top just under the slab's.
+	// Walls and posts only: a parapet is 1m, it never reaches a slab.
+	const bool bHasFullHeight = Piece->PieceClass == EPieceClass::ExteriorWall || Piece->PieceClass == EPieceClass::InteriorWall || Piece->PieceClass == EPieceClass::CornerPost;
+
+	if ((bIsWallClass || bHasFullHeight) && Rules)
 	{
-		const float Sign = (Orientation % 2 == 0) ? 1.f : -1.f;
 		FVector BiasedScale = Piece->GetActorScale3D();
-		BiasedScale.Y *= (1.f + Sign * Rules->CornerParityBias);
+
+		if (bIsWallClass)
+		{
+			// A partition always shortens, whatever its orientation: its ends sit on the outer plane of the exterior
+			// wall it meets, so a lengthened one (even orientation) would stick out 0.01cm through that wall's face.
+			// Where two partitions run end to end the hairline gap this leaves is far under a pixel.
+			const bool bLengthen = Orientation % 2 == 0 && Piece->PieceClass != EPieceClass::InteriorWall;
+			BiasedScale.Y *= (1.f + (bLengthen ? 1.f : -1.f) * Rules->CornerParityBias);
+		}
+
+		if (bHasFullHeight)
+		{
+			BiasedScale.Z *= (1.f - Rules->TopFaceBias);
+		}
+
 		Piece->SetActorScale3D(BiasedScale);
 	}
 

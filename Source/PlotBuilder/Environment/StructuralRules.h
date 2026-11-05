@@ -61,7 +61,16 @@ public:
 	 *  cells, not actor scale.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural|Visual")
-	float CornerParityBias = 0.003f;
+	float CornerParityBias = 0.0001f;
+
+	/**
+	 *  Visual-only fraction taken off the height (Scale.Z) of every exterior wall, interior wall and post at
+	 *  placement, so the top of a wall (300cm, up to the slab above) is never coplanar with that slab's top
+	 *  face where the two overlap (D21). 0.0001 on 300cm is 0.03cm: invisible, enough to stop the flicker.
+	 *  Never read by the graph.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural|Visual", meta = (ClampMin = "0"))
+	float TopFaceBias = 0.0001f;
 
 	/** Grid cell size in cm (horizontal). */
 	UPROPERTY(EditDefaultsOnly, Category = "Structural|Grid")
