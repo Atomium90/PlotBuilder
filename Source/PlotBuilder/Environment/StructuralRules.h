@@ -72,6 +72,27 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural|Visual", meta = (ClampMin = "0"))
 	float TopFaceBias = 0.0001f;
 
+	/**
+	 *  Visual-only retreat, in cm, of a floor slab on the side that touches an exterior wall (D21). The wall's
+	 *  pivot is on its outer face and it extends 20cm inward, so a slab running up to the edge line overlaps
+	 *  it and shares its outer plane. 20 = the slab stops at the wall's inner face; 1 = the slab edge only
+	 *  pulled just inside the wall's outer plane (hides the edge, keeps the overlap). 0 = off.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural|Visual", meta = (ClampMin = "0"))
+	float SlabWallRetreat = 20.f;
+
+	/** Same as SlabWallRetreat for a stair flight (a run of 2 room cells): it stops at the wall's inner face instead of poking into the wall. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural|Visual", meta = (ClampMin = "0"))
+	float StairWallRetreat = 20.f;
+
+	/**
+	 *  Retreat, in cm, used instead of the two above when only part of a side has an exterior wall (a stair flight is two
+	 *  edge segments long, a wall may stand on one and not the other). One piece cannot retreat on half a side, so it only
+	 *  pulls back far enough to hide its face behind the wall's outer plane. Never more than the full retreat.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural|Visual", meta = (ClampMin = "0"))
+	float PartialWallRetreat = 1.f;
+
 	/** Grid cell size in cm (horizontal). */
 	UPROPERTY(EditDefaultsOnly, Category = "Structural|Grid")
 	float CellSize = 200.f;

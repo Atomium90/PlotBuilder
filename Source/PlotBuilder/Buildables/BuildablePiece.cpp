@@ -256,6 +256,78 @@ void ABuildablePiece::UpdateStabilityDebugColor()
 	}
 }
 
+void ABuildablePiece::ApplyWallClearance(const FWallClearance& Clearance)
+{
+	const UStaticMesh* StaticMesh = MeshComponent ? MeshComponent->GetStaticMesh() : nullptr;
+
+	// A falling piece simulates physics, and a Compromised one has its location driven by the jiggle: leave both alone.
+	if (!StaticMesh || State != EBuildablePieceState::Placed || GetWorldTimerManager().IsTimerActive(CompromisedJiggleHandle))
+	{
+		return;
+	}
+
+	if (!bClearanceBaseCaptured)
+	{
+		if (Clearance.IsZero())
+		{
+			return;
+		}
+
+		ClearanceBaseLocation = GetActorLocation();
+		ClearanceBaseScale = GetActorScale3D();
+		bClearanceBaseCaptured = true;
+	}
+
+	const FBoxSphereBounds MeshBounds = StaticMesh->GetBounds();
+	const FVector LocalMin = MeshBounds.Origin - MeshBounds.BoxExtent;
+	const FVector LocalMax = MeshBounds.Origin + MeshBounds.BoxExtent;
+
+	// A quarter turn only ever swaps and flips the two horizontal axes, so each local axis points along one world axis.
+	const FRotator Turn(0.f, Orientation * 90.f, 0.f);
+	const FVector AxisDirection[2] = {Turn.RotateVector(FVector::XAxisVector), Turn.RotateVector(FVector::YAxisVector)};
+
+	// The retreat on the side a direction faces.
+	const auto RetreatToward = [&Clearance](const FVector& Direction)
+	{
+		if (FMath::Abs(Direction.X) > 0.5f)
+		{
+			return Direction.X > 0.f ? Clearance.MaxX : Clearance.MinX;
+		}
+
+		return Direction.Y > 0.f ? Clearance.MaxY : Clearance.MinY;
+	};
+
+	FVector NewScale = ClearanceBaseScale;
+	FVector NewLocation = ClearanceBaseLocation;
+
+	for (int32 Axis = 0; Axis < 2; ++Axis)
+	{
+		const FVector Direction = AxisDirection[Axis];
+		const float RetreatAtMax = RetreatToward(Direction);
+		const float RetreatAtMin = RetreatToward(-Direction);
+		const float Min = Axis == 0 ? LocalMin.X : LocalMin.Y;
+		const float Max = Axis == 0 ? LocalMax.X : LocalMax.Y;
+		const float BaseAxisScale = Axis == 0 ? ClearanceBaseScale.X : ClearanceBaseScale.Y;
+		const float Length = (Max - Min) * BaseAxisScale;
+
+		// Never shrink a piece to nothing: a piece that short has no business being retreated.
+		if (RetreatAtMin + RetreatAtMax <= 0.f || Length <= RetreatAtMin + RetreatAtMax + 1.f)
+		{
+			continue;
+		}
+
+		const float NewAxisScale = BaseAxisScale * (Length - RetreatAtMin - RetreatAtMax) / Length;
+		(Axis == 0 ? NewScale.X : NewScale.Y) = NewAxisScale;
+
+		// The face on the min side has to end up RetreatAtMin further along the axis than where it started:
+		// the pivot moves by what the new scale takes off (or adds to) the pivot-to-face distance, plus the retreat.
+		NewLocation += Direction * ((BaseAxisScale - NewAxisScale) * Min + RetreatAtMin);
+	}
+
+	SetActorScale3D(NewScale);
+	SetActorLocation(NewLocation);
+}
+
 void ABuildablePiece::OnCompromisedStart()
 {
 	if (GetWorldTimerManager().IsTimerActive(CompromisedJiggleHandle))

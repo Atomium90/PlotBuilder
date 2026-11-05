@@ -207,6 +207,20 @@ private:
 	void RecomputeStability();
 
 	/**
+	 *  Visual fix near exterior walls (D21, nothing to do with stability): works out which sides of a floor slab or a
+	 *  stair flight touch an exterior wall, from the Edge occupancy table, and tells the piece to pull back from them
+	 *  (UStructuralRules::SlabWallRetreat / StairWallRetreat). A slab at storey N overlaps the walls of storey N - 1
+	 *  (a wall is 300cm, it runs up through the slab's thickness); a flight overlaps the walls of its own storey.
+	 *  A side counts only if every edge segment along it holds an exterior wall. A removed wall frees its slot first,
+	 *  so the same call gives the piece its full size back. Piece's footprint comes from its mesh bounds, turned by
+	 *  its orientation, so no piece class has a hard-coded size.
+	 */
+	void RefreshWallClearance(ABuildablePiece* Piece);
+
+	/** RefreshWallClearance for every slab and stair flight close enough to Wall (an exterior wall piece) to touch it. Called when a wall is registered or removed. */
+	void RefreshWallClearanceAround(const ABuildablePiece* Wall);
+
+	/**
 	 *  Shared fixed-point relaxation core behind RecomputeStability and WouldBeBottleneck's dry run.
 	 *  DryRunResult == nullptr: the real pass - reads/writes each piece's own Stability field
 	 *  directly (GetStability/SetStability), exactly as before this was factored out. DryRunResult

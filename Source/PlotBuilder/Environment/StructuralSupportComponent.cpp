@@ -3,6 +3,7 @@
 #include "Buildables/BuildablePiece.h"
 #include "Destruction/DurabilityComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 
 UStructuralSupportComponent::UStructuralSupportComponent()
 {
@@ -375,6 +376,111 @@ void UStructuralSupportComponent::RegisterPiece(ABuildablePiece* Piece)
 
 	Piece->SetIsStructuralAnchor(bFoundAnchor);
 	MarkDirty();
+
+	// Visual only: the piece itself (a slab or stair placed next to walls that already stand), and the slabs and
+	// stairs next to it if it is itself an exterior wall.
+	RefreshWallClearance(Piece);
+
+	if (Piece->PieceClass == EPieceClass::ExteriorWall)
+	{
+		RefreshWallClearanceAround(Piece);
+	}
+}
+
+void UStructuralSupportComponent::RefreshWallClearance(ABuildablePiece* Piece)
+{
+	if (!Piece || Piece->GetBuildAnchor() == EBuildAnchor::Legacy)
+	{
+		return;
+	}
+
+	const bool bIsStairs = Piece->PieceClass == EPieceClass::Stairs;
+
+	if (!bIsStairs && Piece->PieceClass != EPieceClass::FloorSlab)
+	{
+		return;
+	}
+
+	const UStaticMeshComponent* MeshComponent = Piece->GetMeshComponent();
+	const UStaticMesh* StaticMesh = MeshComponent ? MeshComponent->GetStaticMesh() : nullptr;
+
+	if (!StaticMesh)
+	{
+		return;
+	}
+
+	// Footprint in grid units: the mesh bounds turned by the piece's quarter turns, around its grid cell.
+	const float GridUnit = Rules ? Rules->CellSize : 100.f;
+	const FBoxSphereBounds Bounds = StaticMesh->GetBounds();
+	const FRotator Turn(0.f, Piece->GetOrientation() * 90.f, 0.f);
+	const FVector CornerA = Turn.RotateVector(FVector(Bounds.Origin.X - Bounds.BoxExtent.X, Bounds.Origin.Y - Bounds.BoxExtent.Y, 0.f));
+	const FVector CornerB = Turn.RotateVector(FVector(Bounds.Origin.X + Bounds.BoxExtent.X, Bounds.Origin.Y + Bounds.BoxExtent.Y, 0.f));
+	const FIntVector Cell = Piece->GetGridCoord();
+	const int32 MinX = Cell.X + FMath::RoundToInt(FMath::Min(CornerA.X, CornerB.X) / GridUnit);
+	const int32 MaxX = Cell.X + FMath::RoundToInt(FMath::Max(CornerA.X, CornerB.X) / GridUnit);
+	const int32 MinY = Cell.Y + FMath::RoundToInt(FMath::Min(CornerA.Y, CornerB.Y) / GridUnit);
+	const int32 MaxY = Cell.Y + FMath::RoundToInt(FMath::Max(CornerA.Y, CornerB.Y) / GridUnit);
+	const int32 EdgeLevel = bIsStairs ? Cell.Z : Cell.Z - 1;
+
+	const float FullRetreat = bIsStairs ? (Rules ? Rules->StairWallRetreat : 20.f) : (Rules ? Rules->SlabWallRetreat : 20.f);
+	const float PartialRetreat = FMath::Min(FullRetreat, Rules ? Rules->PartialWallRetreat : 1.f);
+
+	// One side: the edge segments (2 grid units each, centred between From and To) along the line Fixed. bAlongY: the line is X = Fixed.
+	// Every segment holds an exterior wall: the full retreat. Only some do (a flight is two segments long): the piece cannot
+	// retreat on one half only, so it keeps the overlap and just pulls back far enough to hide its face behind the wall's
+	// outer plane, which leaves a barely visible step in the open half instead of a face flickering through the wall.
+	const auto RetreatOnSide = [this, EdgeLevel, FullRetreat, PartialRetreat](bool bAlongY, int32 Fixed, int32 From, int32 To)
+	{
+		int32 Segments = 0;
+		int32 Walls = 0;
+
+		for (int32 Along = From + 1; Along < To; Along += 2)
+		{
+			const FIntVector EdgeCell = bAlongY ? FIntVector(Fixed, Along, EdgeLevel) : FIntVector(Along, Fixed, EdgeLevel);
+			const ABuildablePiece* Wall = GetPieceAt(EBuildAnchor::Edge, EdgeCell);
+
+			++Segments;
+			Walls += (Wall && Wall->PieceClass == EPieceClass::ExteriorWall) ? 1 : 0;
+		}
+
+		if (Walls == 0)
+		{
+			return 0.f;
+		}
+
+		return Walls == Segments ? FullRetreat : PartialRetreat;
+	};
+
+	FWallClearance Clearance;
+	Clearance.MinX = RetreatOnSide(true, MinX, MinY, MaxY);
+	Clearance.MaxX = RetreatOnSide(true, MaxX, MinY, MaxY);
+	Clearance.MinY = RetreatOnSide(false, MinY, MinX, MaxX);
+	Clearance.MaxY = RetreatOnSide(false, MaxY, MinX, MaxX);
+
+	Piece->ApplyWallClearance(Clearance);
+}
+
+void UStructuralSupportComponent::RefreshWallClearanceAround(const ABuildablePiece* Wall)
+{
+	const FIntVector Edge = Wall->GetGridCoord();
+
+	// A flight is 4 grid units long, so its far wall can be 4 units from its pivot: 5 is enough to reach any wall it touches.
+	constexpr int32 Reach = 5;
+
+	for (ABuildablePiece* Other : RegisteredPieces)
+	{
+		if (!Other || (Other->PieceClass != EPieceClass::FloorSlab && Other->PieceClass != EPieceClass::Stairs))
+		{
+			continue;
+		}
+
+		const FIntVector OtherCell = Other->GetGridCoord();
+
+		if (FMath::Abs(OtherCell.X - Edge.X) <= Reach && FMath::Abs(OtherCell.Y - Edge.Y) <= Reach && FMath::Abs(OtherCell.Z - Edge.Z) <= 1)
+		{
+			RefreshWallClearance(Other);
+		}
+	}
 }
 
 void UStructuralSupportComponent::UnregisterPiece(ABuildablePiece* Piece)
@@ -404,6 +510,12 @@ void UStructuralSupportComponent::UnregisterPiece(ABuildablePiece* Piece)
 	}
 
 	MarkDirty();
+
+	// Visual only: the slot is already free, so the slabs and stairs that were pulled back from this wall get their full size back.
+	if (Piece->PieceClass == EPieceClass::ExteriorWall)
+	{
+		RefreshWallClearanceAround(Piece);
+	}
 }
 
 float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSocket>& Sockets, const FVector& WorldLocation, const FRotator& WorldRotation, int32 RoofStep) const

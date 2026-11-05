@@ -26,6 +26,20 @@ enum class EBuildablePieceState : uint8
 };
 
 /**
+ *  How far, in cm, a slab or a stair flight pulls back from each of its four world-axis sides because an
+ *  exterior wall stands there (D21, visual only). MinX is the side facing -X, MaxX the one facing +X, and so on.
+ */
+struct FWallClearance
+{
+	float MinX = 0.f;
+	float MaxX = 0.f;
+	float MinY = 0.f;
+	float MaxY = 0.f;
+
+	bool IsZero() const { return MinX <= 0.f && MaxX <= 0.f && MinY <= 0.f && MaxY <= 0.f; }
+};
+
+/**
  *  Construction piece (wall, floor, roof, door, window...). Never simulates physics while Stock/
  *  Held/Placed, unlike APhysicsProp: it's acquired via Interact into a UHotbarComponent, then
  *  placed kinematically (fixed transform, no Push/Pull/Launch). The one deliberate exception is
@@ -170,6 +184,16 @@ public:
 	/** Writes Stability into the mesh's Custom Primitive Data (index 0) for the debug color gradient - see UStructuralSupportComponent::bShowDebug. */
 	void UpdateStabilityDebugColor();
 
+	/**
+	 *  Pulls this piece back from the sides that touch an exterior wall (D21, visual only): the actor's scale and
+	 *  location are recomputed from the transform it was placed with and the mesh bounds, so the pivot does not
+	 *  matter and a zero clearance restores the full piece. Called by UStructuralSupportComponent whenever a wall
+	 *  next to this piece is registered or removed. Does nothing unless the piece is Placed (a falling piece is
+	 *  simulating physics) or is warning as Compromised (the jiggle owns its location). Never touches the graph:
+	 *  GetGridCoord() and the sockets are unchanged.
+	 */
+	void ApplyWallClearance(const FWallClearance& Clearance);
+
 	/** Called by UStructuralSupportComponent::StartCompromised (GDD §7.6, D29): starts the warning placeholders (creak loop, dust, a small jiggle) while this piece counts down to failing on its own. Safe to call once per Compromised episode - the component only calls it on a fresh queue entry. */
 	void OnCompromisedStart();
 
@@ -251,6 +275,11 @@ private:
 	/** Amplitude (cm) of the Compromised warning's positional jiggle. */
 	UPROPERTY(EditAnywhere, Category = "Structural|Debug")
 	float CompromisedJiggleAmplitude = 0.4f;
+
+	/** Location and scale the piece was placed with, kept by the first ApplyWallClearance so the clearance is always computed from them and never stacks. */
+	FVector ClearanceBaseLocation = FVector::ZeroVector;
+	FVector ClearanceBaseScale = FVector::OneVector;
+	bool bClearanceBaseCaptured = false;
 
 	/** Set by UBuildModeComponent::ConfirmPlacement for a grid-anchored piece - (0,0,0) and ignored for Legacy. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Structural", meta = (AllowPrivateAccess = "true"))
