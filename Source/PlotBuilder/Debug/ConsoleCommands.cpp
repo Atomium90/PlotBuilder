@@ -131,6 +131,40 @@ static FAutoConsoleCommandWithWorldAndArgs PbGenerateHouseCommand(
 		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.GenerateHouse: no AHouseGenerator in the level"));
 	}));
 
+static FAutoConsoleCommandWithWorldAndArgs PbSpawnHouseCommand(
+	TEXT("pb.SpawnHouse"),
+	TEXT("pb.SpawnHouse <archetype> [seed] - switches the level's AHouseGenerator to the first of its KnownArchetypes whose asset name contains <archetype> (any case), then builds a house from the seed (default 1) like pb.GenerateHouse. The archetype stays selected, so pb.TestHouses and pb.GenerateHouse then use it."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		if (!World)
+		{
+			return;
+		}
+
+		if (Args.IsEmpty())
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.SpawnHouse: usage pb.SpawnHouse <archetype> [seed], e.g. pb.SpawnHouse bungalow 3"));
+			return;
+		}
+
+		const int32 Seed = Args.Num() > 1 ? FCString::Atoi(*Args[1]) : 1;
+
+		for (TActorIterator<AHouseGenerator> It(World); It; ++It)
+		{
+			if (It->SelectArchetype(Args[0]))
+			{
+				// Same reset as pb.GenerateHouse: a debug setting left from an earlier call never leaks into this one.
+				It->DebugForcedFailures = 0;
+				It->bKeepUnstableHouse = false;
+				It->GenerateValid(Seed);
+			}
+
+			return;
+		}
+
+		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.SpawnHouse: no AHouseGenerator in the level"));
+	}));
+
 static FAutoConsoleCommandWithWorldAndArgs PbTestHousesCommand(
 	TEXT("pb.TestHouses"),
 	TEXT("pb.TestHouses [firstSeed] [lastSeed] - builds every seed of the range (default 1 to 20, at most 100) twice with the level's AHouseGenerator and prints a summary: valid houses, re-rolls, same hash twice (T6), room types seen, props per house. Leaves the last house in the world."),

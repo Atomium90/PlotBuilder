@@ -98,6 +98,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
 	TObjectPtr<UHouseArchetype> Archetype;
 
+	/** Archetypes pb.SpawnHouse can switch to by name (a part of the asset name is enough: "bungalow", "storey"). Fill with the project's archetypes. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
+	TArray<TObjectPtr<UHouseArchetype>> KnownArchetypes;
+
 	/** Seed of the last Generate call (also the value used by the editor-placed default). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
 	int32 Seed = 1;
@@ -163,6 +167,13 @@ public:
 	/** Seed the current house was really built from: the requested one, a derived one after a re-roll, or the fallback. */
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetEffectiveSeed() const { return Seed; }
+
+	/**
+	 *  Debug: makes the first of KnownArchetypes whose asset name contains NameFragment (any case) the current
+	 *  Archetype. False, with the names logged, if none matches. pb.SpawnHouse calls it.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Generation|Debug")
+	bool SelectArchetype(const FString& NameFragment);
 
 	/** Unregisters from the structural graph, then destroys, every piece this generator created and still owns. */
 	UFUNCTION(BlueprintCallable, Category = "Generation")

@@ -633,7 +633,9 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 	Lines.Add(FString::Printf(TEXT("Houses with each room type (of %d): %s"), ValidCount, *TypeLine));
 	Lines.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d, support posts per house: %d to %d"), MinProps, MaxProps, MinPosts, MaxPosts) : FString(TEXT("Props per house: no valid house")));
 
-	const bool bAllGood = Failed.IsEmpty() && HashDiffers.IsEmpty() && bAllTypesSeen;
+	// Red is a real failure (a seed that gave no house, a house that changed the second time). A room type nobody
+	// has is yellow: it only means this archetype's plans do not contain it (a two-storey plan with no office, say).
+	const FColor SummaryColor = (!Failed.IsEmpty() || !HashDiffers.IsEmpty()) ? FColor::Red : (bAllTypesSeen ? FColor::Green : FColor::Yellow);
 
 	for (const FString& Line : Lines)
 	{
@@ -642,7 +644,7 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 
 	if (bShowDebug && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(ResultMessageKey + 1, 60.f, bAllGood ? FColor::Green : FColor::Red, FString::Join(Lines, TEXT("\n")));
+		GEngine->AddOnScreenDebugMessage(ResultMessageKey + 1, 60.f, SummaryColor, FString::Join(Lines, TEXT("\n")));
 	}
 }
 
@@ -812,6 +814,28 @@ bool AHouseGenerator::IsOnFlight(const FIntVector& Vertex) const
 		}
 	}
 
+	return false;
+}
+
+bool AHouseGenerator::SelectArchetype(const FString& NameFragment)
+{
+	for (const TObjectPtr<UHouseArchetype>& Candidate : KnownArchetypes)
+	{
+		if (Candidate && Candidate->GetName().Contains(NameFragment, ESearchCase::IgnoreCase))
+		{
+			Archetype = Candidate;
+			return true;
+		}
+	}
+
+	FString Known;
+
+	for (const TObjectPtr<UHouseArchetype>& Candidate : KnownArchetypes)
+	{
+		Known += Candidate ? FString::Printf(TEXT(" %s"), *Candidate->GetName()) : FString();
+	}
+
+	UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': no known archetype matches '%s' (known:%s)"), *GetName(), *NameFragment, Known.IsEmpty() ? TEXT(" none, fill KnownArchetypes on the generator") : *Known);
 	return false;
 }
 
