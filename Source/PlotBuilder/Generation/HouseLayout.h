@@ -37,6 +37,56 @@ struct FLayoutLink
 	FString RoomB;
 };
 
+/** Direction a stair flight climbs, read on the text plan: Up goes towards row 0 (+X in the world), Left towards column 0 (-Y). */
+UENUM(BlueprintType)
+enum class ELayoutClimb : uint8
+{
+	Up,
+	Down,
+	Left,
+	Right
+};
+
+/** One step of a climb in the plan's own axes: X is the change of row, Y the change of column. */
+inline FIntPoint LayoutClimbStep(ELayoutClimb Climb)
+{
+	switch (Climb)
+	{
+	case ELayoutClimb::Up: return FIntPoint(-1, 0);
+	case ELayoutClimb::Down: return FIntPoint(1, 0);
+	case ELayoutClimb::Left: return FIntPoint(0, -1);
+	default: return FIntPoint(0, 1);
+	}
+}
+
+/**
+ *  One flight of stairs of a plan (BP_Stairs: 2 room cells long, 1 wide, climbing one storey). The flight
+ *  starts on Level and arrives on Level + 1. It needs a free cell in front of it (the approach), and the cell
+ *  after its top (the landing) must be floor: so along its climb it uses four cells in a row, approach,
+ *  Row/Column and the next one (the two flight cells), then the landing.
+ */
+USTRUCT(BlueprintType)
+struct FLayoutStair
+{
+	GENERATED_BODY()
+
+	/** Storey the flight stands on (0 = ground floor). It arrives on Level + 1. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout", meta = (ClampMin = "0"))
+	int32 Level = 0;
+
+	/** Row of the first flight cell: the one right after the approach cell. 0 is the first string of the grid. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout", meta = (ClampMin = "0"))
+	int32 Row = 0;
+
+	/** Column of the first flight cell. 0 is the first character of a row. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout", meta = (ClampMin = "0"))
+	int32 Column = 0;
+
+	/** Which way the flight climbs from its first cell. The approach is on the opposite side. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
+	ELayoutClimb Climb = ELayoutClimb::Right;
+};
+
 /** The grid of one storey. */
 USTRUCT(BlueprintType)
 struct FLayoutLevel
@@ -95,6 +145,9 @@ struct FParsedLayout
 
 	/** Index into Rooms: the room whose outer wall gets the front door. */
 	int32 EntranceRoom = INDEX_NONE;
+
+	/** The plan's flights, checked: in the cells of the plan's own grid. */
+	TArray<FLayoutStair> Stairs;
 };
 
 /**
@@ -110,6 +163,9 @@ struct FResolvedLayout
 	TArray<FParsedLayoutRoom> Rooms;
 	TArray<TPair<int32, int32>> Links;
 	int32 EntranceRoom = INDEX_NONE;
+
+	/** The plan's flights moved into the grown grid: Row and Column are the first flight cell there, the approach and landing follow from Climb. */
+	TArray<FLayoutStair> Stairs;
 
 	/** The seed's mirror choice, already limited to the flips the plan allows. */
 	bool bMirrorX = false;
@@ -154,6 +210,15 @@ public:
 	/** Letter of the room whose outer wall gets the front door. It must be on the ground floor and touch the edge of the grid. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
 	FString EntranceRoom;
+
+	/**
+	 *  The flights of stairs between storeys, by hand: a house with several storeys needs at least one per
+	 *  storey change. On the ground storey the approach cell and the two flight cells must be one room; on the
+	 *  storey above, the two flight cells (an open stairwell, no floor) and the landing after them must be one
+	 *  room. A flight is not a room, so it has no letter and no partition around it. Mirrors and stretches keep it valid.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
+	TArray<FLayoutStair> Stairs;
 
 	/**
 	 *  Per row of the grid: how many extra copies of that row the generator may add to make the house

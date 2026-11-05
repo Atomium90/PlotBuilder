@@ -731,8 +731,8 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 	FurnishRooms(Stream);
 
 	DrawRoomsDebug();
-	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) [%s] (%s), %d prop(s), %d post(s), door %s, stable, hash %08X"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), PostVertices.Num(), *LastDoorSide, LayoutHash));
+	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), %d room(s) [%s] (%s), %d prop(s), %d post(s), %d stair flight(s), door %s, stable, hash %08X"),
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), PostVertices.Num(), StairRuns.Num(), *LastDoorSide, LayoutHash));
 	return true;
 }
 
@@ -768,7 +768,51 @@ void AHouseGenerator::Clear()
 	Rooms.Reset();
 	Edges.Reset();
 	PostVertices.Reset();
+	StairRuns.Reset();
 	LayoutHash = 0;
+}
+
+bool AHouseGenerator::IsFlightCell(int32 I, int32 J, int32 Level) const
+{
+	for (const FStairRun& Run : StairRuns)
+	{
+		if (Run.Level == Level && (Run.First == FIntPoint(I, J) || Run.Second == FIntPoint(I, J)))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool AHouseGenerator::IsStairwellCell(int32 I, int32 J, int32 Level) const
+{
+	// The flight starts one storey below the floor it opens a stairwell in.
+	return IsFlightCell(I, J, Level - 1);
+}
+
+bool AHouseGenerator::IsOnFlight(const FIntVector& Vertex) const
+{
+	for (const FStairRun& Run : StairRuns)
+	{
+		if (Run.Level != Vertex.Z)
+		{
+			continue;
+		}
+
+		// The flight's two room cells cover grid X 2 * min - 1 .. 2 * max + 1 (same on Y), edges included.
+		const int32 MinX = 2 * FMath::Min(Run.First.X, Run.Second.X) - 1;
+		const int32 MaxX = 2 * FMath::Max(Run.First.X, Run.Second.X) + 1;
+		const int32 MinY = 2 * FMath::Min(Run.First.Y, Run.Second.Y) - 1;
+		const int32 MaxY = 2 * FMath::Max(Run.First.Y, Run.Second.Y) + 1;
+
+		if (Vertex.X >= MinX && Vertex.X <= MaxX && Vertex.Y >= MinY && Vertex.Y <= MaxY)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
@@ -794,6 +838,20 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 
 	const int32 Floors = FMath::Max(1, Archetype->Floors);
 
+	// A house of several storeys is only worth building if the upper ones can be reached: every storey change needs a flight.
+	const auto HasFlightForEveryStorey = [Floors](const FParsedLayout& Parsed)
+	{
+		for (int32 Level = 0; Level + 1 < Floors; ++Level)
+		{
+			if (!Parsed.Stairs.ContainsByPredicate([Level](const FLayoutStair& Stair) { return Stair.Level == Level; }))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	};
+
 	// Hand-written plans the archetype offers that can be built here: valid, one grid per storey, small enough for the plot.
 	TArray<TPair<const UHouseLayout*, FParsedLayout>> UsableLayouts;
 
@@ -818,6 +876,10 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		{
 			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: it has %d storey(s), the archetype has %d"), *GetName(), *Candidate->GetName(), Candidate->Levels.Num(), Floors);
 		}
+		else if (!HasFlightForEveryStorey(Parsed))
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: the archetype has %d storeys and the plan lacks a flight of stairs for one of the storey changes"), *GetName(), *Candidate->GetName(), Floors);
+		}
 		else if (Parsed.Rows > FreeX || Parsed.Columns > FreeY)
 		{
 			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: it is %d x %d cells, the plot holds %d x %d"), *GetName(), *Candidate->GetName(), Parsed.Rows, Parsed.Columns, FreeX, FreeY);
@@ -826,6 +888,13 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		{
 			UsableLayouts.Emplace(Candidate.Get(), MoveTemp(Parsed));
 		}
+	}
+
+	// Without a plan the random split has no stairs to give, so a house of several storeys cannot be built.
+	if (Floors > 1 && (UsableLayouts.IsEmpty() || !Archetype->StairsClass))
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' has %d storeys: it needs a usable plan with stairs and a StairsClass, nothing is built"), *GetName(), *Archetype->GetName(), Floors);
+		return false;
 	}
 
 	if (!Archetype->Layouts.IsEmpty() && UsableLayouts.IsEmpty())
@@ -964,6 +1033,28 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		}
 
 		LayoutLinks = Resolved.Links;
+
+		// The plan's flights as world room cells. Row 0 of the plan is the highest X and column 0 the lowest Y, so Up is +I
+		// and Left is -J; a mirror flips its axis. The foot of the flight is the grid edge between the approach and the first cell.
+		for (const FLayoutStair& Stair : Resolved.Stairs)
+		{
+			const FRoomRect FirstCell = MapLayoutRect(FLayoutRect{Stair.Row, Stair.Column, Stair.Row, Stair.Column}, Resolved.Rows, Resolved.Columns, bMirrorX, bMirrorY, OriginI, OriginJ);
+			const FIntPoint PlanStep = LayoutClimbStep(Stair.Climb);
+			const FIntPoint Step(bMirrorX ? PlanStep.X : -PlanStep.X, bMirrorY ? -PlanStep.Y : PlanStep.Y);
+
+			FStairRun Run;
+			Run.Level = Stair.Level;
+			Run.First = FIntPoint(FirstCell.MinI, FirstCell.MinJ);
+			Run.Approach = Run.First - Step;
+			Run.Second = Run.First + Step;
+			Run.Landing = Run.First + Step * 2;
+			Run.Pivot = FIntVector(2 * Run.First.X - Step.X, 2 * Run.First.Y - Step.Y, Stair.Level);
+
+			// BP_Stairs climbs towards its local +X: +X is 0 quarter turns, +Y 1, -X 2, -Y 3.
+			Run.QuarterTurns = Step.X > 0 ? 0 : (Step.Y > 0 ? 1 : (Step.X < 0 ? 2 : 3));
+			StairRuns.Add(Run);
+		}
+
 		LastLayoutNote = FString::Printf(TEXT("plan %s%s%s"), *Layout->GetName(), bMirrorX ? TEXT(" mirrored X") : TEXT(""), bMirrorY ? TEXT(" mirrored Y") : TEXT(""));
 	}
 	else
@@ -987,12 +1078,19 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 
 	const auto IsEntranceEdge = [&](const FPerimeterEdge& Edge)
 	{
+		const FIntPoint Inside = InsideCellOf(Edge);
+
+		// The front door never opens onto the side of a flight of stairs.
+		if (IsFlightCell(Inside.X, Inside.Y, 0))
+		{
+			return false;
+		}
+
 		if (!Layout)
 		{
 			return true;
 		}
 
-		const FIntPoint Inside = InsideCellOf(Edge);
 		return Inside.X >= EntranceWorld.MinI && Inside.X <= EntranceWorld.MaxI && Inside.Y >= EntranceWorld.MinJ && Inside.Y <= EntranceWorld.MaxJ;
 	};
 
@@ -1020,6 +1118,12 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		}
 	}
 
+	if (DoorCandidates.IsEmpty())
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': no exterior edge left for the front door (every edge of the entrance room is the side of a flight of stairs)"), *GetName());
+		return false;
+	}
+
 	const int32 DoorIndex = DoorCandidates[Stream.RandRange(0, DoorCandidates.Num() - 1)];
 	LastDoorSide = FString::Printf(TEXT("%s%s"), SideLabel(Perimeter[DoorIndex].Side), bDoorFacesTarget ? TEXT(" toward target") : (bHasFacingSide ? TEXT(" (entrance room does not face the target)") : TEXT("")));
 
@@ -1045,6 +1149,12 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		{
 			for (int32 I = 0; I < Width; ++I)
 			{
+				// The open stairwell above a flight of stairs: no floor there.
+				if (IsStairwellCell(OriginI + I, OriginJ + J, Level))
+				{
+					continue;
+				}
+
 				if (!Place(FloorClass, FIntVector(2 * (OriginI + I), 2 * (OriginJ + J), Level), 0))
 				{
 					return false;
@@ -1072,6 +1182,16 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		if (Layout ? !EmitLayoutPartitions(Level, LayoutLinks, Stream) : !EmitPartitions(Level, Footprint, Stream))
 		{
 			return false;
+		}
+
+		// The flights that start on this storey, on its floor (they rest on the slabs of the cells they cross).
+		// The plan checked that no partition crosses their foot, so the edge they stand on is free.
+		for (const FStairRun& Run : StairRuns)
+		{
+			if (Run.Level == Level && !Place(Archetype->StairsClass, Run.Pivot, Run.QuarterTurns))
+			{
+				return false;
+			}
 		}
 	}
 
@@ -1103,9 +1223,29 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 	{
 		for (const FRoom& Room : Rooms)
 		{
-			const FIntVector Cell(2 * ((Room.Rect.MinI + Room.Rect.MaxI) / 2), 2 * ((Room.Rect.MinJ + Room.Rect.MaxJ) / 2), Room.Level);
+			// The middle cell, unless its ceiling is an open stairwell (nothing to hang from): then the first cell
+			// of the room, in cell order, that has a floor above it; a room with none gets no lamp.
+			FIntPoint LampCell((Room.Rect.MinI + Room.Rect.MaxI) / 2, (Room.Rect.MinJ + Room.Rect.MaxJ) / 2);
+			bool bHasCeiling = !IsStairwellCell(LampCell.X, LampCell.Y, Room.Level + 1);
 
-			if (!Place(Archetype->CeilingLightClass, Cell, 0))
+			for (int32 I = Room.Rect.MinI; I <= Room.Rect.MaxI && !bHasCeiling; ++I)
+			{
+				for (int32 J = Room.Rect.MinJ; J <= Room.Rect.MaxJ && !bHasCeiling; ++J)
+				{
+					if (!IsStairwellCell(I, J, Room.Level + 1))
+					{
+						LampCell = FIntPoint(I, J);
+						bHasCeiling = true;
+					}
+				}
+			}
+
+			if (!bHasCeiling)
+			{
+				continue;
+			}
+
+			if (!Place(Archetype->CeilingLightClass, FIntVector(2 * LampCell.X, 2 * LampCell.Y, Room.Level), 0))
 			{
 				return false;
 			}
@@ -1294,7 +1434,25 @@ bool AHouseGenerator::EmitLayoutPartitions(int32 Level, const TArray<TPair<int32
 			continue;
 		}
 
-		DoorOf.Add(Pair, Stream.RandRange(0, Segments->Num() - 1));
+		// A door must not open onto the side of a flight of stairs: the stairs are solid, so a link whose only door
+		// did would cut two rooms apart. The other segments of the shared wall are preferred; the draw is still one,
+		// and without stairs every segment is usable, so it is the same draw as before.
+		TArray<int32> UsableSegments;
+
+		for (int32 SegmentIndex = 0; SegmentIndex < Segments->Num(); ++SegmentIndex)
+		{
+			const FIntVector& Edge = (*Segments)[SegmentIndex].Edge;
+			const bool bVerticalEdge = FMath::Abs(Edge.X) % 2 == 1;
+			const FIntPoint CellA = bVerticalEdge ? FIntPoint((Edge.X - 1) / 2, Edge.Y / 2) : FIntPoint(Edge.X / 2, (Edge.Y - 1) / 2);
+			const FIntPoint CellB = bVerticalEdge ? FIntPoint((Edge.X + 1) / 2, Edge.Y / 2) : FIntPoint(Edge.X / 2, (Edge.Y + 1) / 2);
+
+			if (!IsFlightCell(CellA.X, CellA.Y, Level) && !IsFlightCell(CellB.X, CellB.Y, Level))
+			{
+				UsableSegments.Add(SegmentIndex);
+			}
+		}
+
+		DoorOf.Add(Pair, UsableSegments.IsEmpty() ? Stream.RandRange(0, Segments->Num() - 1) : UsableSegments[Stream.RandRange(0, UsableSegments.Num() - 1)]);
 	}
 
 	for (const FIntPoint& Pair : PairOrder)
@@ -1397,7 +1555,7 @@ bool AHouseGenerator::AddSupportPosts()
 
 		for (const TPair<FIntPoint, int32>& Candidate : Coverage)
 		{
-			if (!Structural->IsSlotFree(EBuildAnchor::Vertex, FIntVector(Candidate.Key.X, Candidate.Key.Y, PostLevel)))
+			if (!Structural->IsSlotFree(EBuildAnchor::Vertex, FIntVector(Candidate.Key.X, Candidate.Key.Y, PostLevel)) || IsOnFlight(FIntVector(Candidate.Key.X, Candidate.Key.Y, PostLevel)))
 			{
 				continue;
 			}
@@ -1606,6 +1764,33 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 		}
 	}
 
+	// The floor the stairs need clear. On the flight's own storey: the cell in front of its foot and the flight
+	// itself. One storey up: the open stairwell and the landing, so nothing hangs over the edge or blocks the way off the top.
+	for (const FStairRun& Run : StairRuns)
+	{
+		FIntPoint FromCell = FIntPoint::ZeroValue;
+		FIntPoint ToCell = FIntPoint::ZeroValue;
+
+		if (Run.Level == Room.Level)
+		{
+			FromCell = Run.Approach;
+			ToCell = Run.Second;
+		}
+		else if (Run.Level + 1 == Room.Level)
+		{
+			FromCell = Run.First;
+			ToCell = Run.Landing;
+		}
+		else
+		{
+			continue;
+		}
+
+		const FVector2D Low(GridOrigin.X + (2 * FMath::Min(FromCell.X, ToCell.X) - 1) * CellSize, GridOrigin.Y + (2 * FMath::Min(FromCell.Y, ToCell.Y) - 1) * CellSize);
+		const FVector2D High(GridOrigin.X + (2 * FMath::Max(FromCell.X, ToCell.X) + 1) * CellSize, GridOrigin.Y + (2 * FMath::Max(FromCell.Y, ToCell.Y) + 1) * CellSize);
+		Floor.Taken.Add(FBox2D(Low - FVector2D(PropGap, PropGap), High + FVector2D(PropGap, PropGap)));
+	}
+
 	// A support post inside or on the border of this room is solid: keep props off it. Its half width comes
 	// from the Blueprint's mesh, so a thinner post needs no change here.
 	float PostHalfWidth = 10.f;
@@ -1718,6 +1903,26 @@ void AHouseGenerator::DrawRoomsDebug() const
 		const FString Info = Room.Label.IsEmpty() ? RoomTypeName(Room.Type) : FString::Printf(TEXT("'%s' %s"), *Room.Label, *RoomTypeName(Room.Type));
 		DrawDebugString(World, Centre + FVector(0.f, 0.f, 40.f), FString::Printf(TEXT("Room %d %s (%d x %d)"), Index, *Info, Room.Rect.Width(), Room.Rect.Depth()), nullptr, Colour, UnstableMarkerSeconds, true);
 	}
+
+	// Stair flights: green where the flight and its approach are, red for the open stairwell upstairs, blue for the landing, and an arrow up the climb.
+	const auto CellCentre = [&](const FIntPoint& Cell, int32 Level)
+	{
+		return FVector(GridOrigin.X + 2 * Cell.X * CellSize, GridOrigin.Y + 2 * Cell.Y * CellSize, Plot->GetPlaneZ(Level, 0, 0.f) + 12.f);
+	};
+
+	for (const FStairRun& Run : StairRuns)
+	{
+		const FVector CellHalf(CellSize - 10.f, CellSize - 10.f, 2.f);
+
+		DrawDebugBox(World, CellCentre(Run.Approach, Run.Level), CellHalf, FColor::Silver, false, UnstableMarkerSeconds, 0, 2.f);
+		DrawDebugBox(World, CellCentre(Run.First, Run.Level), CellHalf, FColor::Green, false, UnstableMarkerSeconds, 0, 3.f);
+		DrawDebugBox(World, CellCentre(Run.Second, Run.Level), CellHalf, FColor::Green, false, UnstableMarkerSeconds, 0, 3.f);
+		DrawDebugBox(World, CellCentre(Run.First, Run.Level + 1), CellHalf, FColor::Red, false, UnstableMarkerSeconds, 0, 3.f);
+		DrawDebugBox(World, CellCentre(Run.Second, Run.Level + 1), CellHalf, FColor::Red, false, UnstableMarkerSeconds, 0, 3.f);
+		DrawDebugBox(World, CellCentre(Run.Landing, Run.Level + 1), CellHalf, FColor::Blue, false, UnstableMarkerSeconds, 0, 3.f);
+		DrawDebugDirectionalArrow(World, CellCentre(Run.Approach, Run.Level), CellCentre(Run.Landing, Run.Level + 1), 40.f, FColor::Green, false, UnstableMarkerSeconds, 0, 3.f);
+		DrawDebugString(World, CellCentre(Run.First, Run.Level) + FVector(0.f, 0.f, 60.f), FString::Printf(TEXT("Stairs %d -> %d"), Run.Level, Run.Level + 1), nullptr, FColor::Green, UnstableMarkerSeconds, true);
+	}
 }
 
 ABuildablePiece* AHouseGenerator::Place(TSubclassOf<ABuildablePiece> PieceClass, const FIntVector& GridCoord, uint8 QuarterTurns, int32 RoofStep)
@@ -1778,7 +1983,9 @@ uint8 AHouseGenerator::ResolveWallQuarterTurns(const FIntVector& Edge) const
 {
 	const bool bVertical = FMath::Abs(Edge.X) % 2 == 1;
 	const FIntVector MinusNeighbour = bVertical ? FIntVector(Edge.X - 1, Edge.Y, Edge.Z) : FIntVector(Edge.X, Edge.Y - 1, Edge.Z);
-	const bool bMinusHasFloor = Plot->GetStructuralSupport()->GetPieceAt(EBuildAnchor::Cell, MinusNeighbour) != nullptr;
+	// An open stairwell has no slab either, but it is inside the house: a wall beside it still faces the inside.
+	const bool bMinusHasFloor = Plot->GetStructuralSupport()->GetPieceAt(EBuildAnchor::Cell, MinusNeighbour) != nullptr
+		|| IsStairwellCell(MinusNeighbour.X / 2, MinusNeighbour.Y / 2, MinusNeighbour.Z);
 
 	// Base 0 (vertical) or 1 (horizontal) faces the -X / -Y side; +2 turns the wall to the other side.
 	const uint8 Base = bVertical ? 0 : 1;

@@ -294,6 +294,106 @@ bool UHouseLayout::Parse(FParsedLayout& OutLayout, TArray<FString>& OutErrors) c
 		OutLayout.Links.Add(TPair<int32, int32>(*A, *B));
 	}
 
+	// Stair flights: along its climb a flight uses the approach, two flight cells and the landing, in one line.
+	// The approach and the flight stand in one room on their storey (no partition may cross the foot of the
+	// stairs), the flight's two cells (the open stairwell) and the landing in one room on the storey above.
+	const auto RoomAt = [&](int32 Level, int32 Row, int32 Column) -> int32
+	{
+		if (!Levels.IsValidIndex(Level) || !Levels[Level].Rows.IsValidIndex(Row) || Column < 0 || Column >= Levels[Level].Rows[Row].Len())
+		{
+			return INDEX_NONE;
+		}
+
+		const int32* Room = RoomOf.Find(KeyOf(Levels[Level].Rows[Row][Column]));
+		return Room ? *Room : INDEX_NONE;
+	};
+
+	TSet<FIntVector> FlightFeet;
+	TSet<FIntVector> Stairwells;
+	TArray<TPair<int32, FIntVector>> StairLandings;
+
+	for (int32 Index = 0; Index < Stairs.Num(); ++Index)
+	{
+		const FLayoutStair& Stair = Stairs[Index];
+		const FIntPoint Step = LayoutClimbStep(Stair.Climb);
+
+		if (Stair.Level < 0 || Stair.Level + 1 >= Levels.Num())
+		{
+			OutErrors.Add(FString::Printf(TEXT("Stairs[%d]: Level %d needs a storey above it, the plan has %d storey(s)"), Index, Stair.Level, Levels.Num()));
+			continue;
+		}
+
+		const auto CellAt = [&](int32 FlightIndex) { return FIntPoint(Stair.Row + Step.X * FlightIndex, Stair.Column + Step.Y * FlightIndex); };
+		const FIntPoint Approach = CellAt(-1);
+		const FIntPoint First = CellAt(0);
+		const FIntPoint Second = CellAt(1);
+		const FIntPoint Landing = CellAt(2);
+		const auto Inside = [&](const FIntPoint& Cell) { return Cell.X >= 0 && Cell.X < RowCount && Cell.Y >= 0 && Cell.Y < ColumnCount; };
+
+		if (!Inside(Approach) || !Inside(Landing))
+		{
+			OutErrors.Add(FString::Printf(TEXT("Stairs[%d]: the approach cell (row %d, column %d) and the landing cell (row %d, column %d) must be inside the grid"), Index, Approach.X, Approach.Y, Landing.X, Landing.Y));
+			continue;
+		}
+
+		const int32 FootRoom = RoomAt(Stair.Level, Approach.X, Approach.Y);
+
+		if (FootRoom == INDEX_NONE || RoomAt(Stair.Level, First.X, First.Y) != FootRoom || RoomAt(Stair.Level, Second.X, Second.Y) != FootRoom)
+		{
+			OutErrors.Add(FString::Printf(TEXT("Stairs[%d]: the approach cell and the two flight cells must be one room on Levels[%d]"), Index, Stair.Level));
+			continue;
+		}
+
+		const int32 TopRoom = RoomAt(Stair.Level + 1, First.X, First.Y);
+
+		if (TopRoom == INDEX_NONE || RoomAt(Stair.Level + 1, Second.X, Second.Y) != TopRoom || RoomAt(Stair.Level + 1, Landing.X, Landing.Y) != TopRoom)
+		{
+			OutErrors.Add(FString::Printf(TEXT("Stairs[%d]: the two flight cells and the landing cell must be one room on Levels[%d]"), Index, Stair.Level + 1));
+			continue;
+		}
+
+		// A flight's cells (the approach too) belong to it alone on their storey, and the stairwell it opens upstairs has no floor.
+		for (int32 FlightIndex = -1; FlightIndex <= 1; ++FlightIndex)
+		{
+			bool bAlreadyUsed = false;
+			FlightFeet.Add(FIntVector(CellAt(FlightIndex).X, CellAt(FlightIndex).Y, Stair.Level), &bAlreadyUsed);
+
+			if (bAlreadyUsed)
+			{
+				OutErrors.Add(FString::Printf(TEXT("Stairs[%d]: shares a cell with another flight on Levels[%d]"), Index, Stair.Level));
+				break;
+			}
+		}
+
+		Stairwells.Add(FIntVector(First.X, First.Y, Stair.Level + 1));
+		Stairwells.Add(FIntVector(Second.X, Second.Y, Stair.Level + 1));
+		StairLandings.Emplace(Index, FIntVector(Landing.X, Landing.Y, Stair.Level + 1));
+		OutLayout.Stairs.Add(Stair);
+	}
+
+	// No flight may start in, or land on, the open stairwell another flight leaves in the floor.
+	for (const FLayoutStair& Stair : OutLayout.Stairs)
+	{
+		const FIntPoint Step = LayoutClimbStep(Stair.Climb);
+
+		for (int32 FlightIndex = -1; FlightIndex <= 1; ++FlightIndex)
+		{
+			if (Stairwells.Contains(FIntVector(Stair.Row + Step.X * FlightIndex, Stair.Column + Step.Y * FlightIndex, Stair.Level)))
+			{
+				OutErrors.Add(FString::Printf(TEXT("A flight on Levels[%d] (row %d, column %d) stands on the open stairwell of a flight from the storey below"), Stair.Level, Stair.Row, Stair.Column));
+				break;
+			}
+		}
+	}
+
+	for (const TPair<int32, FIntVector>& Landing : StairLandings)
+	{
+		if (Stairwells.Contains(Landing.Value))
+		{
+			OutErrors.Add(FString::Printf(TEXT("Stairs[%d]: the landing is inside the open stairwell of another flight"), Landing.Key));
+		}
+	}
+
 	// Every room of a storey must be reachable from the others through the Links, or the player could not walk to it.
 	for (int32 Level = 0; Level < Levels.Num(); ++Level)
 	{
@@ -414,6 +514,19 @@ void UHouseLayout::Resolve(const FParsedLayout& Parsed, FIntPoint MinCells, FInt
 
 	OutLayout.Links = Parsed.Links;
 	OutLayout.EntranceRoom = Parsed.EntranceRoom;
+
+	// A flight moves with the copies and stays valid: copies only repeat letters, so the cells next to each other
+	// in the grown grid are still the same rooms. Along its climb the first flight cell is the copy of its row
+	// (or column) the approach touches: the first copy when climbing towards a higher index, the last towards
+	// a lower one. Across its climb any copy is in the same room, the first is taken. No draw.
+	for (const FLayoutStair& Stair : Parsed.Stairs)
+	{
+		const FIntPoint Step = LayoutClimbStep(Stair.Climb);
+		FLayoutStair Grown = Stair;
+		Grown.Row = Step.X < 0 ? RowStart[Stair.Row] + RowExtra[Stair.Row] : RowStart[Stair.Row];
+		Grown.Column = Step.Y < 0 ? ColumnStart[Stair.Column] + ColumnExtra[Stair.Column] : ColumnStart[Stair.Column];
+		OutLayout.Stairs.Add(Grown);
+	}
 
 	// Type swaps, group by group in order of first appearance: a Fisher-Yates shuffle of the group's types.
 	TArray<FName> Groups;

@@ -79,6 +79,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
 	TSubclassOf<ABuildablePiece> DoorWallClass;
 
+	/**
+	 *  Flight of stairs (BP_Stairs: Edge anchor, 4 x 2 m, climbs one storey) the generator places for each
+	 *  stair of a plan (UHouseLayout::Stairs). A house of two storeys or more needs it, and plans that have stairs.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
+	TSubclassOf<ABuildablePiece> StairsClass;
+
 	/** Exterior wall with a single window. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
 	TSubclassOf<ABuildablePiece> WindowWallClass;

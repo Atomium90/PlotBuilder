@@ -46,6 +46,26 @@ struct FRoom
 };
 
 /**
+ *  One flight of stairs of the generated house, in world room cells. Along the climb the cells go Approach,
+ *  First, Second, Landing: the flight (BP_Stairs, 2 cells long) covers First and Second on Level, climbs one
+ *  storey, and leaves an open stairwell in the floor above over those same two cells. The Approach is the
+ *  cell in front of its foot, the Landing the floor cell the top steps onto.
+ */
+struct FStairRun
+{
+	int32 Level = 0;
+	FIntPoint Approach = FIntPoint::ZeroValue;
+	FIntPoint First = FIntPoint::ZeroValue;
+	FIntPoint Second = FIntPoint::ZeroValue;
+	FIntPoint Landing = FIntPoint::ZeroValue;
+
+	/** Where BP_Stairs goes: the grid edge between Approach and First, on Level. */
+	FIntVector Pivot = FIntVector::ZeroValue;
+
+	uint8 QuarterTurns = 0;
+};
+
+/**
  *  Builds a house in a plot from a UHouseArchetype and a seed (GDD §9). It places every piece through
  *  APlot::PlacePiece, the same function build mode uses, so a generated house is a normal house for the
  *  structural graph: it can be demolished, it collapses, it shows in the heat-map.
@@ -209,8 +229,17 @@ private:
 	 */
 	void FurnishRoom(const FRoom& Room, const TArray<const FFurnishingRuleRow*>& Rows, FRandomStream& Stream);
 
-	/** Draws every room as a coloured flat box with its number and size, for UnstableMarkerSeconds. */
+	/** Draws every room as a coloured flat box with its number and size, and every stair flight with its approach, stairwell and landing, for UnstableMarkerSeconds. */
 	void DrawRoomsDebug() const;
+
+	/** True if (I, J) on Level is a flight cell of a stair run starting on that storey (not the approach). */
+	bool IsFlightCell(int32 I, int32 J, int32 Level) const;
+
+	/** True if (I, J) on Level is the open stairwell a flight from the storey below leaves in the floor: no slab goes there. */
+	bool IsStairwellCell(int32 I, int32 J, int32 Level) const;
+
+	/** True if the grid vertex (X, Y) on Level touches a flight's footprint (closed): a post there would stand in the stairs. */
+	bool IsOnFlight(const FIntVector& Vertex) const;
 
 	/** PlacePiece plus bookkeeping (owned list, layout hash). nullptr if the plot refused it. */
 	ABuildablePiece* Place(TSubclassOf<ABuildablePiece> PieceClass, const FIntVector& GridCoord, uint8 QuarterTurns, int32 RoofStep = 0);
@@ -242,6 +271,9 @@ private:
 
 	/** Grid vertex (odd X, odd Y, storey the post stands on) of every support post. The furnishing step keeps props off them. Cleared with the house. */
 	TArray<FIntVector> PostVertices;
+
+	/** Stair flights of the current house, from the plan's Stairs. Cleared with the house. */
+	TArray<FStairRun> StairRuns;
 
 	/** Set by TryGenerate when bKeepUnstableHouse left a rejected house in the world: GenerateValid then stops instead of re-rolling. */
 	bool bKeptUnstableHouse = false;
