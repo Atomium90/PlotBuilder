@@ -43,4 +43,30 @@ struct FShopItemRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shop Item")
 	EShopItemCategory Category = EShopItemCategory::Structure;
+
+	/**
+	 *  The row of Catalog whose ActorClass is exactly ActorClass, or nullptr (no catalog, no class, no such row).
+	 *  The one lookup by class: the hotbar uses it to store a prop, the mission director to weigh a piece.
+	 *  The catalog is the source of truth for costs; the Cost field on the piece Blueprints is not read.
+	 */
+	static const FShopItemRow* FindForClass(const UDataTable* Catalog, TSubclassOf<AActor> ActorClass)
+	{
+		if (!Catalog || !ActorClass)
+		{
+			return nullptr;
+		}
+
+		TArray<FShopItemRow*> Rows;
+		Catalog->GetAllRows<FShopItemRow>(TEXT("FShopItemRow::FindForClass"), Rows);
+
+		for (const FShopItemRow* Row : Rows)
+		{
+			if (Row && Row->ActorClass == ActorClass)
+			{
+				return Row;
+			}
+		}
+
+		return nullptr;
+	}
 };

@@ -97,23 +97,7 @@ int32 UHotbarComponent::AddItem(TSubclassOf<AActor> ActorClass, const FVector& S
 
 const FShopItemRow* UHotbarComponent::FindCatalogRowFor(TSubclassOf<AActor> ActorClass) const
 {
-	if (!ShopCatalog || !ActorClass)
-	{
-		return nullptr;
-	}
-
-	TArray<FShopItemRow*> Rows;
-	ShopCatalog->GetAllRows<FShopItemRow>(TEXT("FindCatalogRowFor"), Rows);
-
-	for (const FShopItemRow* Row : Rows)
-	{
-		if (Row && Row->ActorClass == ActorClass)
-		{
-			return Row;
-		}
-	}
-
-	return nullptr;
+	return FShopItemRow::FindForClass(ShopCatalog, ActorClass);
 }
 
 void UHotbarComponent::SetSelectedIndex(int32 NewIndex)
