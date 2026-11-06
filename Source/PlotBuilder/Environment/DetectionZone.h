@@ -25,6 +25,13 @@ protected:
 
 	virtual void BeginPlay() override;
 
+	/** Whether Actor counts for this zone: by default anything implementing IInteractable. A subclass narrows it (the drop zone only counts props). */
+	virtual bool Accepts(AActor* Actor) const;
+
+	/** The accepted actors currently inside. Entries of actors destroyed since are null or invalid: skip them. */
+	UPROPERTY()
+	TSet<TObjectPtr<AActor>> OverlappingInteractables;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UStaticMeshComponent* ZoneMesh;
 
@@ -43,9 +50,6 @@ protected:
 	void OnZoneEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
 private:
-
-	UPROPERTY()
-	TSet<TObjectPtr<AActor>> OverlappingInteractables;
 
 	void UpdateVisual();
 };

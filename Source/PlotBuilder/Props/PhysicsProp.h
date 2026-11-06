@@ -30,6 +30,7 @@ public:
 	APhysicsProp();
 
 	UStaticMeshComponent* GetMeshComponent() const { return MeshComponent; }
+	UDurabilityComponent* GetDurabilityComponent() const { return DurabilityComponent; }
 
 	virtual void Interact_Implementation(AActor* InteractingActor) override;
 	virtual void ApplyDamage_Implementation(const FDamageInfo& DamageInfo) override;

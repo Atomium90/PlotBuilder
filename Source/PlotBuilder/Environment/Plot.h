@@ -2,10 +2,15 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Contracts/MissionBinding.h"
 #include "Plot.generated.h"
 
 class ABuildablePiece;
+class ADropZone;
+class AProtectedZone;
 class UBoxComponent;
+class UInstancedStaticMeshComponent;
+class UStaticMesh;
 class UStructuralSupportComponent;
 
 /**
@@ -23,12 +28,13 @@ public:
 
 	APlot();
 
+	/** The plot's footprint: a flat box on the ground, its X and Y extents are the plot's size. The height is VolumeHeight, not this box's Z. */
 	UBoxComponent* GetBoundsVolume() const { return BoundsVolume; }
 
 	UFUNCTION(BlueprintPure, Category = "Plot")
 	UStructuralSupportComponent* GetStructuralSupport() const { return StructuralSupport; }
 
-	/** Whether WorldLocation falls within this plot's bounds (axis-aligned box test, inclusive with a small tolerance so a vertex/edge exactly on the boundary still counts). */
+	/** Whether WorldLocation falls within this plot's volume: the footprint, from the ground up to VolumeHeight (axis-aligned box test, inclusive with a small tolerance so a vertex/edge exactly on the boundary still counts). */
 	UFUNCTION(BlueprintCallable, Category = "Plot")
 	bool IsLocationInside(const FVector& WorldLocation) const;
 
@@ -65,21 +71,91 @@ public:
 	 */
 	ABuildablePiece* PlacePiece(TSubclassOf<ABuildablePiece> PieceClass, const FIntVector& GridCoord, uint8 QuarterTurns, int32 RoofStep = 0, const FVector& Scale = FVector::OneVector);
 
+	/** The target and must-stay sets of the contract being played (GDD §13.3: the plot holds the contract binding). Empty outside a mission. */
+	const FMissionSets& GetMissionSets() const { return MissionSets; }
+
+	/** Replaces the mission sets. Called by AMissionDirector once the house is built and the contract bound. */
+	void SetMissionSets(FMissionSets&& NewSets) { MissionSets = MoveTemp(NewSets); }
+
+	/** Called by an AProtectedZone when it starts: the plot keeps the list for the evaluator. */
+	void RegisterProtectedZone(AProtectedZone* Zone);
+
+	/** Called by the client ADropZone when it starts. A second one replaces the first (one client zone per mission map). */
+	void RegisterClientDropZone(ADropZone* Zone);
+
+	const TArray<TObjectPtr<AProtectedZone>>& GetProtectedZones() const { return ProtectedZones; }
+	ADropZone* GetClientDropZone() const { return ClientDropZone; }
+
+	/**
+	 *  Height of the plot's volume above the ground (the pivot), in cm: the house, its roof and everything built on it must fit
+	 *  under it. Nothing is built below the pivot. The BoundsVolume box only gives the footprint (X and Y); its Z is reset on
+	 *  every construction, the VolumeGuide box shows the whole volume.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Plot", meta = (ClampMin = "100"))
+	float VolumeHeight = 3000.f;
+
+	/** Draws the plot's volume as a debug box every tick. The mission director turns it off: the caution tape marks the plot there. */
 	UPROPERTY(EditAnywhere, Category = "Plot|Debug")
 	bool bShowDebugBounds = true;
 
 	UPROPERTY(EditAnywhere, Category = "Plot|Debug")
 	FColor DebugColor = FColor::Cyan;
 
+	/** Whether the plot's perimeter is marked with poles and caution tape (GDD §13.2). Needs PoleMesh and/or TapeMesh. */
+	UPROPERTY(EditAnywhere, Category = "Plot|Tape")
+	bool bShowTape = true;
+
+	/** One pole, pivot at its foot. Poles stand on the perimeter, at every corner and at most PoleSpacing apart. Empty = no poles. */
+	UPROPERTY(EditAnywhere, Category = "Plot|Tape")
+	TObjectPtr<UStaticMesh> PoleMesh;
+
+	/** The tape between two poles: a bar lying along its local X with its pivot at its middle. A gap is filled with as many copies as fit, each stretched a little to close it, so a striped mesh keeps its stripes. The engine cube works too (the look is then the material's). Empty = no tape. */
+	UPROPERTY(EditAnywhere, Category = "Plot|Tape")
+	TObjectPtr<UStaticMesh> TapeMesh;
+
+	/** Longest gap between two poles along a side, in cm. A side is cut into equal gaps no longer than this. */
+	UPROPERTY(EditAnywhere, Category = "Plot|Tape", meta = (ClampMin = "50"))
+	float PoleSpacing = 300.f;
+
+	/** Height of the middle of the tape above the ground, in cm. */
+	UPROPERTY(EditAnywhere, Category = "Plot|Tape", meta = (ClampMin = "0"))
+	float TapeHeight = 100.f;
+
+	/** Size of the tape across its length, in cm: how tall the band is, and how thick. The mesh is scaled to it, so the default fits SM_CautionTape (12 x 0.5 cm) and a 100 cm cube alike. */
+	UPROPERTY(EditAnywhere, Category = "Plot|Tape", meta = (ClampMin = "0.1"))
+	FVector2D TapeSize = FVector2D(12.f, 0.5f);
+
 protected:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
+	virtual void OnConstruction(const FTransform& Transform) override;
 
 private:
 
+	/** Lays the poles and the tape out along the bounds (at the ground, whatever the plot's scale): in the editor on every change, and at spawn. */
+	void RebuildTape();
+
+	UPROPERTY(VisibleAnywhere, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInstancedStaticMeshComponent> TapePoles;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInstancedStaticMeshComponent> TapeBars;
+
+	UPROPERTY()
+	TArray<TObjectPtr<AProtectedZone>> ProtectedZones;
+
+	UPROPERTY()
+	TObjectPtr<ADropZone> ClientDropZone;
+
+	FMissionSets MissionSets;
+
 	UPROPERTY(VisibleAnywhere, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UBoxComponent> BoundsVolume;
+
+	/** Shows the whole volume (footprint x VolumeHeight) from the ground up, in the editor and in the debug draw. Never collides. */
+	UPROPERTY(VisibleAnywhere, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UBoxComponent> VolumeGuide;
 
 	UPROPERTY(VisibleAnywhere, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UStructuralSupportComponent> StructuralSupport;

@@ -2,11 +2,21 @@
 #include "PlotBuilder.h"
 #include "Buildables/BuildablePiece.h"
 #include "Components/BoxComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "Environment/DropZone.h"
+#include "Environment/ProtectedZone.h"
 #include "StructuralRules.h"
 #include "StructuralSupportComponent.h"
+
+namespace
+{
+	/** Half-thickness of the root box, in cm: it is the footprint, a flat plate on the ground. */
+	constexpr float FootprintHalfThickness = 1.f;
+}
 
 APlot::APlot()
 {
@@ -15,16 +25,142 @@ APlot::APlot()
 	BoundsVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("BoundsVolume"));
 	SetRootComponent(BoundsVolume);
 
-	BoundsVolume->SetBoxExtent(FVector(500.f, 500.f, 50.f));
+	BoundsVolume->SetBoxExtent(FVector(500.f, 500.f, FootprintHalfThickness));
 	BoundsVolume->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	// Only there to show the whole volume in the editor and in the debug view: it never collides.
+	VolumeGuide = CreateDefaultSubobject<UBoxComponent>(TEXT("VolumeGuide"));
+	VolumeGuide->SetupAttachment(BoundsVolume);
+	VolumeGuide->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	VolumeGuide->SetGenerateOverlapEvents(false);
+	VolumeGuide->SetHiddenInGame(true);
+
 	StructuralSupport = CreateDefaultSubobject<UStructuralSupportComponent>(TEXT("StructuralSupport"));
+
+	// The tape is only there to be seen: the player walks through it (the mission rule is "demolish inside", not a wall).
+	TapePoles = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("TapePoles"));
+	TapePoles->SetupAttachment(BoundsVolume);
+	TapePoles->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	TapeBars = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("TapeBars"));
+	TapeBars->SetupAttachment(BoundsVolume);
+	TapeBars->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
+void APlot::RegisterProtectedZone(AProtectedZone* Zone)
+{
+	if (Zone)
+	{
+		ProtectedZones.AddUnique(Zone);
+	}
+}
+
+void APlot::RegisterClientDropZone(ADropZone* Zone)
+{
+	if (Zone && ClientDropZone && ClientDropZone != Zone)
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("APlot '%s': a second client drop zone '%s' replaces '%s' (one client zone per mission map)."), *GetName(), *Zone->GetName(), *ClientDropZone->GetName());
+	}
+
+	ClientDropZone = Zone;
+}
+
+void APlot::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	// The root box is the footprint, flat on the ground (the pivot is the ground, GetGroundZ). The volume the plot covers rises
+	// from it by VolumeHeight: the guide box shows it. Only the box's X and Y extents are read; its Z is reset here.
+	const FVector Footprint = BoundsVolume->GetUnscaledBoxExtent();
+	BoundsVolume->SetBoxExtent(FVector(Footprint.X, Footprint.Y, FootprintHalfThickness), false);
+	VolumeGuide->SetBoxExtent(FVector(Footprint.X, Footprint.Y, VolumeHeight * 0.5f), false);
+	VolumeGuide->SetRelativeLocation(FVector(0.f, 0.f, VolumeHeight * 0.5f));
+
+	RebuildTape();
+}
+
+void APlot::RebuildTape()
+{
+	if (!TapePoles || !TapeBars)
+	{
+		return;
+	}
+
+	TapePoles->ClearInstances();
+	TapeBars->ClearInstances();
+	TapePoles->SetStaticMesh(PoleMesh);
+	TapeBars->SetStaticMesh(TapeMesh);
+
+	if (!bShowTape || (!PoleMesh && !TapeMesh))
+	{
+		return;
+	}
+
+	// Corners in the plot's own space, walked once around; the plot's transform (scale included) puts them in the world.
+	const FVector Extent = BoundsVolume->GetUnscaledBoxExtent();
+	const FVector2D Corners[4] = {
+		FVector2D(-Extent.X, -Extent.Y), FVector2D(Extent.X, -Extent.Y),
+		FVector2D(Extent.X, Extent.Y), FVector2D(-Extent.X, Extent.Y)
+	};
+
+	const FTransform PlotTransform = GetActorTransform();
+
+	// The pole points, in order around the perimeter. A side is cut into equal gaps no longer than PoleSpacing; its first
+	// point is its start corner, the end corner is the start of the next side.
+	TArray<FVector> PolePoints;
+
+	for (int32 Side = 0; Side < 4; ++Side)
+	{
+		const FVector Start = PlotTransform.TransformPosition(FVector(Corners[Side], 0.f));
+		const FVector End = PlotTransform.TransformPosition(FVector(Corners[(Side + 1) % 4], 0.f));
+		const int32 Gaps = FMath::Max(1, FMath::CeilToInt(FVector::Dist(Start, End) / FMath::Max(PoleSpacing, 1.f)));
+
+		for (int32 Gap = 0; Gap < Gaps; ++Gap)
+		{
+			PolePoints.Add(FMath::Lerp(Start, End, static_cast<float>(Gap) / Gaps));
+		}
+	}
+
+	// The tape mesh is centred and lies along its X. Its own size is the unit: a gap is filled with as many modules as fit
+	// (each a little stretched or squeezed to close the gap exactly), so stripes in the mesh keep their size at any spacing.
+	// The engine cube (100 cm each way) is the special case where one module is 100 cm and TapeSize alone sets the band.
+	const FVector MeshSize = TapeMesh ? (TapeMesh->GetBounds().BoxExtent * 2.0).ComponentMax(FVector(1.0)) : FVector(100.0);
+
+	for (int32 Index = 0; Index < PolePoints.Num(); ++Index)
+	{
+		if (PoleMesh)
+		{
+			TapePoles->AddInstance(FTransform(PolePoints[Index]), true);
+		}
+
+		if (TapeMesh)
+		{
+			const FVector From = PolePoints[Index];
+			const FVector To = PolePoints[(Index + 1) % PolePoints.Num()];
+			const FVector Along = To - From;
+			const float Length = Along.Size();
+			const int32 Modules = FMath::Max(1, FMath::RoundToInt(Length / MeshSize.X));
+			const FRotator Rotation(0.f, FMath::RadiansToDegrees(FMath::Atan2(Along.Y, Along.X)), 0.f);
+			const FVector Scale((Length / Modules) / MeshSize.X, TapeSize.Y / MeshSize.Y, TapeSize.X / MeshSize.Z);
+
+			for (int32 Module = 0; Module < Modules; ++Module)
+			{
+				const FVector Middle = From + Along * ((Module + 0.5f) / Modules);
+				TapeBars->AddInstance(FTransform(Rotation, Middle + FVector(0.f, 0.f, TapeHeight), Scale), true);
+			}
+		}
+	}
 }
 
 bool APlot::IsLocationInside(const FVector& WorldLocation) const
 {
 	constexpr float Tolerance = 1.f;
-	return BoundsVolume->Bounds.GetBox().ExpandBy(Tolerance).IsInside(WorldLocation);
+
+	// The footprint is the root box (flat); the volume rises from the ground by VolumeHeight, which scales with the plot.
+	const FBox Footprint = BoundsVolume->Bounds.GetBox();
+	const double Ground = GetGroundZ();
+	const FBox Volume(FVector(Footprint.Min.X, Footprint.Min.Y, Ground), FVector(Footprint.Max.X, Footprint.Max.Y, Ground + VolumeHeight * GetActorScale3D().Z));
+	return Volume.ExpandBy(Tolerance).IsInside(WorldLocation);
 }
 
 float APlot::GetPlaneZ(int32 BuildLevel, int32 RoofStep, float VerticalOffset) const
@@ -196,6 +332,6 @@ void APlot::Tick(float DeltaTime)
 
 	if (bShowDebugBounds)
 	{
-		DrawDebugBox(GetWorld(), BoundsVolume->GetComponentLocation(), BoundsVolume->GetScaledBoxExtent(), BoundsVolume->GetComponentQuat(), DebugColor, false, -1.f, 0, 3.f);
+		DrawDebugBox(GetWorld(), VolumeGuide->GetComponentLocation(), VolumeGuide->GetScaledBoxExtent(), VolumeGuide->GetComponentQuat(), DebugColor, false, -1.f, 0, 3.f);
 	}
 }

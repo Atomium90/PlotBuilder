@@ -23,9 +23,14 @@ void ADetectionZone::BeginPlay()
 	UpdateVisual();
 }
 
+bool ADetectionZone::Accepts(AActor* Actor) const
+{
+	return Actor && Actor->Implements<UInteractable>();
+}
+
 void ADetectionZone::OnZoneBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (OtherActor && OtherActor->Implements<UInteractable>())
+	if (Accepts(OtherActor))
 	{
 		OverlappingInteractables.Add(OtherActor);
 		UpdateVisual();
