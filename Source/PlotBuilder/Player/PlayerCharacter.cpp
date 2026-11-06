@@ -385,6 +385,19 @@ void APlayerCharacter::DebugDamageFocus(float Amount)
 	}
 }
 
+void APlayerCharacter::SetBuildingAllowed(bool bAllowed)
+{
+	if (BuildModeComponent)
+	{
+		BuildModeComponent->SetAllowed(bAllowed);
+	}
+
+	if (HotbarComponent)
+	{
+		HotbarComponent->SetAllowed(bAllowed);
+	}
+}
+
 void APlayerCharacter::DebugShowStability(bool bShow)
 {
 	APlot* Plot = Cast<APlot>(UGameplayStatics::GetActorOfClass(GetWorld(), APlot::StaticClass()));

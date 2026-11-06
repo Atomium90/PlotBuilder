@@ -239,6 +239,14 @@ public:
 	/** Returns CrushDetectionComponent subobject **/
 	UCrushDetectionComponent* GetCrushDetectionComponent() const { return CrushDetectionComponent; }
 
+	/**
+	 *  Switches the building side of the game on or off in one call: Build Mode, and the hotbar's picking up,
+	 *  buying and placing (see UBuildModeComponent::SetAllowed, UHotbarComponent::SetAllowed). A mission level
+	 *  turns it off, leaving the tool belt and the hands as the only way to act on the house. On by default.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Player")
+	void SetBuildingAllowed(bool bAllowed);
+
 	/** Debug console command (open the console with ~, type "ListShop" + Enter): prints every ShopCatalog row's index, display name and cost, so Buy's index is known without any UI. */
 	UFUNCTION(Exec, Category = "Debug")
 	void ListShop() const;

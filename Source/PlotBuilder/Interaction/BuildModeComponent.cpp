@@ -66,9 +66,19 @@ void UBuildModeComponent::ToggleBuildMode()
 	{
 		ExitBuildMode();
 	}
-	else
+	else if (bAllowed)
 	{
 		EnterBuildMode();
+	}
+}
+
+void UBuildModeComponent::SetAllowed(bool bNewAllowed)
+{
+	bAllowed = bNewAllowed;
+
+	if (!bAllowed && bIsActive)
+	{
+		ExitBuildMode();
 	}
 }
 

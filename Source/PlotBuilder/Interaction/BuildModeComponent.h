@@ -104,7 +104,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Build Mode")
 	bool IsBuildModeActive() const { return bIsActive; }
 
+	/**
+	 *  Whether Build Mode can be entered at all. A mission turns it off (APlayerCharacter::SetBuildingAllowed):
+	 *  turning it off while active leaves Build Mode first.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Build Mode")
+	void SetAllowed(bool bNewAllowed);
+
+	UFUNCTION(BlueprintPure, Category = "Build Mode")
+	bool IsAllowed() const { return bAllowed; }
+
 private:
+
+	bool bAllowed = true;
 
 	void EnterBuildMode();
 	void ExitBuildMode();

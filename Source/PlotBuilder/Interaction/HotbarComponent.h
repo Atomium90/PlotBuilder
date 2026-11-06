@@ -128,6 +128,17 @@ public:
 	bool IsInfiniteMoney() const { return bInfiniteMoney; }
 
 	/**
+	 *  Whether the inventory side of the game works: picking a prop up (E), buying, placing a prop from the hotbar.
+	 *  A mission turns it off (APlayerCharacter::SetBuildingAllowed): the tool belt is the only way to take a house
+	 *  apart there. Pieces check it too, before a Placed one can be demolished by hand (ABuildablePiece::Interact).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	void SetAllowed(bool bNewAllowed) { bAllowed = bNewAllowed; }
+
+	UFUNCTION(BlueprintPure, Category = "Hotbar")
+	bool IsAllowed() const { return bAllowed; }
+
+	/**
 	 *  Destroys ActorToStore and adds its class to the first slot that fits (see AddItem) - an
 	 *  existing stack of the same class/scale with room first, an empty slot otherwise. Fails if the
 	 *  grid is completely full for this item (no matching stack with room, no empty slot).
@@ -222,6 +233,9 @@ private:
 	const struct FShopItemRow* FindCatalogRowFor(TSubclassOf<AActor> ActorClass) const;
 
 	void SetSelectedIndex(int32 NewIndex);
+
+	/** See SetAllowed. */
+	bool bAllowed = true;
 
 	UPROPERTY()
 	TArray<FInventorySlot> Slots;

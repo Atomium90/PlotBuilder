@@ -113,7 +113,7 @@ void UHotbarComponent::SetSelectedIndex(int32 NewIndex)
 
 bool UHotbarComponent::Store(AActor* ActorToStore)
 {
-	if (!ActorToStore)
+	if (!ActorToStore || !bAllowed)
 	{
 		return false;
 	}
@@ -157,7 +157,7 @@ TSubclassOf<AActor> UHotbarComponent::PopLast()
 
 bool UHotbarComponent::PurchaseRow(FName RowName)
 {
-	if (!ShopCatalog)
+	if (!ShopCatalog || !bAllowed)
 	{
 		return false;
 	}
@@ -193,7 +193,7 @@ void UHotbarComponent::TryPlace()
 {
 	FInventorySlot SelectedEntry;
 
-	if (!GetSelectedEntry(SelectedEntry) || !SelectedEntry.ActorClass)
+	if (!bAllowed || !GetSelectedEntry(SelectedEntry) || !SelectedEntry.ActorClass)
 	{
 		return;
 	}

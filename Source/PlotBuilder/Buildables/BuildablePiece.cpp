@@ -98,6 +98,14 @@ void ABuildablePiece::Interact_Implementation(AActor* InteractingActor)
 
 	if (State == EBuildablePieceState::Placed)
 	{
+		// In a mission the hotbar is off and a house only comes down through the tools: no free demolition by hand.
+		const UHotbarComponent* Hotbar = InteractingActor ? InteractingActor->FindComponentByClass<UHotbarComponent>() : nullptr;
+
+		if (Hotbar && !Hotbar->IsAllowed())
+		{
+			return;
+		}
+
 		Demolish();
 	}
 }
