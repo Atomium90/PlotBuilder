@@ -197,6 +197,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetPropCount() const { return Props.Num(); }
 
+	/** Every piece this generator placed and still owns (a stale entry is a piece already demolished: check the pointer). The contract binding reads them. */
+	const TArray<TWeakObjectPtr<ABuildablePiece>>& GetPieces() const { return Pieces; }
+
+	/** Every prop this generator spawned and still owns (a stale entry is a prop already broken). */
+	const TArray<TWeakObjectPtr<APhysicsProp>>& GetProps() const { return Props; }
+
+	/** Storey of the room Prop was placed in, 0 for a prop this generator did not place. */
+	int32 GetPropLevel(APhysicsProp* Prop) const;
+
 	/**
 	 *  The current house's standing, 1 (basic) to 3 (high end), rolled from the seed when it was furnished: it
 	 *  tilts every room's furniture towards rows of that quality tier. 0 for an empty house, or one with no
@@ -314,6 +323,9 @@ private:
 
 	/** Furniture this generator spawned and still owns: Clear() destroys it with the pieces. */
 	TArray<TWeakObjectPtr<APhysicsProp>> Props;
+
+	/** Storey each prop was furnished on (the room's level), for the contract binding. Cleared with the house. */
+	TMap<TWeakObjectPtr<APhysicsProp>, int32> PropLevels;
 
 	/** Rooms of the current house, every storey, in emission order. Cleared with the house. */
 	TArray<FRoom> Rooms;

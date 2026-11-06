@@ -936,6 +936,7 @@ void AHouseGenerator::Clear()
 	}
 
 	Props.Reset();
+	PropLevels.Reset();
 	Pieces.Reset();
 	Rooms.Reset();
 	Edges.Reset();
@@ -947,6 +948,13 @@ void AHouseGenerator::Clear()
 	VariantTierSum = 0;
 	VariantPropCount = 0;
 	LayoutHash = 0;
+}
+
+int32 AHouseGenerator::GetPropLevel(APhysicsProp* Prop) const
+{
+	// Out of line: the header only forward-declares APhysicsProp, and a weak pointer needs the full type.
+	const int32* Level = PropLevels.Find(Prop);
+	return Level ? *Level : 0;
 }
 
 int32 AHouseGenerator::RollStanding(FRandomStream& Stream) const
@@ -2351,6 +2359,7 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 		Prop->GetMeshComponent()->SetMassOverrideInKg(NAME_None, Item.Row->Mass, true);
 
 		Props.Add(Prop);
+		PropLevels.Add(Prop, Room.Level);
 		Floor.Taken.Add(FBox2D(Spot.Box.Min - FVector2D(PropGap, PropGap), Spot.Box.Max + FVector2D(PropGap, PropGap)));
 
 		LayoutHash = HashCombine(LayoutHash, GetTypeHash(Item.Row->PropClass->GetPathName()));
