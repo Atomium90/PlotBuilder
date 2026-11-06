@@ -4,6 +4,7 @@
 #include "Destruction/DurabilityComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 UStructuralSupportComponent::UStructuralSupportComponent()
 {
@@ -13,6 +14,9 @@ UStructuralSupportComponent::UStructuralSupportComponent()
 void UStructuralSupportComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// Named scopes for Unreal Insights (T5): one Structural.Recompute per frame at most, however many pieces fell.
+	TRACE_CPUPROFILER_EVENT_SCOPE_STR("Structural.Tick");
 
 	if (bRecomputeDirty)
 	{
@@ -948,6 +952,8 @@ void UStructuralSupportComponent::RefreshCompromisedQueue()
 
 void UStructuralSupportComponent::RecomputeStability()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE_STR("Structural.Recompute");
+
 	const TMap<ABuildablePiece*, int32> HopDistances = ComputeHopDistances();
 	RecentlyVacatedCells.Reset();
 
