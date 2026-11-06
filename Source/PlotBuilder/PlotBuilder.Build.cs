@@ -18,7 +18,8 @@ public class PlotBuilder : ModuleRules
 			"Slate"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "GeometryCollectionEngine" });
+		// ProceduralMeshComponent: the mission ground is a mesh built from a height function at the start of the level.
+		PrivateDependencyModuleNames.AddRange(new string[] { "GeometryCollectionEngine", "ProceduralMeshComponent" });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"PlotBuilder"

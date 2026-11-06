@@ -8,6 +8,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Environment/DropZone.h"
+#include "Environment/MissionGround.h"
 #include "Environment/ProtectedZone.h"
 #include "StructuralRules.h"
 #include "StructuralSupportComponent.h"
@@ -292,22 +293,27 @@ void APlot::BeginPlay()
 	// Sanity check for the GetGroundZ()/GetGridOrigin() authoring convention (plot pivot = ground
 	// surface, at the center of a grid cell) - a warning here is the first thing to check if grid
 	// placement ends up floating or buried.
-	FHitResult Hit;
-	const FVector Start = GetActorLocation() + FVector(0.f, 0.f, 50.f);
-	const FVector End = GetActorLocation() - FVector(0.f, 0.f, 500.f);
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this);
+	// A mission level builds its ground after the plot starts (the director does it, flush with the pivot by construction):
+	// there is nothing to hit yet, so the check would only warn for nothing.
+	if (!AMissionGround::Find(this))
+	{
+		FHitResult Hit;
+		const FVector Start = GetActorLocation() + FVector(0.f, 0.f, 50.f);
+		const FVector End = GetActorLocation() - FVector(0.f, 0.f, 500.f);
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this);
 
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, QueryParams))
-	{
-		if (FMath::Abs(Hit.Location.Z - GetActorLocation().Z) > 1.f)
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, QueryParams))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("APlot '%s': ground hit at Z=%.1f is more than 1cm from the plot's own pivot Z=%.1f - GetGroundZ() assumes they match."), *GetName(), Hit.Location.Z, GetActorLocation().Z);
+			if (FMath::Abs(Hit.Location.Z - GetActorLocation().Z) > 1.f)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("APlot '%s': ground hit at Z=%.1f is more than 1cm from the plot's own pivot Z=%.1f - GetGroundZ() assumes they match."), *GetName(), Hit.Location.Z, GetActorLocation().Z);
+			}
 		}
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("APlot '%s': no WorldStatic ground found below the plot's pivot - GetGroundZ() assumes the pivot sits at ground level."), *GetName());
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("APlot '%s': no WorldStatic ground found below the plot's pivot - GetGroundZ() assumes the pivot sits at ground level."), *GetName());
+		}
 	}
 
 	// Authoring convention: the plot's footprint should be a whole number of room cells (200cm) on
