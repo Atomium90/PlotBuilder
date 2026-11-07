@@ -65,7 +65,7 @@ public:
 
 	/**
 	 *  Fewest storeys this archetype may be given, by the seed or by the mission. 0 = no range: the house always has
-	 *  Floors storeys. A range only works with plans that repeat their typical storey (UHouseLayout::bRepeatTypicalStorey),
+	 *  Floors storeys. A range only works with plans that repeat their typical storeys (UHouseLayout::bRepeatTypicalStorey),
 	 *  since any other plan has a fixed number of grids.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "0", ClampMax = "30"))

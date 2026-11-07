@@ -306,6 +306,13 @@ private:
 	int32 RollStanding(FRandomStream& Stream) const;
 
 	/**
+	 *  The standing the furniture of a storey leans towards: the house's, moved by the standing of that storey's plan
+	 *  (LevelStandingShifts), kept in 1..3. The house's own for a plan that does not repeat storeys, and for an empty house.
+	 *  No draw: the shift is data, so the stream is the same with or without it.
+	 */
+	int32 StandingOfLevel(int32 Level) const;
+
+	/**
 	 *  Rolls the roof shape from the archetype's weights, tilted by the footprint (RoofShapeBias), then the axis a square
 	 *  footprint's gable would take. Always two draws, so the stream after the roof does not depend on the weights or the
 	 *  shape. bOutRidgeAlongX is the ridge's axis for a two-sided roof: the longer side, a draw on a square.
@@ -378,6 +385,9 @@ private:
 
 	/** See GetStanding. Cleared with the house. */
 	int32 Standing = 0;
+
+	/** Per storey, how many standing steps its furniture moves from Standing: copied from the chosen plan (UHouseLayout::LevelStandingShifts), empty when the plan has none. Cleared with the house. */
+	TArray<int32> LevelStandingShifts;
 
 	/** See GetRoofShape, and a few words on how it got built (ridge axis, a fallback), for the result line. Cleared with the house. */
 	EHouseRoof RoofShape = EHouseRoof::None;

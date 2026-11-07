@@ -100,6 +100,15 @@ struct FLayoutLevel
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
 	TArray<FString> Rows;
+
+	/**
+	 *  Only for the typical storeys of a plan with bRepeatTypicalStorey: how well off this storey is, 1 (basic) to 3 (high
+	 *  end). It decides how often the generator stacks this storey at each height (high standings go up, see
+	 *  UHouseLayout::StandingFalloff) and how far the furniture of its rooms moves from the house's own standing: 2 changes
+	 *  nothing, 3 leans one tier better, 1 one tier worse. Ignored on every other grid.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout", meta = (ClampMin = "1", ClampMax = "3"))
+	int32 Standing = 2;
 };
 
 /** Block of cells in the text grid of a layout, inclusive on both ends. Row 0 is the first string, column 0 its first character. */
@@ -197,33 +206,59 @@ class UHouseLayout : public UDataAsset
 public:
 
 	/**
-	 *  One grid per storey, ground floor first. The bungalow has one. With bRepeatTypicalStorey: exactly two, the ground
-	 *  floor and the one typical storey that is repeated.
+	 *  One grid per storey, ground floor first. The bungalow has one. With bRepeatTypicalStorey: the ground floor, then one
+	 *  or more typical storeys (2 to 5 is the intended range) that the generator draws from for every storey above it.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
 	TArray<FLayoutLevel> Levels;
 
 	/**
-	 *  Apartment-block mode: Levels holds the ground floor then ONE typical storey, and the generator repeats the typical
-	 *  storey up to the number of storeys the house is given (UHouseArchetype::Floors, MinFloors..MaxFloors), so one plan
-	 *  makes a block of 3, 5 or 10 storeys. Each copy gets its own letters (the plan uses one letter per room, unique
-	 *  across storeys; the copies take free characters), its own swap groups and its own links.
+	 *  Apartment-block mode: Levels holds the ground floor, then the typical storeys (Levels[1], Levels[2]...), and the
+	 *  generator fills every storey above the ground floor with one of them, up to the number of storeys the house is given
+	 *  (UHouseArchetype::Floors, MinFloors..MaxFloors). One plan makes a block of 3, 5 or 10 storeys, each storey drawn
+	 *  from the seed (DrawTypicalStoreys). Each copy gets its own letters (the plan uses one letter per room, unique across
+	 *  all the grids; the copies take free characters), its own swap groups and its own links.
 	 *
-	 *  The flights alternate, so two stairwells never sit on top of each other: Stairs holds exactly two entries, Level 0
-	 *  and Level 1, and the flight leaving storey L is the entry with Level == L % 2 (the ground floor takes the first,
-	 *  the first typical storey the second, the next typical storey the first again). Both flights' cells must lie in the
-	 *  typical storey's hall, in different rows: see ThreeStoreyA, where they are on rows 0 and 1.
+	 *  All the typical storeys share the same stair core. The flights alternate, so two stairwells never sit on top of each
+	 *  other: Stairs holds exactly two entries, Level 0 and Level 1, and the flight leaving storey L is the entry with
+	 *  Level == L % 2 (the ground floor takes the first, the first typical storey the second, the next one the first again).
+	 *  Both flights' cells must lie in the hall of every typical storey, in different rows: see ThreeStoreyA, where they are
+	 *  on rows 0 and 1. Parse checks every typical storey under each of the two flights, and every pair of neighbours.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout|Repeat")
 	bool bRepeatTypicalStorey = false;
 
 	/**
-	 *  A copy of this plan (bRepeatTypicalStorey) with Floors storeys, as a plain plan the generator can parse and resolve
-	 *  like any other: the ground floor, then the typical storey Floors - 1 times. The copy is transient and owned by Outer,
-	 *  whose owner must keep it referenced for as long as it is used. Null, with the reason in OutError, if this plan cannot
-	 *  be expanded (not in repeat mode, wrong shape, a flight missing, out of free letters).
+	 *  How strongly the height steers the draw of the typical storeys. Storey s of a block of F gets a target standing that
+	 *  rises from 1 (lowest storey above the ground floor) to 3 (top storey); a typical storey is drawn with a weight of
+	 *  StandingFalloff ^ (distance between its Standing and that target). 1 = the height does not matter, every typical
+	 *  storey is as likely anywhere; 0.5 = the high-end storey is four times as likely as the basic one at the top, and the
+	 *  other way round at the bottom.
 	 */
-	UHouseLayout* ExpandForFloors(int32 Floors, UObject* Outer, FString& OutError) const;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout|Repeat", meta = (ClampMin = "0.01", ClampMax = "1", EditCondition = "bRepeatTypicalStorey"))
+	float StandingFalloff = 0.5f;
+
+	/**
+	 *  Which typical storey stands at each storey above the ground floor of a block of Floors storeys: the returned array
+	 *  has Floors - 1 entries, entry i is the index into Levels minus one (0 = Levels[1]) for storey i + 1. One draw per
+	 *  storey, whatever the weights. Empty if the plan does not repeat or has no typical storey.
+	 */
+	TArray<int32> DrawTypicalStoreys(int32 Floors, FRandomStream& Stream) const;
+
+	/**
+	 *  A copy of this plan (bRepeatTypicalStorey) as a plain plan the generator can parse and resolve like any other: the
+	 *  ground floor, then one typical storey per entry of TypicalPicks (the index of the typical storey, 0 = Levels[1]), so
+	 *  the copy has TypicalPicks.Num() + 1 storeys. The copy is transient and owned by Outer, whose owner must keep it
+	 *  referenced for as long as it is used. Null, with the reason in OutError, if this plan cannot be expanded (not in repeat
+	 *  mode, no typical storey, a flight missing, a letter used by two grids, a link across grids, out of free letters).
+	 */
+	UHouseLayout* ExpandForFloors(const TArray<int32>& TypicalPicks, UObject* Outer, FString& OutError) const;
+
+	/**
+	 *  Set on a plan made by ExpandForFloors: for each storey, how many standing steps the furniture of its rooms moves from
+	 *  the house's standing (the typical storey's Standing minus 2; 0 for the ground floor). Empty on every other plan.
+	 */
+	TArray<int32> LevelStandingShifts;
 
 	/** Letter to room type, in the order the rooms are numbered. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")

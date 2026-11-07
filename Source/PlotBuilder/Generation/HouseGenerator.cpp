@@ -948,6 +948,7 @@ void AHouseGenerator::Clear()
 	StairRuns.Reset();
 	ActiveFloors = 0;
 	Standing = 0;
+	LevelStandingShifts.Reset();
 	RoofShape = EHouseRoof::None;
 	RoofNote.Reset();
 	VariantTierSum = 0;
@@ -999,6 +1000,17 @@ int32 AHouseGenerator::RollStanding(FRandomStream& Stream) const
 	}
 
 	return Picked;
+}
+
+int32 AHouseGenerator::StandingOfLevel(int32 Level) const
+{
+	// No standing (an empty house, or no furnishing table), or a plan that does not repeat storeys: the house's own.
+	if (Standing <= 0 || !LevelStandingShifts.IsValidIndex(Level))
+	{
+		return Standing;
+	}
+
+	return FMath::Clamp(Standing + LevelStandingShifts[Level], 1, FMath::Max(3, Standing));
 }
 
 EHouseRoof AHouseGenerator::RollRoof(FRandomStream& Stream, int32 Width, int32 Depth, bool& bOutRidgeAlongX) const
@@ -1420,14 +1432,19 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 			continue;
 		}
 
-		// A plan that repeats its typical storey becomes a plan of exactly this many storeys, then goes through the same checks.
+		// A plan that repeats its typical storeys becomes a plan of exactly this many storeys, then goes through the same checks.
 		const UHouseLayout* Plan = Candidate.Get();
 		FString PlanName = Candidate->GetName();
 
 		if (Candidate->bRepeatTypicalStorey)
 		{
+			// Which typical storey goes where comes from a stream of its own, derived from the seed: the draws of the footprint, the
+			// doors and the furniture do not move when a plan gets more typical storeys, and every repeating plan draws the same way.
+			FRandomStream StoreyStream(static_cast<int32>(HashCombine(GetTypeHash(Stream.GetInitialSeed()), 0x57015E1u)));
+			const TArray<int32> Picks = Candidate->DrawTypicalStoreys(Floors, StoreyStream);
+
 			FString ExpandError;
-			UHouseLayout* Expanded = Candidate->ExpandForFloors(Floors, this, ExpandError);
+			UHouseLayout* Expanded = Candidate->ExpandForFloors(Picks, this, ExpandError);
 
 			if (!Expanded)
 			{
@@ -1438,6 +1455,19 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 			ExpandedLayouts.Add(Expanded);
 			Plan = Expanded;
 			PlanName = FString::Printf(TEXT("%s x%d"), *Candidate->GetName(), Floors);
+
+			// With several typical storeys, say which one stands at each storey (1 = Levels[1]), lowest first: the debug line of the draw.
+			if (Candidate->Levels.Num() > 2)
+			{
+				FString Sequence;
+
+				for (const int32 Pick : Picks)
+				{
+					Sequence += FString::Printf(TEXT("%s%d"), Sequence.IsEmpty() ? TEXT("") : TEXT(" "), Pick + 1);
+				}
+
+				PlanName += FString::Printf(TEXT(" [storeys %s]"), *Sequence);
+			}
 		}
 
 		FParsedLayout Parsed;
@@ -1492,6 +1522,7 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 	{
 		const int32 Pick = Stream.RandRange(0, UsableLayouts.Num() - 1);
 		Layout = UsableLayouts[Pick].Key;
+		LevelStandingShifts = Layout->LevelStandingShifts;
 		Layout->Resolve(UsableLayouts[Pick].Value, Archetype->MinRoomCells, Archetype->MaxRoomCells, FIntPoint(FreeX, FreeY), Stream, Resolved);
 		Width = Resolved.Rows;
 		Depth = Resolved.Columns;
@@ -2239,10 +2270,13 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 
 	// The row's Weight, scaled down by how many tiers its quality is from the house's standing. Only the odds between the
 	// rows of one group move: a group with a single row keeps all of its weight and is furnished at any standing.
+	// The room's own standing: the house's, moved by the standing of its storey's plan (a block's penthouse floor leans higher
+	// than its basic floors). Same as the house's for every plan that does not repeat storeys.
 	const float TierFalloff = FMath::Clamp(Archetype->TierMismatchFalloff, 0.01f, 1.f);
-	const auto EffectiveWeight = [this, TierFalloff](const FFurnishingRuleRow& Row)
+	const int32 RoomStanding = StandingOfLevel(Room.Level);
+	const auto EffectiveWeight = [RoomStanding, TierFalloff](const FFurnishingRuleRow& Row)
 	{
-		return FMath::Max(0.f, Row.Weight) * FMath::Pow(TierFalloff, static_cast<float>(FMath::Abs(Row.QualityTier - Standing)));
+		return FMath::Max(0.f, Row.Weight) * FMath::Pow(TierFalloff, static_cast<float>(FMath::Abs(Row.QualityTier - RoomStanding)));
 	};
 
 	for (const FName& Group : GroupOrder)

@@ -66,7 +66,56 @@ namespace
 	}
 }
 
-UHouseLayout* UHouseLayout::ExpandForFloors(int32 Floors, UObject* Outer, FString& OutError) const
+TArray<int32> UHouseLayout::DrawTypicalStoreys(int32 Floors, FRandomStream& Stream) const
+{
+	TArray<int32> Picks;
+	const int32 VariantCount = Levels.Num() - 1;
+
+	if (!bRepeatTypicalStorey || VariantCount < 1)
+	{
+		return Picks;
+	}
+
+	const float Falloff = FMath::Clamp(StandingFalloff, 0.01f, 1.f);
+
+	for (int32 Storey = 1; Storey < Floors; ++Storey)
+	{
+		// 0 at the lowest storey above the ground floor, 1 at the top one (a block with a single such storey sits in the middle).
+		const float Height = Floors > 2 ? static_cast<float>(Storey - 1) / static_cast<float>(Floors - 2) : 0.5f;
+		const float Target = 1.f + 2.f * Height;
+
+		TArray<float> Weights;
+		float Total = 0.f;
+
+		for (int32 Variant = 0; Variant < VariantCount; ++Variant)
+		{
+			const float Weight = FMath::Pow(Falloff, FMath::Abs(static_cast<float>(Levels[Variant + 1].Standing) - Target));
+			Weights.Add(Weight);
+			Total += Weight;
+		}
+
+		// One draw per storey, even with a single typical storey: the number of draws depends on the block, not on the weights.
+		float Remaining = Stream.FRand() * Total;
+		int32 Picked = VariantCount - 1;
+
+		for (int32 Variant = 0; Variant < VariantCount; ++Variant)
+		{
+			if (Remaining < Weights[Variant])
+			{
+				Picked = Variant;
+				break;
+			}
+
+			Remaining -= Weights[Variant];
+		}
+
+		Picks.Add(Picked);
+	}
+
+	return Picks;
+}
+
+UHouseLayout* UHouseLayout::ExpandForFloors(const TArray<int32>& TypicalPicks, UObject* Outer, FString& OutError) const
 {
 	if (!bRepeatTypicalStorey)
 	{
@@ -74,13 +123,25 @@ UHouseLayout* UHouseLayout::ExpandForFloors(int32 Floors, UObject* Outer, FStrin
 		return nullptr;
 	}
 
-	if (Levels.Num() != 2)
+	// Levels[0] is the ground floor, Levels[1..] are the typical storeys the picks choose from.
+	const int32 VariantCount = Levels.Num() - 1;
+
+	if (VariantCount < 1)
 	{
-		OutError = FString::Printf(TEXT("bRepeatTypicalStorey needs exactly 2 grids in Levels (the ground floor, then the typical storey), there are %d"), Levels.Num());
+		OutError = FString::Printf(TEXT("bRepeatTypicalStorey needs the ground floor then at least one typical storey in Levels, there are %d grid(s)"), Levels.Num());
 		return nullptr;
 	}
 
-	Floors = FMath::Max(1, Floors);
+	for (const int32 Pick : TypicalPicks)
+	{
+		if (Pick < 0 || Pick >= VariantCount)
+		{
+			OutError = FString::Printf(TEXT("Typical storey %d does not exist: the plan has %d"), Pick, VariantCount);
+			return nullptr;
+		}
+	}
+
+	const int32 Floors = TypicalPicks.Num() + 1;
 
 	// The flight leaving storey L is the entry authored for Level L % 2.
 	const auto FlightOfParity = [this](int32 Parity) -> const FLayoutStair*
@@ -106,7 +167,8 @@ UHouseLayout* UHouseLayout::ExpandForFloors(int32 Floors, UObject* Outer, FStrin
 	// Every character a grid or the legend already uses is taken: the copies get the free ones.
 	TSet<int32> Used;
 	TSet<int32> InGround;
-	TSet<int32> InTypical;
+	TArray<TSet<int32>> InVariant;
+	InVariant.SetNum(VariantCount);
 
 	for (const FString& Row : Levels[0].Rows)
 	{
@@ -117,12 +179,15 @@ UHouseLayout* UHouseLayout::ExpandForFloors(int32 Floors, UObject* Outer, FStrin
 		}
 	}
 
-	for (const FString& Row : Levels[1].Rows)
+	for (int32 Variant = 0; Variant < VariantCount; ++Variant)
 	{
-		for (const TCHAR Letter : Row)
+		for (const FString& Row : Levels[Variant + 1].Rows)
 		{
-			Used.Add(KeyOf(Letter));
-			InTypical.Add(KeyOf(Letter));
+			for (const TCHAR Letter : Row)
+			{
+				Used.Add(KeyOf(Letter));
+				InVariant[Variant].Add(KeyOf(Letter));
+			}
 		}
 	}
 
@@ -134,26 +199,59 @@ UHouseLayout* UHouseLayout::ExpandForFloors(int32 Floors, UObject* Outer, FStrin
 		}
 	}
 
-	// The legend entries of the typical storey, by index: the letters its grid draws.
-	TArray<int32> TypicalLegend;
+	// The legend entries of each typical storey, by index: the letters its grid draws. A letter belongs to one grid only.
+	TArray<TArray<int32>> VariantLegend;
+	VariantLegend.SetNum(VariantCount);
+	TMap<int32, int32> VariantOfLetter;
+	TSet<int32> TypicalLegendIndices;
 
 	for (int32 Index = 0; Index < Legend.Num(); ++Index)
 	{
 		const FString& Letter = Legend[Index].Letter;
 
-		if (Letter.Len() == 1 && InTypical.Contains(KeyOf(Letter[0])))
+		if (Letter.Len() != 1)
 		{
-			if (InGround.Contains(KeyOf(Letter[0])))
+			continue;
+		}
+
+		const int32 Key = KeyOf(Letter[0]);
+		int32 Owner = INDEX_NONE;
+
+		for (int32 Variant = 0; Variant < VariantCount; ++Variant)
+		{
+			if (!InVariant[Variant].Contains(Key))
 			{
-				OutError = FString::Printf(TEXT("The letter '%s' is used on both the ground floor and the typical storey: use a different letter for each room"), *Letter);
+				continue;
+			}
+
+			if (InGround.Contains(Key))
+			{
+				OutError = FString::Printf(TEXT("The letter '%s' is used on both the ground floor and a typical storey: use a different letter for each room"), *Letter);
 				return nullptr;
 			}
 
-			TypicalLegend.Add(Index);
+			if (Owner != INDEX_NONE)
+			{
+				OutError = FString::Printf(TEXT("The letter '%s' is used by two typical storeys (Levels[%d] and Levels[%d]): use a different letter for each room"), *Letter, Owner + 1, Variant + 1);
+				return nullptr;
+			}
+
+			Owner = Variant;
+		}
+
+		if (Owner != INDEX_NONE)
+		{
+			VariantLegend[Owner].Add(Index);
+			VariantOfLetter.Add(Key, Owner);
+			TypicalLegendIndices.Add(Index);
 		}
 	}
 
-	const auto IsTypicalLetter = [&InTypical, &KeyOf](const FString& Letter) { return Letter.Len() == 1 && InTypical.Contains(KeyOf(Letter[0])); };
+	// The typical storey a link's letter belongs to, or null (a ground-floor room, or a letter Parse will report).
+	const auto VariantOf = [&VariantOfLetter, &KeyOf](const FString& Letter) -> const int32*
+	{
+		return Letter.Len() == 1 ? VariantOfLetter.Find(KeyOf(Letter[0])) : nullptr;
+	};
 
 	UHouseLayout* Out = NewObject<UHouseLayout>(Outer, MakeUniqueObjectName(Outer, UHouseLayout::StaticClass(), FName(*FString::Printf(TEXT("%s_x%d"), *GetName(), Floors))), RF_Transient);
 	Out->bAllowMirrorX = bAllowMirrorX;
@@ -162,21 +260,31 @@ UHouseLayout* UHouseLayout::ExpandForFloors(int32 Floors, UObject* Outer, FStrin
 	Out->RowStretch = RowStretch;
 	Out->ColumnStretch = ColumnStretch;
 	Out->Levels.Add(Levels[0]);
+	Out->LevelStandingShifts.Add(0);
 
 	for (int32 Index = 0; Index < Legend.Num(); ++Index)
 	{
-		if (!TypicalLegend.Contains(Index))
+		if (!TypicalLegendIndices.Contains(Index))
 		{
 			Out->Legend.Add(Legend[Index]);
 		}
 	}
 
-	// A link that does not name two typical rooms is the ground floor's (or a mistake Parse will report): kept as written, once.
+	// A link between two ground-floor rooms (or one Parse will report) is kept as written, once. A link inside a typical storey is
+	// copied for each storey built from it, below. A link across two grids can never work: reported here, whatever the picks.
 	for (const FLayoutLink& Link : Links)
 	{
-		if (!(IsTypicalLetter(Link.RoomA) && IsTypicalLetter(Link.RoomB)))
+		const int32* VariantA = VariantOf(Link.RoomA);
+		const int32* VariantB = VariantOf(Link.RoomB);
+
+		if (!VariantA && !VariantB)
 		{
 			Out->Links.Add(Link);
+		}
+		else if (!VariantA || !VariantB || *VariantA != *VariantB)
+		{
+			OutError = FString::Printf(TEXT("The link %s-%s joins rooms of two different grids: a link only joins rooms of the same storey plan"), *Link.RoomA, *Link.RoomB);
+			return nullptr;
 		}
 	}
 
@@ -198,15 +306,20 @@ UHouseLayout* UHouseLayout::ExpandForFloors(int32 Floors, UObject* Outer, FStrin
 		return NextLetter++;
 	};
 
+	TArray<bool> VariantUsed;
+	VariantUsed.Init(false, VariantCount);
+
 	for (int32 Storey = 1; Storey < Floors; ++Storey)
 	{
-		// The first typical storey keeps the plan's letters, the copies take free ones.
+		const int32 Variant = TypicalPicks[Storey - 1];
+
+		// The first storey built from a typical plan keeps its letters, the next ones take free characters.
 		TMap<int32, TCHAR> Remap;
 
-		for (const int32 Index : TypicalLegend)
+		for (const int32 Index : VariantLegend[Variant])
 		{
 			const TCHAR Original = Legend[Index].Letter[0];
-			const TCHAR Letter = Storey == 1 ? Original : TakeLetter();
+			const TCHAR Letter = VariantUsed[Variant] ? TakeLetter() : Original;
 
 			if (Letter == TEXT('\0'))
 			{
@@ -228,9 +341,12 @@ UHouseLayout* UHouseLayout::ExpandForFloors(int32 Floors, UObject* Outer, FStrin
 			Out->Legend.Add(Def);
 		}
 
-		FLayoutLevel Grid;
+		VariantUsed[Variant] = true;
 
-		for (const FString& Row : Levels[1].Rows)
+		FLayoutLevel Grid;
+		Grid.Standing = Levels[Variant + 1].Standing;
+
+		for (const FString& Row : Levels[Variant + 1].Rows)
 		{
 			FString Copy = Row;
 
@@ -246,10 +362,13 @@ UHouseLayout* UHouseLayout::ExpandForFloors(int32 Floors, UObject* Outer, FStrin
 		}
 
 		Out->Levels.Add(Grid);
+		Out->LevelStandingShifts.Add(Grid.Standing - 2);
 
 		for (const FLayoutLink& Link : Links)
 		{
-			if (IsTypicalLetter(Link.RoomA) && IsTypicalLetter(Link.RoomB))
+			const int32* VariantA = VariantOf(Link.RoomA);
+
+			if (VariantA && *VariantA == Variant)
 			{
 				FLayoutLink Copy;
 				Copy.RoomA = FString::Chr(Remap[KeyOf(Link.RoomA[0])]);
@@ -274,21 +393,75 @@ bool UHouseLayout::Parse(FParsedLayout& OutLayout, TArray<FString>& OutErrors) c
 	OutLayout = FParsedLayout();
 	OutErrors.Reset();
 
-	// A plan that repeats its typical storey is checked through a four-storey expansion (the ground floor and three typical
-	// storeys), so both flights are tried. The result is that of the expansion: the generator expands to the real count first.
+	// A plan that repeats its typical storeys is checked through expansions. A storey meets two flights (the one that arrives
+	// and the one that leaves), which flight is which depends on the storey's parity, and a typical storey can sit on or under
+	// any other: so every ordered pair of typical storeys is stacked twice, once as the first two storeys above the ground floor
+	// and once with a copy of the lower one beneath. The result is that of the first valid probe: the generator expands to the
+	// real count first.
 	if (bRepeatTypicalStorey)
 	{
-		constexpr int32 ProbeFloors = 4;
-		FString ExpandError;
-		const UHouseLayout* Probe = ExpandForFloors(ProbeFloors, GetTransientPackage(), ExpandError);
+		const int32 VariantCount = Levels.Num() - 1;
 
-		if (!Probe)
+		if (VariantCount < 1)
 		{
-			OutErrors.Add(ExpandError);
+			OutErrors.Add(FString::Printf(TEXT("bRepeatTypicalStorey needs the ground floor then at least one typical storey in Levels, there are %d grid(s)"), Levels.Num()));
 			return false;
 		}
 
-		return Probe->Parse(OutLayout, OutErrors);
+		TArray<TArray<int32>> Probes;
+
+		for (int32 Below = 0; Below < VariantCount; ++Below)
+		{
+			for (int32 Above = 0; Above < VariantCount; ++Above)
+			{
+				Probes.Add(TArray<int32>{Below, Above});
+				Probes.Add(TArray<int32>{Below, Below, Above});
+			}
+		}
+
+		TSet<FString> Reported;
+		bool bHaveLayout = false;
+
+		for (const TArray<int32>& Probe : Probes)
+		{
+			FString Stacked;
+
+			for (const int32 Pick : Probe)
+			{
+				Stacked += FString::Printf(TEXT("%sLevels[%d]"), Stacked.IsEmpty() ? TEXT("") : TEXT(", "), Pick + 1);
+			}
+
+			FString ExpandError;
+			FParsedLayout ProbeLayout;
+			TArray<FString> ProbeErrors;
+			const UHouseLayout* Expanded = ExpandForFloors(Probe, GetTransientPackage(), ExpandError);
+
+			if (!Expanded)
+			{
+				ProbeErrors.Add(ExpandError);
+			}
+			else
+			{
+				Expanded->Parse(ProbeLayout, ProbeErrors);
+			}
+
+			for (const FString& Error : ProbeErrors)
+			{
+				if (!Reported.Contains(Error))
+				{
+					Reported.Add(Error);
+					OutErrors.Add(FString::Printf(TEXT("%s (typical storeys stacked, lowest first: %s)"), *Error, *Stacked));
+				}
+			}
+
+			if (!bHaveLayout && ProbeErrors.IsEmpty())
+			{
+				OutLayout = ProbeLayout;
+				bHaveLayout = true;
+			}
+		}
+
+		return OutErrors.IsEmpty();
 	}
 
 	if (Levels.IsEmpty())
