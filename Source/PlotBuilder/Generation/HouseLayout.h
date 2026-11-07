@@ -196,9 +196,34 @@ class UHouseLayout : public UDataAsset
 
 public:
 
-	/** One grid per storey, ground floor first. The bungalow has one. */
+	/**
+	 *  One grid per storey, ground floor first. The bungalow has one. With bRepeatTypicalStorey: exactly two, the ground
+	 *  floor and the one typical storey that is repeated.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")
 	TArray<FLayoutLevel> Levels;
+
+	/**
+	 *  Apartment-block mode: Levels holds the ground floor then ONE typical storey, and the generator repeats the typical
+	 *  storey up to the number of storeys the house is given (UHouseArchetype::Floors, MinFloors..MaxFloors), so one plan
+	 *  makes a block of 3, 5 or 10 storeys. Each copy gets its own letters (the plan uses one letter per room, unique
+	 *  across storeys; the copies take free characters), its own swap groups and its own links.
+	 *
+	 *  The flights alternate, so two stairwells never sit on top of each other: Stairs holds exactly two entries, Level 0
+	 *  and Level 1, and the flight leaving storey L is the entry with Level == L % 2 (the ground floor takes the first,
+	 *  the first typical storey the second, the next typical storey the first again). Both flights' cells must lie in the
+	 *  typical storey's hall, in different rows: see ThreeStoreyA, where they are on rows 0 and 1.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout|Repeat")
+	bool bRepeatTypicalStorey = false;
+
+	/**
+	 *  A copy of this plan (bRepeatTypicalStorey) with Floors storeys, as a plain plan the generator can parse and resolve
+	 *  like any other: the ground floor, then the typical storey Floors - 1 times. The copy is transient and owned by Outer,
+	 *  whose owner must keep it referenced for as long as it is used. Null, with the reason in OutError, if this plan cannot
+	 *  be expanded (not in repeat mode, wrong shape, a flight missing, out of free letters).
+	 */
+	UHouseLayout* ExpandForFloors(int32 Floors, UObject* Outer, FString& OutError) const;
 
 	/** Letter to room type, in the order the rooms are numbered. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Layout")

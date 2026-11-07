@@ -56,9 +56,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size")
 	int32 FallbackSeed = 1;
 
-	/** Number of storeys, the ground floor included. */
+	/**
+	 *  Number of storeys, the ground floor included. With a range (MinFloors / MaxFloors below) it is the default: the
+	 *  count a house gets when neither the seed's draw (AHouseGenerator::bRandomFloors) nor the mission (FloorsOverride) asks for another.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "1"))
 	int32 Floors = 1;
+
+	/**
+	 *  Fewest storeys this archetype may be given, by the seed or by the mission. 0 = no range: the house always has
+	 *  Floors storeys. A range only works with plans that repeat their typical storey (UHouseLayout::bRepeatTypicalStorey),
+	 *  since any other plan has a fixed number of grids.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "0", ClampMax = "30"))
+	int32 MinFloors = 0;
+
+	/** Most storeys this archetype may be given. Must be at least MinFloors for the range to count. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "0", ClampMax = "30"))
+	int32 MaxFloors = 0;
 
 	/** A reinforcement slab replaces the normal floor slab every N storeys (GDD §8, D28). 0 = never. Irrelevant under 2 storeys. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "0"))

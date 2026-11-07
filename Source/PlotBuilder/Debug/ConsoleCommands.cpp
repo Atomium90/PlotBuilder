@@ -202,7 +202,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbGenerateHouseCommand(
 
 static FAutoConsoleCommandWithWorldAndArgs PbSpawnHouseCommand(
 	TEXT("pb.SpawnHouse"),
-	TEXT("pb.SpawnHouse <archetype> [seed] - switches the level's AHouseGenerator to the first of its KnownArchetypes whose asset name contains <archetype> (any case), then builds a house from the seed (default 1) like pb.GenerateHouse. The archetype stays selected, so pb.TestHouses and pb.GenerateHouse then use it."),
+	TEXT("pb.SpawnHouse <archetype> [seed] [floors] - switches the level's AHouseGenerator to the first of its KnownArchetypes whose asset name contains <archetype> (any case), then builds a house from the seed (default 1) like pb.GenerateHouse. The archetype stays selected, so pb.TestHouses and pb.GenerateHouse then use it. floors (for an archetype with a floor range, the apartment block): a number forces the storey count, random lets the seed draw it, default (or nothing) uses the archetype's. It stays set for the next pb.GenerateHouse and pb.TestHouses."),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 	{
 		if (!World)
@@ -212,7 +212,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbSpawnHouseCommand(
 
 		if (Args.IsEmpty())
 		{
-			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.SpawnHouse: usage pb.SpawnHouse <archetype> [seed], e.g. pb.SpawnHouse bungalow 3"));
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.SpawnHouse: usage pb.SpawnHouse <archetype> [seed] [floors], e.g. pb.SpawnHouse bungalow 3 or pb.SpawnHouse apartment 3 8"));
 			return;
 		}
 
@@ -225,6 +225,14 @@ static FAutoConsoleCommandWithWorldAndArgs PbSpawnHouseCommand(
 				// Same reset as pb.GenerateHouse: a debug setting left from an earlier call never leaks into this one.
 				It->DebugForcedFailures = 0;
 				It->bKeepUnstableHouse = false;
+
+				// Floors are set on every call (no argument = the archetype's default), so an earlier call's value never leaks into this one.
+				if (!It->SetFloorsFromText(Args.Num() > 2 ? Args[2] : TEXT("default")))
+				{
+					UE_LOG(LogPlotBuilder, Warning, TEXT("pb.SpawnHouse: floors '%s' is not a number, 'random' or 'default', the archetype's default is used"), *Args[2]);
+					It->SetFloorsFromText(TEXT("default"));
+				}
+
 				It->GenerateValid(Seed);
 			}
 

@@ -160,6 +160,15 @@ bool AMissionDirector::StartMission()
 		House->SelectArchetype(ArchetypeOption);
 	}
 
+	// Storeys, for an archetype with a floor range (the apartment block): "Floors=8" forces the count, "Floors=random" lets the
+	// seed draw it, "Floors=default" goes back to the archetype's. Without the option the generator keeps its own settings.
+	const FString FloorsOption = UGameplayStatics::ParseOption(Options, TEXT("Floors"));
+
+	if (!FloorsOption.IsEmpty() && !House->SetFloorsFromText(FloorsOption))
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AMissionDirector: the Floors option '%s' is not a number, 'random' or 'default', it is ignored."), *FloorsOption);
+	}
+
 	int32 Seed = DefaultSeed;
 
 	if (DebugSeed >= 0)
@@ -210,7 +219,8 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel)
 		return;
 	}
 
-	const int32 StoreyCount = House->Archetype ? FMath::Max(1, House->Archetype->Floors) : 1;
+	// The storeys the house was really built with: an archetype with a floor range can give several counts.
+	const int32 StoreyCount = House->GetFloorCount() > 0 ? House->GetFloorCount() : (House->Archetype ? FMath::Max(1, House->Archetype->Floors) : 1);
 
 	// A partial demolition with no storey given takes one from the seed the house was really built from.
 	if (Type == EContractType::PartialDemolition && FromLevel <= 0 && StoreyCount >= 2)

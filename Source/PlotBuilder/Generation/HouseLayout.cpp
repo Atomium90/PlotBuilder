@@ -1,4 +1,5 @@
 #include "HouseLayout.h"
+#include "UObject/Package.h"
 
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
@@ -65,10 +66,230 @@ namespace
 	}
 }
 
+UHouseLayout* UHouseLayout::ExpandForFloors(int32 Floors, UObject* Outer, FString& OutError) const
+{
+	if (!bRepeatTypicalStorey)
+	{
+		OutError = TEXT("bRepeatTypicalStorey is off: this plan is used as written");
+		return nullptr;
+	}
+
+	if (Levels.Num() != 2)
+	{
+		OutError = FString::Printf(TEXT("bRepeatTypicalStorey needs exactly 2 grids in Levels (the ground floor, then the typical storey), there are %d"), Levels.Num());
+		return nullptr;
+	}
+
+	Floors = FMath::Max(1, Floors);
+
+	// The flight leaving storey L is the entry authored for Level L % 2.
+	const auto FlightOfParity = [this](int32 Parity) -> const FLayoutStair*
+	{
+		return Stairs.FindByPredicate([Parity](const FLayoutStair& Stair) { return Stair.Level == Parity; });
+	};
+
+	if (Floors >= 2 && !FlightOfParity(0))
+	{
+		OutError = TEXT("bRepeatTypicalStorey needs a flight in Stairs with Level 0 (the one leaving the ground floor)");
+		return nullptr;
+	}
+
+	if (Floors >= 3 && !FlightOfParity(1))
+	{
+		OutError = TEXT("bRepeatTypicalStorey needs a flight in Stairs with Level 1 (the one leaving a typical storey, on other cells than the Level 0 flight)");
+		return nullptr;
+	}
+
+	// Letters are keyed by their character code: TCHAR has no portable hash.
+	const auto KeyOf = [](TCHAR Letter) { return static_cast<int32>(Letter); };
+
+	// Every character a grid or the legend already uses is taken: the copies get the free ones.
+	TSet<int32> Used;
+	TSet<int32> InGround;
+	TSet<int32> InTypical;
+
+	for (const FString& Row : Levels[0].Rows)
+	{
+		for (const TCHAR Letter : Row)
+		{
+			Used.Add(KeyOf(Letter));
+			InGround.Add(KeyOf(Letter));
+		}
+	}
+
+	for (const FString& Row : Levels[1].Rows)
+	{
+		for (const TCHAR Letter : Row)
+		{
+			Used.Add(KeyOf(Letter));
+			InTypical.Add(KeyOf(Letter));
+		}
+	}
+
+	for (const FLayoutRoomDef& Def : Legend)
+	{
+		if (Def.Letter.Len() == 1)
+		{
+			Used.Add(KeyOf(Def.Letter[0]));
+		}
+	}
+
+	// The legend entries of the typical storey, by index: the letters its grid draws.
+	TArray<int32> TypicalLegend;
+
+	for (int32 Index = 0; Index < Legend.Num(); ++Index)
+	{
+		const FString& Letter = Legend[Index].Letter;
+
+		if (Letter.Len() == 1 && InTypical.Contains(KeyOf(Letter[0])))
+		{
+			if (InGround.Contains(KeyOf(Letter[0])))
+			{
+				OutError = FString::Printf(TEXT("The letter '%s' is used on both the ground floor and the typical storey: use a different letter for each room"), *Letter);
+				return nullptr;
+			}
+
+			TypicalLegend.Add(Index);
+		}
+	}
+
+	const auto IsTypicalLetter = [&InTypical, &KeyOf](const FString& Letter) { return Letter.Len() == 1 && InTypical.Contains(KeyOf(Letter[0])); };
+
+	UHouseLayout* Out = NewObject<UHouseLayout>(Outer, MakeUniqueObjectName(Outer, UHouseLayout::StaticClass(), FName(*FString::Printf(TEXT("%s_x%d"), *GetName(), Floors))), RF_Transient);
+	Out->bAllowMirrorX = bAllowMirrorX;
+	Out->bAllowMirrorY = bAllowMirrorY;
+	Out->EntranceRoom = EntranceRoom;
+	Out->RowStretch = RowStretch;
+	Out->ColumnStretch = ColumnStretch;
+	Out->Levels.Add(Levels[0]);
+
+	for (int32 Index = 0; Index < Legend.Num(); ++Index)
+	{
+		if (!TypicalLegend.Contains(Index))
+		{
+			Out->Legend.Add(Legend[Index]);
+		}
+	}
+
+	// A link that does not name two typical rooms is the ground floor's (or a mistake Parse will report): kept as written, once.
+	for (const FLayoutLink& Link : Links)
+	{
+		if (!(IsTypicalLetter(Link.RoomA) && IsTypicalLetter(Link.RoomB)))
+		{
+			Out->Links.Add(Link);
+		}
+	}
+
+	TCHAR NextLetter = TEXT('!');
+
+	const auto TakeLetter = [&Used, &NextLetter, &KeyOf]() -> TCHAR
+	{
+		while (NextLetter <= TEXT('~') && (Used.Contains(KeyOf(NextLetter)) || NextLetter == TEXT('.')))
+		{
+			++NextLetter;
+		}
+
+		if (NextLetter > TEXT('~'))
+		{
+			return TEXT('\0');
+		}
+
+		Used.Add(KeyOf(NextLetter));
+		return NextLetter++;
+	};
+
+	for (int32 Storey = 1; Storey < Floors; ++Storey)
+	{
+		// The first typical storey keeps the plan's letters, the copies take free ones.
+		TMap<int32, TCHAR> Remap;
+
+		for (const int32 Index : TypicalLegend)
+		{
+			const TCHAR Original = Legend[Index].Letter[0];
+			const TCHAR Letter = Storey == 1 ? Original : TakeLetter();
+
+			if (Letter == TEXT('\0'))
+			{
+				OutError = FString::Printf(TEXT("Out of free characters for the letters of %d storeys: the plan has too many rooms per storey for this many storeys"), Floors);
+				return nullptr;
+			}
+
+			Remap.Add(KeyOf(Original), Letter);
+
+			FLayoutRoomDef Def = Legend[Index];
+			Def.Letter = FString::Chr(Letter);
+
+			// A swap group stays inside its storey.
+			if (!Def.SwapGroup.IsNone())
+			{
+				Def.SwapGroup = FName(*FString::Printf(TEXT("%s.%d"), *Def.SwapGroup.ToString(), Storey));
+			}
+
+			Out->Legend.Add(Def);
+		}
+
+		FLayoutLevel Grid;
+
+		for (const FString& Row : Levels[1].Rows)
+		{
+			FString Copy = Row;
+
+			for (TCHAR& Letter : Copy)
+			{
+				if (const TCHAR* Mapped = Remap.Find(KeyOf(Letter)))
+				{
+					Letter = *Mapped;
+				}
+			}
+
+			Grid.Rows.Add(Copy);
+		}
+
+		Out->Levels.Add(Grid);
+
+		for (const FLayoutLink& Link : Links)
+		{
+			if (IsTypicalLetter(Link.RoomA) && IsTypicalLetter(Link.RoomB))
+			{
+				FLayoutLink Copy;
+				Copy.RoomA = FString::Chr(Remap[KeyOf(Link.RoomA[0])]);
+				Copy.RoomB = FString::Chr(Remap[KeyOf(Link.RoomB[0])]);
+				Out->Links.Add(Copy);
+			}
+		}
+	}
+
+	for (int32 Storey = 0; Storey + 1 < Floors; ++Storey)
+	{
+		FLayoutStair Flight = *FlightOfParity(Storey % 2);
+		Flight.Level = Storey;
+		Out->Stairs.Add(Flight);
+	}
+
+	return Out;
+}
+
 bool UHouseLayout::Parse(FParsedLayout& OutLayout, TArray<FString>& OutErrors) const
 {
 	OutLayout = FParsedLayout();
 	OutErrors.Reset();
+
+	// A plan that repeats its typical storey is checked through a four-storey expansion (the ground floor and three typical
+	// storeys), so both flights are tried. The result is that of the expansion: the generator expands to the real count first.
+	if (bRepeatTypicalStorey)
+	{
+		constexpr int32 ProbeFloors = 4;
+		FString ExpandError;
+		const UHouseLayout* Probe = ExpandForFloors(ProbeFloors, GetTransientPackage(), ExpandError);
+
+		if (!Probe)
+		{
+			OutErrors.Add(ExpandError);
+			return false;
+		}
+
+		return Probe->Parse(OutLayout, OutErrors);
+	}
 
 	if (Levels.IsEmpty())
 	{

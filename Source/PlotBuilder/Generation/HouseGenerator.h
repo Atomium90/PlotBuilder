@@ -108,6 +108,22 @@ public:
 	int32 Seed = 1;
 
 	/**
+	 *  Storeys the next houses must have, 0 = not forced (the archetype's default, or the seed's draw if bRandomFloors).
+	 *  Clamped to the archetype's MinFloors..MaxFloors. An archetype with no range ignores it, since its plans have a fixed
+	 *  number of storeys. The mission sets it from its Floors option (Floors=8); pb.SpawnHouse from its third argument.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation", meta = (ClampMin = "0", ClampMax = "30"))
+	int32 FloorsOverride = 0;
+
+	/**
+	 *  The seed draws the number of storeys in the archetype's MinFloors..MaxFloors, so the same archetype gives blocks of
+	 *  different heights. FloorsOverride wins over it. Off = the archetype's default count. The draw happens only for an
+	 *  archetype with a range, so the houses of every other archetype stay exactly as they were.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Generation")
+	bool bRandomFloors = false;
+
+	/**
 	 *  Where the player arrives from (the truck drop-off in a mission). When set, the door goes on the
 	 *  side of the house that faces it: the face the line from the house centre to this actor leaves
 	 *  through. Empty, or standing inside the footprint, the door can be on any side.
@@ -193,6 +209,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetPieceCount() const { return Pieces.Num(); }
 
+	/** Storeys of the current house (the ground floor included): the count it was really built with, 0 when there is none. */
+	UFUNCTION(BlueprintPure, Category = "Generation")
+	int32 GetFloorCount() const { return ActiveFloors; }
+
+	/** Reads "random" (the seed draws the count) or a number (forced) into the two floor settings. False, nothing changed, for anything else. */
+	bool SetFloorsFromText(const FString& Text);
+
 	/** Furniture the current house has (props are not pieces: they are not in the structural graph). */
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetPropCount() const { return Props.Num(); }
@@ -229,6 +252,13 @@ private:
 
 	/** Whole emission: footprint, foundation, then storey by storey the slabs and walls, then the roof. False if a piece could not be placed. */
 	bool EmitHouse(FRandomStream& Stream);
+
+	/**
+	 *  How many storeys this house gets: FloorsOverride if set, else a draw in the archetype's range if bRandomFloors, else
+	 *  the archetype's Floors. Clamped to the range when there is one. The only draw it makes, and only for an archetype
+	 *  with a range and bRandomFloors, so every other house keeps its stream as it was.
+	 */
+	int32 ResolveFloors(FRandomStream& Stream) const;
 
 	/**
 	 *  Cuts one storey's footprint into rooms and places the partition walls (GDD §9.2, step 4). The
@@ -338,6 +368,13 @@ private:
 
 	/** Stair flights of the current house, from the plan's Stairs. Cleared with the house. */
 	TArray<FStairRun> StairRuns;
+
+	/** See GetFloorCount. Set by EmitHouse, cleared with the house. */
+	int32 ActiveFloors = 0;
+
+	/** The plans of this attempt that were expanded to ActiveFloors storeys (UHouseLayout::ExpandForFloors): kept here so they are not collected while the house is built. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UHouseLayout>> ExpandedLayouts;
 
 	/** See GetStanding. Cleared with the house. */
 	int32 Standing = 0;

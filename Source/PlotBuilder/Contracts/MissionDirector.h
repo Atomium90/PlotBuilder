@@ -17,7 +17,8 @@ class UDataTable;
  *
  *  What the mission is comes from the level's travel options, so the hub can send the player there with a plain
  *  OpenLevel: "Lvl_Mission?Seed=7?Archetype=twostorey?Type=partial?From=1". Anything missing falls back to the
- *  defaults below. pb.SetSeed overrides the seed for the rest of the session, for demos and tests. The contract
+ *  defaults below. For an archetype with a floor range, "?Floors=8" forces the storey count and "?Floors=random" lets the
+ *  seed draw it. pb.SetSeed overrides the seed for the rest of the session, for demos and tests. The contract
  *  subsystem will replace the option reading: it will set the same values from the active contract.
  *
  *  The result (the target and must-stay sets) is stored on the level's plot (APlot::GetMissionSets), which is

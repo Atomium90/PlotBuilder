@@ -693,6 +693,8 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 	int32 MaxProps = 0;
 	int32 MinPosts = MAX_int32;
 	int32 MaxPosts = 0;
+	int32 MinFloorsSeen = MAX_int32;
+	int32 MaxFloorsSeen = 0;
 	int32 ValidCount = 0;
 
 	for (int32 Offset = 0; Offset < Count; ++Offset)
@@ -739,6 +741,8 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 		MaxProps = FMath::Max(MaxProps, Props.Num());
 		MinPosts = FMath::Min(MinPosts, PostVertices.Num());
 		MaxPosts = FMath::Max(MaxPosts, PostVertices.Num());
+		MinFloorsSeen = FMath::Min(MinFloorsSeen, ActiveFloors);
+		MaxFloorsSeen = FMath::Max(MaxFloorsSeen, ActiveFloors);
 
 		// T6: asking again for the same seed must give the same house, furniture included.
 		if (!GenerateValid(TestSeed) || GetLayoutHash() != FirstHash || Seed != FirstEffectiveSeed)
@@ -786,7 +790,7 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 		Result.Add(FString::Printf(TEXT("Re-rolled or fallback: %s"), *Join(Rerolled)));
 		Result.Add(FString::Printf(TEXT("Same seed twice (T6): %d of %d gave the same hash (differs: %s)"), ValidCount - HashDiffers.Num(), ValidCount, *Join(HashDiffers)));
 		Result.Add(FString::Printf(TEXT("Houses with each room type (of %d): %s"), ValidCount, *TypeLine));
-		Result.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d | support posts per house: %d to %d"), MinProps, MaxProps, MinPosts, MaxPosts) : FString(TEXT("Props per house: no valid house")));
+		Result.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d | support posts per house: %d to %d | storeys: %d to %d"), MinProps, MaxProps, MinPosts, MaxPosts, MinFloorsSeen, MaxFloorsSeen) : FString(TEXT("Props per house: no valid house")));
 
 		// The standing leans the furniture: the average tier of the props that had a choice should rise with it.
 		for (int32 Index = 0; Index < StandingCount; ++Index)
@@ -904,7 +908,7 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 	DrawRoomsDebug();
 	// Four short lines: on screen a line that is too long runs off the edge, and the end (the hash) is what one reads it for.
 	ReportResult(true, FString::Printf(TEXT("House seed %d: %d pieces, %d x %d cells, %d storey(s), stable, hash %08X\n%d room(s) [%s], %s\n%d prop(s), standing %d | %d post(s) | %d stair flight(s) | door %s\nroof %s"),
-		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, Archetype->Floors), LayoutHash, Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), Standing, PostVertices.Num(), StairRuns.Num(), *LastDoorSide, *RoofNote));
+		Seed, PlacedCount, LastSize.X, LastSize.Y, FMath::Max(1, ActiveFloors), LayoutHash, Rooms.Num(), *RoomTypeTally(Rooms), *LastLayoutNote, Props.Num(), Standing, PostVertices.Num(), StairRuns.Num(), *LastDoorSide, *RoofNote));
 	return true;
 }
 
@@ -942,6 +946,7 @@ void AHouseGenerator::Clear()
 	Edges.Reset();
 	PostVertices.Reset();
 	StairRuns.Reset();
+	ActiveFloors = 0;
 	Standing = 0;
 	RoofShape = EHouseRoof::None;
 	RoofNote.Reset();
@@ -1041,7 +1046,7 @@ EHouseRoof AHouseGenerator::RollRoof(FRandomStream& Stream, int32 Width, int32 D
 
 bool AHouseGenerator::EmitRoof(FRandomStream& Stream, const FRoomRect& Footprint)
 {
-	const int32 Floors = FMath::Max(1, Archetype->Floors);
+	const int32 Floors = FMath::Max(1, ActiveFloors);
 	const int32 Width = Footprint.Width();
 	const int32 Depth = Footprint.Depth();
 
@@ -1302,6 +1307,67 @@ bool AHouseGenerator::SelectArchetype(const FString& NameFragment)
 	return false;
 }
 
+int32 AHouseGenerator::ResolveFloors(FRandomStream& Stream) const
+{
+	const int32 Default = FMath::Max(1, Archetype->Floors);
+
+	// 0 on either end means no range: the plans of this archetype have a fixed number of storeys.
+	const bool bHasRange = Archetype->MinFloors > 0 && Archetype->MaxFloors >= Archetype->MinFloors;
+
+	if (!bHasRange)
+	{
+		if (FloorsOverride > 0 && FloorsOverride != Default)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' has no MinFloors/MaxFloors range, the request for %d storeys is ignored (%d storey(s) built)"), *GetName(), *Archetype->GetName(), FloorsOverride, Default);
+		}
+
+		return Default;
+	}
+
+	const int32 Low = Archetype->MinFloors;
+	const int32 High = Archetype->MaxFloors;
+
+	if (FloorsOverride > 0)
+	{
+		return FMath::Clamp(FloorsOverride, Low, High);
+	}
+
+	if (bRandomFloors && Low < High)
+	{
+		return Stream.RandRange(Low, High);
+	}
+
+	return FMath::Clamp(Default, Low, High);
+}
+
+bool AHouseGenerator::SetFloorsFromText(const FString& Text)
+{
+	if (Text.Equals(TEXT("random"), ESearchCase::IgnoreCase))
+	{
+		bRandomFloors = true;
+		FloorsOverride = 0;
+		return true;
+	}
+
+	if (Text.Equals(TEXT("default"), ESearchCase::IgnoreCase))
+	{
+		bRandomFloors = false;
+		FloorsOverride = 0;
+		return true;
+	}
+
+	const int32 Value = FCString::Atoi(*Text);
+
+	if (Value > 0 && Text.IsNumeric())
+	{
+		bRandomFloors = false;
+		FloorsOverride = Value;
+		return true;
+	}
+
+	return false;
+}
+
 bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 {
 	const UStructuralRules* Rules = Plot->GetStructuralSupport()->Rules;
@@ -1323,7 +1389,10 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 		return false;
 	}
 
-	const int32 Floors = FMath::Max(1, Archetype->Floors);
+	// The storey count first: the only draw that can come before the plan's, and only for an archetype with a range and bRandomFloors.
+	const int32 Floors = ResolveFloors(Stream);
+	ActiveFloors = Floors;
+	ExpandedLayouts.Reset();
 
 	// A house of several storeys is only worth building if the upper ones can be reached: every storey change needs a flight.
 	const auto HasFlightForEveryStorey = [Floors](const FParsedLayout& Parsed)
@@ -1340,7 +1409,9 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 	};
 
 	// Hand-written plans the archetype offers that can be built here: valid, one grid per storey, small enough for the plot.
+	// PlanNames: what to call each plan in the result line (an expanded plan is named after the one it was made from).
 	TArray<TPair<const UHouseLayout*, FParsedLayout>> UsableLayouts;
+	TMap<const UHouseLayout*, FString> PlanNames;
 
 	for (const TObjectPtr<UHouseLayout>& Candidate : Archetype->Layouts)
 	{
@@ -1349,38 +1420,59 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 			continue;
 		}
 
+		// A plan that repeats its typical storey becomes a plan of exactly this many storeys, then goes through the same checks.
+		const UHouseLayout* Plan = Candidate.Get();
+		FString PlanName = Candidate->GetName();
+
+		if (Candidate->bRepeatTypicalStorey)
+		{
+			FString ExpandError;
+			UHouseLayout* Expanded = Candidate->ExpandForFloors(Floors, this, ExpandError);
+
+			if (!Expanded)
+			{
+				UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: %s"), *GetName(), *Candidate->GetName(), *ExpandError);
+				continue;
+			}
+
+			ExpandedLayouts.Add(Expanded);
+			Plan = Expanded;
+			PlanName = FString::Printf(TEXT("%s x%d"), *Candidate->GetName(), Floors);
+		}
+
 		FParsedLayout Parsed;
 		TArray<FString> Errors;
 
-		if (!Candidate->Parse(Parsed, Errors))
+		if (!Plan->Parse(Parsed, Errors))
 		{
 			for (const FString& Error : Errors)
 			{
-				UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: %s"), *GetName(), *Candidate->GetName(), *Error);
+				UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: %s"), *GetName(), *PlanName, *Error);
 			}
 		}
-		else if (Candidate->Levels.Num() != Floors)
+		else if (Plan->Levels.Num() != Floors)
 		{
-			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: it has %d storey(s), the archetype has %d"), *GetName(), *Candidate->GetName(), Candidate->Levels.Num(), Floors);
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: it has %d storey(s), the house needs %d"), *GetName(), *PlanName, Plan->Levels.Num(), Floors);
 		}
 		else if (!HasFlightForEveryStorey(Parsed))
 		{
-			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: the archetype has %d storeys and the plan lacks a flight of stairs for one of the storey changes"), *GetName(), *Candidate->GetName(), Floors);
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: the house has %d storeys and the plan lacks a flight of stairs for one of the storey changes"), *GetName(), *PlanName, Floors);
 		}
 		else if (Parsed.Rows > FreeX || Parsed.Columns > FreeY)
 		{
-			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: it is %d x %d cells, the plot holds %d x %d"), *GetName(), *Candidate->GetName(), Parsed.Rows, Parsed.Columns, FreeX, FreeY);
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': layout '%s' skipped: it is %d x %d cells, the plot holds %d x %d"), *GetName(), *PlanName, Parsed.Rows, Parsed.Columns, FreeX, FreeY);
 		}
 		else
 		{
-			UsableLayouts.Emplace(Candidate.Get(), MoveTemp(Parsed));
+			PlanNames.Add(Plan, PlanName);
+			UsableLayouts.Emplace(Plan, MoveTemp(Parsed));
 		}
 	}
 
 	// Without a plan the random split has no stairs to give, so a house of several storeys cannot be built.
 	if (Floors > 1 && (UsableLayouts.IsEmpty() || !Archetype->StairsClass))
 	{
-		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' has %d storeys: it needs a usable plan with stairs and a StairsClass, nothing is built"), *GetName(), *Archetype->GetName(), Floors);
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' asks for %d storeys: it needs a usable plan with stairs and a StairsClass, nothing is built"), *GetName(), *Archetype->GetName(), Floors);
 		return false;
 	}
 
@@ -1542,7 +1634,7 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 			StairRuns.Add(Run);
 		}
 
-		LastLayoutNote = FString::Printf(TEXT("plan %s%s%s"), *Layout->GetName(), bMirrorX ? TEXT(" mirrored X") : TEXT(""), bMirrorY ? TEXT(" mirrored Y") : TEXT(""));
+		LastLayoutNote = FString::Printf(TEXT("plan %s%s%s"), *PlanNames.FindRef(Layout), bMirrorX ? TEXT(" mirrored X") : TEXT(""), bMirrorY ? TEXT(" mirrored Y") : TEXT(""));
 	}
 	else
 	{
