@@ -56,6 +56,24 @@ void UHotbarComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActo
 	}
 }
 
+void UHotbarComponent::RestoreSlots(const TArray<FInventorySlot>& NewSlots)
+{
+	const int32 Total = FMath::Max(NumColumns * NumRows, 0);
+
+	Slots.Reset();
+	Slots.SetNum(Total);
+
+	for (int32 Index = 0; Index < FMath::Min(NewSlots.Num(), Total); ++Index)
+	{
+		Slots[Index] = NewSlots[Index];
+	}
+
+	CursorSlot.Reset();
+
+	OnCursorSlotChanged.Broadcast();
+	OnInventoryChanged.Broadcast();
+}
+
 bool UHotbarComponent::SlotQualifies(const FInventorySlot& Slot, bool bBuildablesOnly)
 {
 	if (Slot.IsEmpty())

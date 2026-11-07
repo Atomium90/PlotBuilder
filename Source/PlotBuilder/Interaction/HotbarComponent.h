@@ -222,6 +222,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	bool ReturnCursorSlot();
 
+	/**
+	 *  Replaces the whole grid with NewSlots (same row-major layout as GetSlots; extra slots are dropped, missing ones
+	 *  are empty) and empties the cursor. For the home restore: the inventory the player left comes back as it was.
+	 */
+	void RestoreSlots(const TArray<FInventorySlot>& NewSlots);
+
 private:
 
 	static bool SlotQualifies(const FInventorySlot& Slot, bool bBuildablesOnly);

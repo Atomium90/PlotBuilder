@@ -166,6 +166,13 @@ public:
 	void FindUnstablePieces(TArray<ABuildablePiece*>& OutUnstable) const;
 
 	/**
+	 *  Every piece the graph holds right now: the ones placed through APlot::PlacePiece or registered by hand, not a piece
+	 *  that already started to fall, and not a child actor (door leaf, window glass), which never registers. The home
+	 *  snapshot reads this list instead of walking the world, so it sees exactly what a restore would put back.
+	 */
+	const TArray<TObjectPtr<ABuildablePiece>>& GetRegisteredPieces() const { return RegisteredPieces; }
+
+	/**
 	 *  Immediate D29 check for the "once when the piece enters Critical" case (HandleDurabilityStateChanged's
 	 *  transition to Critical) - RecomputeStability's own end-of-batch scan (see RecomputeStability)
 	 *  covers "again after each batch of destructions" for every other Critical load-bearing piece.

@@ -160,6 +160,13 @@ public:
 	uint8 GetOrientation() const { return Orientation; }
 	int32 GetRoofStep() const { return RoofStep; }
 
+	/**
+	 *  The scale APlot::PlacePiece was given, before the corner, height and wall-clearance biases touched the actor's
+	 *  own. The home snapshot stores this one: restoring the biased scale would bias it a second time on every visit.
+	 */
+	const FVector& GetPlacedScale() const { return PlacedScale; }
+	void SetPlacedScale(const FVector& NewScale) { PlacedScale = NewScale; }
+
 	/** Called once by UBuildModeComponent::ConfirmPlacement right after spawning a non-Legacy piece - never meaningful for a Legacy one. NewRoofStep defaults to 0 - meaningless for anything but a Roof_* piece. */
 	void SetGridPlacement(const FIntVector& NewGridCoord, uint8 NewOrientation, int32 NewRoofStep = 0) { GridCoord = NewGridCoord; Orientation = NewOrientation; RoofStep = NewRoofStep; }
 
@@ -292,6 +299,9 @@ private:
 	/** Fine vertical step, set alongside GridCoord - see FStructuralSocket::RoofStep. Always 0 and meaningless for anything but a Roof_* piece climbing a slope or stacking a gable infill. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Structural", meta = (AllowPrivateAccess = "true"))
 	int32 RoofStep = 0;
+
+	/** See GetPlacedScale. */
+	FVector PlacedScale = FVector::OneVector;
 
 	UPROPERTY()
 	TObjectPtr<UStructuralSupportComponent> StructuralComponent;

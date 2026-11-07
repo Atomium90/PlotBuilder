@@ -230,6 +230,7 @@ ABuildablePiece* APlot::PlacePiece(TSubclassOf<ABuildablePiece> PieceClass, cons
 	}
 
 	Piece->SetActorScale3D(Scale);
+	Piece->SetPlacedScale(Scale);
 	Piece->State = EBuildablePieceState::Placed;
 
 	// Corner parity bias (D21, visual only): nudges this wall-class piece's length (local Y - every
