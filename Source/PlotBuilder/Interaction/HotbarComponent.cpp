@@ -1,6 +1,7 @@
 #include "HotbarComponent.h"
 #include "ShopItemRow.h"
 #include "Buildables/BuildablePiece.h"
+#include "Progress/ProgressSubsystem.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 #include "Engine/World.h"
@@ -16,6 +17,22 @@ void UHotbarComponent::BeginPlay()
 	Super::BeginPlay();
 
 	Slots.SetNum(FMath::Max(NumColumns * NumRows, 0));
+
+	// The money outlives the pawn (hub, mission and home are different maps): the subsystem holds it, this component
+	// starts from it and writes every change back. The editor value of Money only matters when there is no subsystem.
+	if (UProgressSubsystem* Progress = UProgressSubsystem::Get(this))
+	{
+		Money = Progress->GetMoney();
+		OnMoneyChanged.AddDynamic(this, &UHotbarComponent::HandleMoneyChanged);
+	}
+}
+
+void UHotbarComponent::HandleMoneyChanged()
+{
+	if (UProgressSubsystem* Progress = UProgressSubsystem::Get(this))
+	{
+		Progress->SetMoney(Money);
+	}
 }
 
 void UHotbarComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

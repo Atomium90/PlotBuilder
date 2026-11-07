@@ -234,6 +234,10 @@ private:
 
 	void SetSelectedIndex(int32 NewIndex);
 
+	/** Bound to OnMoneyChanged: writes Money back to UProgressSubsystem, which is the source of truth across maps. */
+	UFUNCTION()
+	void HandleMoneyChanged();
+
 	/** See SetAllowed. */
 	bool bAllowed = true;
 

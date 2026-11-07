@@ -13,6 +13,7 @@
 #include "Environment/ProtectedZone.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "ProfilingDebugging/MiscTrace.h"
+#include "Progress/ProgressSubsystem.h"
 #include "Props/PhysicsProp.h"
 #include "Player/PlayerCharacter.h"
 #include "Interaction/HotbarComponent.h"
@@ -77,6 +78,47 @@ static FAutoConsoleCommandWithWorldAndArgs PbMoneyCommand(
 				Hotbar->SetMoney(FCString::Atoi(*Args[0]));
 			}
 		}
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbShowProgressCommand(
+	TEXT("pb.ShowProgress"),
+	TEXT("pb.ShowProgress - prints the saved progress (money, owned tools, parcel) on screen and in the log. It is kept across maps and across sessions in the Progress save slot."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		if (const UProgressSubsystem* Progress = UProgressSubsystem::Get(World))
+		{
+			Progress->ShowOnScreen(10.f);
+			return;
+		}
+
+		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.ShowProgress: no progress subsystem (no game instance)"));
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbResetProgressCommand(
+	TEXT("pb.ResetProgress"),
+	TEXT("pb.ResetProgress - back to a new game: 500 money, the hands and the sledgehammer, no parcel. Writes the Progress slot and updates the player's hotbar. Run it before a demo."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		UProgressSubsystem* Progress = UProgressSubsystem::Get(World);
+
+		if (!Progress)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.ResetProgress: no progress subsystem (no game instance)"));
+			return;
+		}
+
+		Progress->Reset();
+
+		// The hotbar keeps its own copy of the money for the map: bring it back in line.
+		if (APlayerCharacter* Character = GetDebugPlayerCharacter(World))
+		{
+			if (UHotbarComponent* Hotbar = Character->GetHotbarComponent())
+			{
+				Hotbar->SetMoney(Progress->GetMoney());
+			}
+		}
+
+		Progress->ShowOnScreen(10.f);
 	}));
 
 static FAutoConsoleCommandWithWorldAndArgs PbShowCollapseQueueCommand(
