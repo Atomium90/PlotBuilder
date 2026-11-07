@@ -6,6 +6,7 @@
 #include "PlotBuilder.h"
 #include "Buildables/BuildablePiece.h"
 #include "Contracts/MissionDirector.h"
+#include "Destruction/CrushDetectionComponent.h"
 #include "Destruction/Damageable.h"
 #include "Destruction/DemolitionTypes.h"
 #include "Environment/DropZone.h"
@@ -119,6 +120,20 @@ static FAutoConsoleCommandWithWorldAndArgs PbResetProgressCommand(
 		}
 
 		Progress->ShowOnScreen(10.f);
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbShowCrushCommand(
+	TEXT("pb.ShowCrush"),
+	TEXT("pb.ShowCrush 0|1 - toggles the on-screen crush gauge: the energy summed over the rolling window against the stun threshold (green, yellow, orange, red when stunned)."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		if (const APlayerCharacter* Character = GetDebugPlayerCharacter(World))
+		{
+			if (UCrushDetectionComponent* Crush = Character->GetCrushDetectionComponent())
+			{
+				Crush->SetShowGauge(ParseBoolArg(Args));
+			}
+		}
 	}));
 
 static FAutoConsoleCommandWithWorldAndArgs PbShowCollapseQueueCommand(

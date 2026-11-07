@@ -50,8 +50,11 @@ public:
 	/** Movement/camera/tool input should early-out while this is true - see APlayerCharacter's input handlers. */
 	bool IsStunned() const { return bIsStunned; }
 
-	/** Current summed crush energy within the rolling window - for the Nov 7 debug display, not wired to any UI yet. */
+	/** Current summed crush energy within the rolling window. Read by the on-screen gauge (SetShowGauge). */
 	float GetCurrentEnergy() const { return CurrentEnergy; }
+
+	/** Shows or hides the gauge: a text bar of the current energy against Rules->CrushThreshold, for tuning and the demo (pb.ShowCrush). */
+	void SetShowGauge(bool bShow) { bShowGauge = bShow; }
 
 	/**
 	 *  Shared "this counts as a safety penalty" log hook (GDD §6.5 - crush and an explosion on the
@@ -74,8 +77,15 @@ private:
 	void TriggerCrushEvent();
 	void EndStun();
 
+	/** Prints the gauge for this frame when it is on. */
+	void DrawGauge() const;
+
+	/** On-screen key of the gauge (7700 and up are reserved for the combat readouts). */
+	static constexpr int32 GaugeMessageKey = 7700;
+
 	TArray<FCrushHitRecord> RecentHits;
 	float CurrentEnergy = 0.f;
 	bool bIsStunned = false;
+	bool bShowGauge = false;
 	FTimerHandle StunTimerHandle;
 };

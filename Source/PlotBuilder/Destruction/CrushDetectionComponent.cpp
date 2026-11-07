@@ -3,6 +3,7 @@
 #include "Buildables/BuildablePiece.h"
 #include "Components/PrimitiveComponent.h"
 #include "Camera/CameraShakeBase.h"
+#include "Engine/Engine.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "PlotBuilder.h"
@@ -44,6 +45,7 @@ void UCrushDetectionComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	if (RecentHits.IsEmpty())
 	{
 		CurrentEnergy = 0.f;
+		DrawGauge();
 		return;
 	}
 
@@ -68,6 +70,26 @@ void UCrushDetectionComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	{
 		TriggerCrushEvent();
 	}
+
+	DrawGauge();
+}
+
+void UCrushDetectionComponent::DrawGauge() const
+{
+	if (!bShowGauge || !GEngine)
+	{
+		return;
+	}
+
+	const float Threshold = Rules ? Rules->CrushThreshold : 500.f;
+	const float Ratio = Threshold > 0.f ? FMath::Clamp(CurrentEnergy / Threshold, 0.f, 1.f) : 0.f;
+	const int32 BarLength = 20;
+	const int32 Filled = FMath::RoundToInt(Ratio * BarLength);
+	const FString Bar = FString::ChrN(Filled, TEXT('#')) + FString::ChrN(BarLength - Filled, TEXT('-'));
+	const FColor Colour = bIsStunned ? FColor::Red : (Ratio >= 0.75f ? FColor::Orange : (Ratio >= 0.4f ? FColor::Yellow : FColor::Green));
+
+	GEngine->AddOnScreenDebugMessage(GaugeMessageKey, 0.f, Colour,
+		FString::Printf(TEXT("Crush [%s] %.0f / %.0f%s"), *Bar, CurrentEnergy, Threshold, bIsStunned ? TEXT("  STUNNED") : TEXT("")));
 }
 
 void UCrushDetectionComponent::TriggerCrushEvent()
