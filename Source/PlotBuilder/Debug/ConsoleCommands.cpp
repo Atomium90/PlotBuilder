@@ -12,6 +12,7 @@
 #include "Environment/DropZone.h"
 #include "Environment/MissionGround.h"
 #include "Environment/ProtectedZone.h"
+#include "Home/HomeDirector.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "ProfilingDebugging/MiscTrace.h"
 #include "Progress/ProgressSubsystem.h"
@@ -97,7 +98,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbShowProgressCommand(
 
 static FAutoConsoleCommandWithWorldAndArgs PbResetProgressCommand(
 	TEXT("pb.ResetProgress"),
-	TEXT("pb.ResetProgress - back to a new game: 500 money, the hands and the sledgehammer, no parcel. Writes the Progress slot and updates the player's hotbar. Run it before a demo."),
+	TEXT("pb.ResetProgress - back to a new game: 500 money, the hands and the sledgehammer, no parcel, no home. Writes the Progress slot and updates the player's hotbar. Run it before a demo."),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
 	{
 		UProgressSubsystem* Progress = UProgressSubsystem::Get(World);
@@ -119,6 +120,54 @@ static FAutoConsoleCommandWithWorldAndArgs PbResetProgressCommand(
 			}
 		}
 
+		Progress->ShowOnScreen(10.f);
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbSetParcelCommand(
+	TEXT("pb.SetParcel"),
+	TEXT("pb.SetParcel 0|1 - gives or takes away the parcel, which opens or closes the home's access point in the hub. Stands in for the purchase at the PC."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		UProgressSubsystem* Progress = UProgressSubsystem::Get(World);
+
+		if (!Progress)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.SetParcel: no progress subsystem (no game instance)"));
+			return;
+		}
+
+		Progress->SetParcelOwned(ParseBoolArg(Args));
+		Progress->ShowOnScreen(10.f);
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbSaveHomeCommand(
+	TEXT("pb.SaveHome"),
+	TEXT("pb.SaveHome - writes the home (pieces, props, inventory) to the Progress slot now, as leaving through a travel point does. Needs an AHomeDirector in the level."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		if (AHomeDirector* Director = AHomeDirector::Find(World))
+		{
+			Director->SaveSnapshot();
+			return;
+		}
+
+		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.SaveHome: no AHomeDirector in this level, it only works in Lvl_Home"));
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbClearHomeCommand(
+	TEXT("pb.ClearHome"),
+	TEXT("pb.ClearHome - forgets the saved home: the next visit to Lvl_Home starts on an empty plot. The money, tools and parcel are kept."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		UProgressSubsystem* Progress = UProgressSubsystem::Get(World);
+
+		if (!Progress)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.ClearHome: no progress subsystem (no game instance)"));
+			return;
+		}
+
+		Progress->ClearHome();
 		Progress->ShowOnScreen(10.f);
 	}));
 
