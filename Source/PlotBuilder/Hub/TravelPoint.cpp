@@ -63,6 +63,12 @@ void ATravelPoint::Use(AActor* User)
 
 	const FString TravelOptions = BuildOptions();
 
+	// The level we are about to leave may have something to keep (the home): tell it while its world still exists.
+	if (UProgressSubsystem* Progress = UProgressSubsystem::Get(this))
+	{
+		Progress->OnBeforeLevelChange.Broadcast();
+	}
+
 	UE_LOG(LogPlotBuilder, Log, TEXT("ATravelPoint %s: opening %s with options '%s'."), *GetName(), *Destination.GetLongPackageName(), *TravelOptions);
 
 	UGameplayStatics::OpenLevelBySoftObjectPtr(this, Destination, true, TravelOptions);
