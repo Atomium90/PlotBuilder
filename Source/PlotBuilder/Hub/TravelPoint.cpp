@@ -1,9 +1,10 @@
 #include "TravelPoint.h"
-#include "Engine/Engine.h"
+#include "Debug/DebugDisplay.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "PlotBuilder.h"
 #include "Progress/ProgressSubsystem.h"
+#include "UI/PlayerMessages.h"
 
 ATravelPoint::ATravelPoint()
 {
@@ -38,10 +39,8 @@ void ATravelPoint::Use(AActor* User)
 	{
 		UE_LOG(LogPlotBuilder, Warning, TEXT("ATravelPoint %s: no destination set."), *GetName());
 
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(FeedbackMessageKey, 4.f, FColor::Red, FString::Printf(TEXT("%s has no destination."), *GetName()));
-		}
+		// A level-design mistake, not something for the player: debug text only.
+		PBDebug::Message(NoDestinationMessageKey, 4.f, FColor::Red, FString::Printf(TEXT("%s has no destination."), *GetName()));
 
 		return;
 	}
@@ -52,9 +51,9 @@ void ATravelPoint::Use(AActor* User)
 
 		if (!Progress || !Progress->IsParcelOwned())
 		{
-			if (GEngine)
+			if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
 			{
-				GEngine->AddOnScreenDebugMessage(FeedbackMessageKey, 4.f, FColor::Red, TEXT("You do not own a parcel yet. Buy one at the PC."));
+				Messages->Notify(NSLOCTEXT("Hub", "ParcelRequired", "You do not own a parcel yet. Buy one at the PC."), EMessageTone::Warning);
 			}
 
 			return;

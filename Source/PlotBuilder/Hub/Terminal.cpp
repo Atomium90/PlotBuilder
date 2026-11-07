@@ -1,5 +1,5 @@
 #include "Terminal.h"
-#include "Engine/Engine.h"
+#include "UI/PlayerMessages.h"
 
 ATerminal::ATerminal()
 {
@@ -8,8 +8,8 @@ ATerminal::ATerminal()
 
 void ATerminal::Use(AActor* User)
 {
-	if (GEngine)
+	if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
 	{
-		GEngine->AddOnScreenDebugMessage(PlaceholderMessageKey, 4.f, FColor::Cyan, TEXT("PC: the mission board comes on Nov 10."));
+		Messages->Notify(NSLOCTEXT("Hub", "TerminalPlaceholder", "PC: the mission board comes on Nov 10."), EMessageTone::Info);
 	}
 }

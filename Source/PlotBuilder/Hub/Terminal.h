@@ -21,9 +21,4 @@ public:
 protected:
 
 	virtual void Use(AActor* User) override;
-
-private:
-
-	/** On-screen key of the placeholder line. */
-	static constexpr int32 PlaceholderMessageKey = 7630;
 };

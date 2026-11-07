@@ -3,6 +3,7 @@
 #include "ShopItemRow.h"
 #include "Buildables/BuildablePiece.h"
 #include "Progress/ProgressSubsystem.h"
+#include "UI/PlayerMessages.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 #include "Engine/World.h"
@@ -236,9 +237,10 @@ void UHotbarComponent::TryPlace()
 
 	if (SelectedEntry.ActorClass->IsChildOf(ABuildablePiece::StaticClass()))
 	{
-		if (bShowDebug && GEngine)
+		// Say why the click did nothing. This one used to be debug text, so the player never saw it.
+		if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
 		{
-			GEngine->AddOnScreenDebugMessage(410, 2.f, FColor::Orange, TEXT("Enter Build Mode to place buildables."));
+			Messages->Notify(NSLOCTEXT("Hotbar", "EnterBuildMode", "Enter Build Mode to place buildables."), EMessageTone::Info);
 		}
 		return;
 	}

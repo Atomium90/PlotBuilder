@@ -1,6 +1,6 @@
 #include "HubInteractable.h"
 #include "Components/BoxComponent.h"
-#include "Engine/Engine.h"
+#include "UI/PlayerMessages.h"
 
 AHubInteractable::AHubInteractable()
 {
@@ -21,19 +21,17 @@ AHubInteractable::AHubInteractable()
 
 void AHubInteractable::OnFocusBegin_Implementation(AActor* User)
 {
-	if (GEngine && !Prompt.IsEmpty())
+	if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
 	{
-		GEngine->AddOnScreenDebugMessage(PromptMessageKey, 600.f, FColor::Yellow, Prompt.ToString());
-		bPromptShown = true;
+		Messages->SetPrompt(this, Prompt);
 	}
 }
 
 void AHubInteractable::OnFocusEnd_Implementation(AActor* User)
 {
-	if (GEngine && bPromptShown)
+	if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
 	{
-		GEngine->RemoveOnScreenDebugMessage(PromptMessageKey);
-		bPromptShown = false;
+		Messages->ClearPrompt(this);
 	}
 }
 
@@ -46,10 +44,9 @@ void AHubInteractable::Interact_Implementation(AActor* User)
 void AHubInteractable::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	// The level is leaving while the prompt is up (the use that sent the player away): take it down.
-	if (GEngine && bPromptShown)
+	if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
 	{
-		GEngine->RemoveOnScreenDebugMessage(PromptMessageKey);
-		bPromptShown = false;
+		Messages->ClearPrompt(this);
 	}
 
 	Super::EndPlay(EndPlayReason);

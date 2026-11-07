@@ -29,7 +29,7 @@ public:
 
 	AHubInteractable();
 
-	/** Shown on screen while the player looks at this. Subclasses set a default. */
+	/** Shown to the player (UPlayerMessages) while they look at this. Subclasses set a default. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hub")
 	FText Prompt;
 
@@ -50,11 +50,4 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hub")
 	TObjectPtr<UBoxComponent> Trigger;
-
-private:
-
-	/** On-screen key of the prompt: one is enough, the player focuses one thing at a time. */
-	static constexpr int32 PromptMessageKey = 7610;
-
-	bool bPromptShown = false;
 };

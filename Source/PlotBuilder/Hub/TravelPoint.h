@@ -49,6 +49,6 @@ protected:
 
 private:
 
-	/** On-screen key of the feedback line (a refused trip, a missing destination). */
-	static constexpr int32 FeedbackMessageKey = 7620;
+	/** On-screen key of the "no destination" debug line (a refused trip goes to the player through UPlayerMessages). */
+	static constexpr int32 NoDestinationMessageKey = 7621;
 };
