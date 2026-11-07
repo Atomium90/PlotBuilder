@@ -1,4 +1,5 @@
 #include "HouseGenerator.h"
+#include "Debug/DebugDisplay.h"
 #include "HouseArchetype.h"
 #include "HouseLayout.h"
 #include "HouseRoofKit.h"
@@ -817,7 +818,7 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 	if (bShowDebug && GEngine)
 	{
 		constexpr int32 MaxSeedsOnScreen = 12;
-		GEngine->AddOnScreenDebugMessage(ResultMessageKey + 1, 60.f, SummaryColor, FString::Join(BuildLines(MaxSeedsOnScreen), TEXT("\n")));
+		PBDebug::Message(ResultMessageKey + 1, 60.f, SummaryColor, FString::Join(BuildLines(MaxSeedsOnScreen), TEXT("\n")));
 	}
 }
 
@@ -873,7 +874,7 @@ bool AHouseGenerator::TryGenerate(int32 InSeed, bool bForceFailure)
 			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': seed %d, unstable %s at cell (%d, %d, %d)"),
 				*GetName(), Seed, *Piece->GetClass()->GetName(), Piece->GetGridCoord().X, Piece->GetGridCoord().Y, Piece->GetGridCoord().Z);
 
-			if (bShowDebug && World)
+			if (bShowDebug && World && PBDebug::IsEnabled())
 			{
 				const FBox Bounds = Piece->GetComponentsBoundingBox(true);
 				DrawDebugBox(World, Bounds.GetCenter(), Bounds.GetExtent(), FColor::Red, false, UnstableMarkerSeconds, 0, 5.f);
@@ -2389,7 +2390,7 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 
 			Floor.Taken.Add(Zone);
 
-			if (bShowDebug)
+			if (bShowDebug && PBDebug::IsEnabled())
 			{
 				DrawDebugBox(World, FVector(Zone.GetCenter(), FloorZ + 5.f), FVector(Zone.GetExtent(), 3.f), FColor::Red, false, UnstableMarkerSeconds, 0, 2.f);
 			}
@@ -2492,7 +2493,7 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 		LayoutHash = HashCombine(LayoutHash, GetTypeHash(FIntVector(FMath::RoundToInt(Location.X), FMath::RoundToInt(Location.Y), FMath::RoundToInt(Location.Z))));
 		LayoutHash = HashCombine(LayoutHash, GetTypeHash(FMath::RoundToInt(FRotator::NormalizeAxis(Spot.Yaw))));
 
-		if (bShowDebug)
+		if (bShowDebug && PBDebug::IsEnabled())
 		{
 			// The box is the footprint; the green arrow is where the front is meant to point, so a mesh that faces another way shows at once (fix: FrontYawOffset in the row).
 			const float Height = Rotated.GetSize().Z;
@@ -2509,7 +2510,7 @@ void AHouseGenerator::DrawRoomsDebug() const
 {
 	UWorld* World = GetWorld();
 
-	if (!bShowDebug || !World || !Plot || !Plot->GetStructuralSupport())
+	if (!bShowDebug || !PBDebug::IsEnabled() || !World || !Plot || !Plot->GetStructuralSupport())
 	{
 		return;
 	}
@@ -2642,6 +2643,6 @@ void AHouseGenerator::ReportResult(bool bSuccess, const FString& Line) const
 
 	if (bShowDebug && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(ResultMessageKey, UnstableMarkerSeconds, bSuccess ? FColor::Green : FColor::Red, ScreenText);
+		PBDebug::Message(ResultMessageKey, UnstableMarkerSeconds, bSuccess ? FColor::Green : FColor::Red, ScreenText);
 	}
 }

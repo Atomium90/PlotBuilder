@@ -1,4 +1,5 @@
 #include "ToolbeltComponent.h"
+#include "Debug/DebugDisplay.h"
 #include "PhysicsManipulationComponent.h"
 #include "Destruction/ExplosiveCharge.h"
 #include "Destruction/DemolitionTool.h"
@@ -39,7 +40,7 @@ void UToolbeltComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			SlotName = MeleeTool->GetClass()->GetName();
 		}
 
-		GEngine->AddOnScreenDebugMessage(900, DeltaTime, FColor::Cyan, FString::Printf(TEXT("Toolbelt slot %d: %s"), EquippedIndex, *SlotName));
+		PBDebug::Message(900, DeltaTime, FColor::Cyan, FString::Printf(TEXT("Toolbelt slot %d: %s"), EquippedIndex, *SlotName));
 	}
 }
 
@@ -233,7 +234,7 @@ void UToolbeltComponent::PlaceCharge()
 	{
 		if (bShowDebug && GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(901, 1.5f, FColor::Yellow, TEXT("Charge: no surface in reach"));
+			PBDebug::Message(901, 1.5f, FColor::Yellow, TEXT("Charge: no surface in reach"));
 		}
 
 		return;

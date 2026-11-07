@@ -1,4 +1,5 @@
 #include "InteractionComponent.h"
+#include "Debug/DebugDisplay.h"
 #include "Interactable.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
@@ -62,21 +63,21 @@ void UInteractionComponent::UpdateFocus()
 		}
 	}
 
-	if (bShowDebugTrace)
+	if (bShowDebugTrace && PBDebug::IsEnabled())
 	{
 		DrawDebugLine(GetWorld(), ViewLocation, bHit ? Hit.Location : TraceEnd, CurrentFocus ? FColor::Green : FColor::Red, false, 0.f, 0, 1.f);
 	}
 
 	if (bShowDebugFocusName && CurrentFocus && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::Green, FString::Printf(TEXT("Focus: %s"), *CurrentFocus->GetActorNameOrLabel()));
+		PBDebug::Message(1, 0.f, FColor::Green, FString::Printf(TEXT("Focus: %s"), *CurrentFocus->GetActorNameOrLabel()));
 	}
 
 	if (bShowDebugDurability && CurrentFocus && GEngine)
 	{
 		if (const UDurabilityComponent* Durability = CurrentFocus->FindComponentByClass<UDurabilityComponent>())
 		{
-			GEngine->AddOnScreenDebugMessage(2, 0.f, FColor::Yellow, FString::Printf(TEXT("HP: %.0f / %.0f  Material: %s  State: %s"),
+			PBDebug::Message(2, 0.f, FColor::Yellow, FString::Printf(TEXT("HP: %.0f / %.0f  Material: %s  State: %s"),
 				Durability->CurrentHP, Durability->MaxHP,
 				*UEnum::GetValueAsString(Durability->GetMaterial()),
 				*UEnum::GetValueAsString(Durability->GetState())));

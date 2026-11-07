@@ -1,4 +1,5 @@
 #include "Environment/MissionGround.h"
+#include "Debug/DebugDisplay.h"
 #include "Components/BoxComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
@@ -523,7 +524,7 @@ void AMissionGround::Generate(int32 Seed)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(GroundSummaryMessageKey, 15.f, FColor::Green, Summary);
+		PBDebug::Message(GroundSummaryMessageKey, 15.f, FColor::Green, Summary);
 	}
 }
 
@@ -706,7 +707,7 @@ void AMissionGround::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (!bShowDebug || !GetWorld())
+	if (!bShowDebug || !PBDebug::IsEnabled() || !GetWorld())
 	{
 		return;
 	}

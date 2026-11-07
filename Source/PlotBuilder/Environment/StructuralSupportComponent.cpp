@@ -1,4 +1,5 @@
 #include "StructuralSupportComponent.h"
+#include "Debug/DebugDisplay.h"
 #include "StructuralRules.h"
 #include "Buildables/BuildablePiece.h"
 #include "Destruction/DurabilityComponent.h"
@@ -17,6 +18,12 @@ void UStructuralSupportComponent::TickComponent(float DeltaTime, ELevelTick Tick
 
 	// Named scopes for Unreal Insights (T5): one Structural.Recompute per frame at most, however many pieces fell.
 	TRACE_CPUPROFILER_EVENT_SCOPE_STR("Structural.Tick");
+
+	// The heat-map swaps the pieces' materials, so the master debug switch cannot just hide it: when pb.Debug goes off, it goes off too.
+	if (bShowDebug && !PBDebug::IsEnabled())
+	{
+		SetShowDebug(false);
+	}
 
 	if (bRecomputeDirty)
 	{
@@ -49,7 +56,7 @@ void UStructuralSupportComponent::TickComponent(float DeltaTime, ELevelTick Tick
 
 		if (bShowCollapseQueueDebug && GEngine && DebugLine < 20)
 		{
-			GEngine->AddOnScreenDebugMessage(800 + DebugLine++, DeltaTime, FColor::Yellow,
+			PBDebug::Message(800 + DebugLine++, DeltaTime, FColor::Yellow,
 				FString::Printf(TEXT("%s releases in %.2fs"), *Piece->GetActorNameOrLabel(), CollapseQueue[Index].ReleaseTime - Now));
 		}
 	}

@@ -1,4 +1,5 @@
 #include "CrushDetectionComponent.h"
+#include "Debug/DebugDisplay.h"
 #include "DemolitionRules.h"
 #include "Buildables/BuildablePiece.h"
 #include "Components/PrimitiveComponent.h"
@@ -88,7 +89,7 @@ void UCrushDetectionComponent::DrawGauge() const
 	const FString Bar = FString::ChrN(Filled, TEXT('#')) + FString::ChrN(BarLength - Filled, TEXT('-'));
 	const FColor Colour = bIsStunned ? FColor::Red : (Ratio >= 0.75f ? FColor::Orange : (Ratio >= 0.4f ? FColor::Yellow : FColor::Green));
 
-	GEngine->AddOnScreenDebugMessage(GaugeMessageKey, 0.f, Colour,
+	PBDebug::Message(GaugeMessageKey, 0.f, Colour,
 		FString::Printf(TEXT("Crush [%s] %.0f / %.0f%s"), *Bar, CurrentEnergy, Threshold, bIsStunned ? TEXT("  STUNNED") : TEXT("")));
 }
 

@@ -1,4 +1,5 @@
 #include "HotbarComponent.h"
+#include "Debug/DebugDisplay.h"
 #include "ShopItemRow.h"
 #include "Buildables/BuildablePiece.h"
 #include "Progress/ProgressSubsystem.h"
@@ -46,13 +47,13 @@ void UHotbarComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActo
 
 	const FString MoneyText = bInfiniteMoney ? TEXT("(infinite)") : FString::FromInt(Money);
 	const FString CursorText = CursorSlot.IsEmpty() ? TEXT("(none)") : FString::Printf(TEXT("%s x%d"), *GetNameSafe(CursorSlot.ActorClass), CursorSlot.Count);
-	GEngine->AddOnScreenDebugMessage(400, 0.f, FColor::Yellow, FString::Printf(TEXT("Hotbar: money %s | cursor %s"), *MoneyText, *CursorText));
+	PBDebug::Message(400, 0.f, FColor::Yellow, FString::Printf(TEXT("Hotbar: money %s | cursor %s"), *MoneyText, *CursorText));
 
 	for (int32 i = 0; i < Slots.Num(); ++i)
 	{
 		const FString ClassName = Slots[i].ActorClass ? Slots[i].ActorClass->GetName() : TEXT("-");
 		const TCHAR* Marker = (i == SelectedIndex) ? TEXT(">") : TEXT(" ");
-		GEngine->AddOnScreenDebugMessage(401 + i, 0.f, FColor::Yellow, FString::Printf(TEXT(" %s [%d] %s x%d"), Marker, i, *ClassName, Slots[i].Count));
+		PBDebug::Message(401 + i, 0.f, FColor::Yellow, FString::Printf(TEXT(" %s [%d] %s x%d"), Marker, i, *ClassName, Slots[i].Count));
 	}
 }
 

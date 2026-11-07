@@ -4,6 +4,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 #include "DrawDebugHelpers.h"
+#include "Debug/DebugDisplay.h"
 
 UPhysicsManipulationComponent::UPhysicsManipulationComponent()
 {
@@ -70,7 +71,7 @@ void UPhysicsManipulationComponent::TickComponent(float DeltaTime, ELevelTick Ti
 
 	HeldComponent->AddForce(Force, NAME_None, false);
 
-	if (bShowDebug)
+	if (bShowDebug && PBDebug::IsEnabled())
 	{
 		DrawDebugDirectionalArrow(GetWorld(), CenterOfMass, CenterOfMass + Force.GetClampedToMaxSize(200.f), 20.f, FColor::Cyan, false, 0.f, 0, 2.f);
 	}
@@ -115,7 +116,7 @@ void UPhysicsManipulationComponent::LaunchHeld()
 	const FVector Impulse = ViewForward * LaunchImpulseStrength;
 	HeldComponent->AddImpulse(Impulse, NAME_None, false);
 
-	if (bShowDebug)
+	if (bShowDebug && PBDebug::IsEnabled())
 	{
 		const FVector CenterOfMass = HeldComponent->GetCenterOfMass();
 		DrawDebugDirectionalArrow(GetWorld(), CenterOfMass, CenterOfMass + Impulse.GetClampedToMaxSize(200.f), 20.f, FColor::Orange, false, 1.f, 0, 2.f);
@@ -144,7 +145,7 @@ void UPhysicsManipulationComponent::PushFocus()
 	const FVector Impulse = ViewForward * PushImpulseStrength;
 	Target->AddImpulse(Impulse, NAME_None, false);
 
-	if (bShowDebug)
+	if (bShowDebug && PBDebug::IsEnabled())
 	{
 		const FVector CenterOfMass = Target->GetCenterOfMass();
 		DrawDebugDirectionalArrow(GetWorld(), CenterOfMass, CenterOfMass + Impulse.GetClampedToMaxSize(200.f), 20.f, FColor::Red, false, 1.f, 0, 2.f);

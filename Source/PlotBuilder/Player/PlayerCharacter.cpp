@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "PlayerCharacter.h"
+#include "Debug/DebugDisplay.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -332,7 +333,7 @@ void APlayerCharacter::ListShop() const
 
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(600 + i, 10.f, FColor::Cyan, Line);
+			PBDebug::Message(600 + i, 10.f, FColor::Cyan, Line);
 		}
 
 		UE_LOG(LogPlayerCharacter, Log, TEXT("%s"), *Line);
@@ -357,7 +358,7 @@ void APlayerCharacter::Buy(int32 ItemIndex)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(650, 2.f, bBought ? FColor::Green : FColor::Red,
+		PBDebug::Message(650, 2.f, bBought ? FColor::Green : FColor::Red,
 			FString::Printf(TEXT("Buy %d: %s"), ItemIndex, bBought ? TEXT("ok") : TEXT("failed")));
 	}
 }
@@ -381,7 +382,7 @@ void APlayerCharacter::DebugDamageFocus(float Amount)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(700, 2.f, FColor::Orange, FString::Printf(TEXT("DebugDamageFocus %s: -%.0f"), *Focus->GetActorNameOrLabel(), Amount));
+		PBDebug::Message(700, 2.f, FColor::Orange, FString::Printf(TEXT("DebugDamageFocus %s: -%.0f"), *Focus->GetActorNameOrLabel(), Amount));
 	}
 }
 
@@ -412,7 +413,7 @@ void APlayerCharacter::DebugShowStability(bool bShow)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(701, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowStability: %s"), bShow ? TEXT("on") : TEXT("off")));
+		PBDebug::Message(701, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowStability: %s"), bShow ? TEXT("on") : TEXT("off")));
 	}
 }
 
@@ -430,7 +431,7 @@ void APlayerCharacter::DebugShowCollapseQueue(bool bShow)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(702, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowCollapseQueue: %s"), bShow ? TEXT("on") : TEXT("off")));
+		PBDebug::Message(702, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowCollapseQueue: %s"), bShow ? TEXT("on") : TEXT("off")));
 	}
 }
 
@@ -443,6 +444,6 @@ void APlayerCharacter::DebugShowFragmentCount(bool bShow)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(703, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowFragmentCount: %s"), bShow ? TEXT("on") : TEXT("off")));
+		PBDebug::Message(703, 2.f, FColor::Cyan, FString::Printf(TEXT("DebugShowFragmentCount: %s"), bShow ? TEXT("on") : TEXT("off")));
 	}
 }

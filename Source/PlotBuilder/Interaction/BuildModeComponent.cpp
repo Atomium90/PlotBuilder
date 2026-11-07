@@ -1,4 +1,5 @@
 #include "BuildModeComponent.h"
+#include "Debug/DebugDisplay.h"
 #include "HotbarComponent.h"
 #include "Buildables/BuildablePiece.h"
 #include "Environment/Plot.h"
@@ -50,12 +51,12 @@ void UBuildModeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 
 		if (Anchor != EBuildAnchor::Legacy)
 		{
-			GEngine->AddOnScreenDebugMessage(500, 0.f, FColor::Green, FString::Printf(TEXT("Build Mode: %s | level %d | roof step %d | cell (%d,%d,%d) | %s%s"),
+			PBDebug::Message(500, 0.f, FColor::Green, FString::Printf(TEXT("Build Mode: %s | level %d | roof step %d | cell (%d,%d,%d) | %s%s"),
 				*ClassName, BuildLevel, RoofStepValue, PendingGridCoord.X, PendingGridCoord.Y, PendingGridCoord.Z, *LastBlockReason, bIsRisky ? TEXT(" | risky") : TEXT("")));
 		}
 		else
 		{
-			GEngine->AddOnScreenDebugMessage(500, 0.f, FColor::Green, FString::Printf(TEXT("Build Mode: %s | rotation %d deg"), *ClassName, RotationSteps * FMath::RoundToInt(RotationStepDegrees)));
+			PBDebug::Message(500, 0.f, FColor::Green, FString::Printf(TEXT("Build Mode: %s | rotation %d deg"), *ClassName, RotationSteps * FMath::RoundToInt(RotationStepDegrees)));
 		}
 	}
 }
@@ -205,7 +206,7 @@ void UBuildModeComponent::ConfirmPlacement()
 		if (bShowDebug && GEngine)
 		{
 			const bool bOutsidePlot = CachedPlot && !CachedPlot->IsLocationInside(PreviewActor->GetActorLocation());
-			GEngine->AddOnScreenDebugMessage(501, 2.f, FColor::Red, bOutsidePlot
+			PBDebug::Message(501, 2.f, FColor::Red, bOutsidePlot
 				? TEXT("Can't place here - outside the plot.")
 				: TEXT("Can't place here - blocked."));
 		}

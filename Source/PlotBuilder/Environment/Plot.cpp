@@ -1,4 +1,5 @@
 #include "Plot.h"
+#include "Debug/DebugDisplay.h"
 #include "PlotBuilder.h"
 #include "Buildables/BuildablePiece.h"
 #include "Components/BoxComponent.h"
@@ -287,7 +288,7 @@ void APlot::BeginPlay()
 
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(7200, 20.f, FColor::Red, Message);
+			PBDebug::Message(7200, 20.f, FColor::Red, Message);
 		}
 	}
 
@@ -337,7 +338,7 @@ void APlot::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (bShowDebugBounds)
+	if (bShowDebugBounds && PBDebug::IsEnabled())
 	{
 		DrawDebugBox(GetWorld(), VolumeGuide->GetComponentLocation(), VolumeGuide->GetScaledBoxExtent(), VolumeGuide->GetComponentQuat(), DebugColor, false, -1.f, 0, 3.f);
 	}

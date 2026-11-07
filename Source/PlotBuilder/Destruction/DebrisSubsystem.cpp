@@ -1,4 +1,5 @@
 #include "DebrisSubsystem.h"
+#include "Debug/DebugDisplay.h"
 #include "GameFramework/Actor.h"
 #include "Engine/Engine.h"
 
@@ -21,7 +22,7 @@ void UDebrisSubsystem::Tick(float DeltaTime)
 {
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(710, DeltaTime, FColor::Green,
+		PBDebug::Message(710, DeltaTime, FColor::Green,
 			FString::Printf(TEXT("Fragments: %d / %d"), TotalWeight, LastCapSeen));
 	}
 }

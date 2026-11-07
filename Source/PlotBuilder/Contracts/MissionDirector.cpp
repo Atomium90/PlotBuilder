@@ -1,4 +1,5 @@
 #include "Contracts/MissionDirector.h"
+#include "Debug/DebugDisplay.h"
 #include "Buildables/BuildablePiece.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/DataTable.h"
@@ -198,7 +199,7 @@ bool AMissionDirector::StartMission()
 
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(DirectorMessageKey, 30.f, FColor::Red, Message);
+			PBDebug::Message(DirectorMessageKey, 30.f, FColor::Red, Message);
 		}
 
 		return false;
@@ -360,7 +361,7 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(DirectorMessageKey, 20.f, FColor::Cyan, Summary);
+		PBDebug::Message(DirectorMessageKey, 20.f, FColor::Cyan, Summary);
 	}
 
 	Plot->SetMissionSets(MoveTemp(Sets));
@@ -378,7 +379,7 @@ void AMissionDirector::Tick(float DeltaTime)
 
 	const APlot* Plot = ResolvePlot();
 
-	if (!bShowTargets || !Plot)
+	if (!bShowTargets || !PBDebug::IsEnabled() || !Plot)
 	{
 		return;
 	}

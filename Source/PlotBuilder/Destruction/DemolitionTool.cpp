@@ -1,4 +1,5 @@
 #include "DemolitionTool.h"
+#include "Debug/DebugDisplay.h"
 #include "DemolitionToolData.h"
 #include "DemolitionRules.h"
 #include "Damageable.h"
@@ -194,7 +195,7 @@ void ADemolitionTool::ResolveHit()
 
 		if (bShowHPDebug && GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Orange, FString::Printf(TEXT("%s hit %s for %.0f (HP left: %.0f)"),
+			PBDebug::Message(-1, 2.f, FColor::Orange, FString::Printf(TEXT("%s hit %s for %.0f (HP left: %.0f)"),
 				*GetName(), *Target->GetActorNameOrLabel(), FinalDamage, Durability ? Durability->CurrentHP : -1.f));
 		}
 	}

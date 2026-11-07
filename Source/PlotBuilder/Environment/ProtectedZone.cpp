@@ -1,5 +1,6 @@
 #include "Environment/ProtectedZone.h"
 #include "Components/BoxComponent.h"
+#include "Debug/DebugDisplay.h"
 #include "Destruction/Damageable.h"
 #include "Destruction/DurabilityComponent.h"
 #include "DrawDebugHelpers.h"
@@ -211,7 +212,7 @@ void AProtectedZone::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (bShowDebug)
+	if (bShowDebug && PBDebug::IsEnabled())
 	{
 		const FColor Color = GetTotalHPLost() > 0.f ? FColor::Red : FColor::Yellow;
 		DrawDebugBox(GetWorld(), Volume->GetComponentLocation(), Volume->GetScaledBoxExtent(), Volume->GetComponentQuat(), Color, false, -1.f, 0, 3.f);

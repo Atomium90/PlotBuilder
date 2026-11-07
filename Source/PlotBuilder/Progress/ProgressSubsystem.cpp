@@ -1,4 +1,5 @@
 #include "ProgressSubsystem.h"
+#include "Debug/DebugDisplay.h"
 #include "ProgressSave.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
@@ -144,7 +145,7 @@ void UProgressSubsystem::ShowOnScreen(float Seconds) const
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(MessageKey, Seconds, FColor::Cyan, Text);
+		PBDebug::Message(MessageKey, Seconds, FColor::Cyan, Text);
 	}
 }
 

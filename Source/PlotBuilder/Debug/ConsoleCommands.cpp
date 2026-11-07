@@ -1,4 +1,5 @@
 #include "HAL/IConsoleManager.h"
+#include "Debug/DebugDisplay.h"
 #include "Containers/Ticker.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
@@ -26,6 +27,9 @@
 // APlayerCharacter (DebugShowStability, DebugDamageFocus), plus the two small additions below
 // (ADemolitionTool::bShowHPDebug, UHotbarComponent::SetMoney). Exec UFUNCTIONs can't produce a
 // dotted command name, so these register for real via IConsoleManager instead.
+//
+// Everything these commands show goes through the master switch (Debug/DebugDisplay.h): pb.Debug 0 hides it all, for a
+// demo, and pb.Debug 1 brings it back. A command's own text answer is hidden too, the log still has it.
 //
 // pb.GiveTool is deliberately not here: UToolbeltComponent has no ownership/gating concept yet
 // (every melee tool is already always spawned), so there is nothing for it to wrap until tool
@@ -411,12 +415,12 @@ namespace
 				Text += FString::Printf(TEXT("\n  %s: value %d, %.0f%% HP"), Item.Prop.IsValid() ? *Item.Prop->GetName() : TEXT("?"), Item.Value, Item.HPRatio * 100.f);
 			}
 
-			GEngine->AddOnScreenDebugMessage(Key++, 0.2f, FColor::Green, Text);
+			PBDebug::Message(Key++, 0.2f, FColor::Green, Text);
 		}
 
 		for (TActorIterator<AProtectedZone> It(World); It; ++It)
 		{
-			GEngine->AddOnScreenDebugMessage(Key++, 0.2f, It->GetTotalHPLost() > 0.f ? FColor::Red : FColor::Yellow, It->Describe());
+			PBDebug::Message(Key++, 0.2f, It->GetTotalHPLost() > 0.f ? FColor::Red : FColor::Yellow, It->Describe());
 		}
 
 		return true;
@@ -528,7 +532,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbCollapseAllCommand(
 
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(7500, 10.f, FColor::Orange, Message);
+			PBDebug::Message(7500, 10.f, FColor::Orange, Message);
 		}
 	}));
 
