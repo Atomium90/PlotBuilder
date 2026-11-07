@@ -9,4 +9,6 @@ void UProgressSave::ResetToDefaults()
 	OwnedTools.Add(FName("Sledgehammer"));
 
 	bParcelOwned = false;
+
+	Home = FHomeSnapshot();
 }

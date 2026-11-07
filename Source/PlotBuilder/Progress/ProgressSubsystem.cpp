@@ -93,6 +93,23 @@ void UProgressSubsystem::SetParcelOwned(bool bOwned)
 	Persist();
 }
 
+const FHomeSnapshot& UProgressSubsystem::GetHome() const
+{
+	return Progress->Home;
+}
+
+void UProgressSubsystem::SetHome(FHomeSnapshot&& NewHome)
+{
+	Progress->Home = MoveTemp(NewHome);
+	Persist();
+}
+
+void UProgressSubsystem::ClearHome()
+{
+	Progress->Home = FHomeSnapshot();
+	Persist();
+}
+
 void UProgressSubsystem::Reset()
 {
 	Progress->ResetToDefaults();
@@ -110,8 +127,13 @@ FString UProgressSubsystem::Describe() const
 
 	Tools.Sort();
 
-	return FString::Printf(TEXT("Progress: money %d | tools %s | parcel %s | slot %s"),
-		Progress->Money, *FString::Join(Tools, TEXT(", ")), Progress->bParcelOwned ? TEXT("owned") : TEXT("not owned"), *SlotName);
+	const FHomeSnapshot& Home = Progress->Home;
+	const FString HomeText = Home.bValid
+		? FString::Printf(TEXT("%d pieces, %d props, %d slots"), Home.Pieces.Num(), Home.Props.Num(), Home.Slots.Num())
+		: FString(TEXT("none"));
+
+	return FString::Printf(TEXT("Progress: money %d | tools %s | parcel %s | home %s | slot %s"),
+		Progress->Money, *FString::Join(Tools, TEXT(", ")), Progress->bParcelOwned ? TEXT("owned") : TEXT("not owned"), *HomeText, *SlotName);
 }
 
 void UProgressSubsystem::ShowOnScreen(float Seconds) const

@@ -5,6 +5,7 @@
 #include "ProgressSubsystem.generated.h"
 
 class UProgressSave;
+struct FHomeSnapshot;
 
 DECLARE_MULTICAST_DELEGATE(FOnProgressChanged);
 
@@ -51,6 +52,15 @@ public:
 
 	void SetParcelOwned(bool bOwned);
 
+	/** The home as it was left (FHomeSnapshot::bValid is false until a first one is stored). */
+	const FHomeSnapshot& GetHome() const;
+
+	/** Replaces the home snapshot and saves. */
+	void SetHome(FHomeSnapshot&& NewHome);
+
+	/** Forgets the home (the next visit starts on an empty plot) and saves. */
+	void ClearHome();
+
 	/** Back to a new game (UProgressSave::ResetToDefaults), saved. */
 	void Reset();
 
@@ -62,6 +72,13 @@ public:
 
 	/** Fired after every change, once the slot is written. */
 	FOnProgressChanged OnProgressChanged;
+
+	/**
+	 *  Fired by whatever is about to open another level on purpose (ATravelPoint), while the current world is still
+	 *  intact. A level that has something to keep (AHomeDirector) listens and writes it to the save here. The one
+	 *  that travels does not know who listens, and the listener does not know who travels.
+	 */
+	FSimpleMulticastDelegate OnBeforeLevelChange;
 
 private:
 
