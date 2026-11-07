@@ -22,7 +22,7 @@ int32 AMissionDirector::DebugSeed = -1;
 
 namespace
 {
-	constexpr int32 SummaryMessageKey = 7300;
+	constexpr int32 DirectorMessageKey = 7300;
 	constexpr int32 MaxInputAttempts = 50;
 	constexpr float InputRetryInterval = 0.1f;
 }
@@ -189,7 +189,7 @@ bool AMissionDirector::StartMission()
 
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(SummaryMessageKey, 30.f, FColor::Red, Message);
+			GEngine->AddOnScreenDebugMessage(DirectorMessageKey, 30.f, FColor::Red, Message);
 		}
 
 		return false;
@@ -350,7 +350,7 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(SummaryMessageKey, 20.f, FColor::Cyan, Summary);
+		GEngine->AddOnScreenDebugMessage(DirectorMessageKey, 20.f, FColor::Cyan, Summary);
 	}
 
 	Plot->SetMissionSets(MoveTemp(Sets));

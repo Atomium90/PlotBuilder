@@ -17,7 +17,7 @@
 
 namespace
 {
-	constexpr int32 SummaryMessageKey = 7301;
+	constexpr int32 GroundSummaryMessageKey = 7301;
 
 	/** The footprint of a box component, widened by Pad on every side. Only the yaw is kept: the ground is flat. */
 	FGroundRegion RegionFromBox(const FString& Name, const UBoxComponent* Box, double Pad)
@@ -523,7 +523,7 @@ void AMissionGround::Generate(int32 Seed)
 
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(SummaryMessageKey, 15.f, FColor::Green, Summary);
+		GEngine->AddOnScreenDebugMessage(GroundSummaryMessageKey, 15.f, FColor::Green, Summary);
 	}
 }
 
