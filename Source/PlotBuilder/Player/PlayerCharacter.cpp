@@ -399,6 +399,14 @@ void APlayerCharacter::SetBuildingAllowed(bool bAllowed)
 	}
 }
 
+void APlayerCharacter::SetDestructionAllowed(bool bAllowed)
+{
+	if (ToolbeltComponent)
+	{
+		ToolbeltComponent->SetDestructionAllowed(bAllowed);
+	}
+}
+
 void APlayerCharacter::DebugShowStability(bool bShow)
 {
 	APlot* Plot = Cast<APlot>(UGameplayStatics::GetActorOfClass(GetWorld(), APlot::StaticClass()));

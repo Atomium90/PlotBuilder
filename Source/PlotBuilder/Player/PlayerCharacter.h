@@ -247,6 +247,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player")
 	void SetBuildingAllowed(bool bAllowed);
 
+	/**
+	 *  Switches the demolition side on or off: the charge and the melee tools can no longer be equipped (see
+	 *  UToolbeltComponent::SetDestructionAllowed). Independent of SetBuildingAllowed and of the belt lock, so a map picks
+	 *  any mix: the home allows building only, a renovation both, the hub neither. On by default.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Player")
+	void SetDestructionAllowed(bool bAllowed);
+
 	/** Debug console command (open the console with ~, type "ListShop" + Enter): prints every ShopCatalog row's index, display name and cost, so Buy's index is known without any UI. */
 	UFUNCTION(Exec, Category = "Debug")
 	void ListShop() const;

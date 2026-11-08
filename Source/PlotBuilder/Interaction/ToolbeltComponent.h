@@ -57,19 +57,43 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Toolbelt|Debug")
 	bool bShowDebug = true;
 
-	/** Switches to Index, clamped to [0, NumSlots). No-op if already equipped, or if locked - see SetLocked. */
+	/** Switches to Index, clamped to [0, NumSlots). No-op if already equipped, or if that slot is not available - see IsSlotAvailable. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void EquipSlot(int32 Index);
 
-	/** Moves the equipped slot by Delta, wrapping around - for the mouse wheel. No-op if locked - see SetLocked. */
+	/** Moves the equipped slot by the sign of Delta to the next available slot, wrapping around - for the mouse wheel. Slots that are not available are skipped - see IsSlotAvailable. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void CycleTool(int32 Delta);
 
-	/** While locked, EquipSlot/CycleTool are no-ops and the equipped slot is forced back to Hands. For a build-only context (Lvl_Home): also the signal APlayerCharacter uses to re-enable its legacy, full-featured Grab/Push bindings (push-on-unheld-focus included) instead of routing LMB/RMB through this toolbelt - see APlayerCharacter::LegacyGrabInput/LegacyPushInput. */
+	/**
+	 *  The belt has three independent switches, so a map can mix them (a renovation allows building and demolition together,
+	 *  the home allows building only, the hub allows neither):
+	 *   - SetLocked: the whole belt. Only the Hands remain, and the legacy Grab/Push bindings take over (see below).
+	 *   - SetDestructionAllowed: the demolition tools (the charge and the three melee tools).
+	 *   - building (APlayerCharacter::SetBuildingAllowed) also decides whether the paint brush can be used.
+	 *  The Hands are always available.
+	 *
+	 *  While locked, EquipSlot/CycleTool keep the Hands and the equipped slot is forced back to Hands. It is also the signal
+	 *  APlayerCharacter uses to re-enable its legacy, full-featured Grab/Push bindings (push-on-unheld-focus included) instead
+	 *  of routing LMB/RMB through this toolbelt - see APlayerCharacter::LegacyGrabInput/LegacyPushInput.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void SetLocked(bool bNewLocked);
 
 	bool IsLocked() const { return bLocked; }
+
+	/**
+	 *  Allows or forbids the demolition tools (slots 1 to 4) without locking the rest of the belt. Forbidden, they cannot be
+	 *  equipped, the cycle skips them, and a tool already in hand goes back to the Hands. On by default.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
+	void SetDestructionAllowed(bool bNewAllowed);
+
+	bool IsDestructionAllowed() const { return bDestructionAllowed; }
+
+	/** Whether Index can be equipped right now: in range, and either the Hands or a slot that neither the lock nor its own switch forbids. */
+	UFUNCTION(BlueprintPure, Category = "Toolbelt")
+	bool IsSlotAvailable(int32 Index) const;
 
 	int32 GetEquippedIndex() const { return EquippedIndex; }
 	bool IsHandsEquipped() const { return EquippedIndex == HandsSlotIndex; }
@@ -116,6 +140,7 @@ private:
 
 	int32 EquippedIndex = HandsSlotIndex;
 	bool bLocked = false;
+	bool bDestructionAllowed = true;
 
 	UPROPERTY()
 	TObjectPtr<AExplosiveCharge> ActiveCharge;

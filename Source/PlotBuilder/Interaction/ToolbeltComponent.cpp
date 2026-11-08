@@ -44,9 +44,32 @@ void UToolbeltComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	}
 }
 
+bool UToolbeltComponent::IsSlotAvailable(int32 Index) const
+{
+	if (Index < 0 || Index >= NumSlots)
+	{
+		return false;
+	}
+
+	if (Index == HandsSlotIndex)
+	{
+		return true;
+	}
+
+	if (bLocked)
+	{
+		return false;
+	}
+
+	// Every slot after the Hands is a demolition tool for now.
+	return bDestructionAllowed;
+}
+
 void UToolbeltComponent::EquipSlot(int32 Index)
 {
-	if (bLocked)
+	Index = FMath::Clamp(Index, 0, NumSlots - 1);
+
+	if (!IsSlotAvailable(Index))
 	{
 		return;
 	}
@@ -56,12 +79,26 @@ void UToolbeltComponent::EquipSlot(int32 Index)
 
 void UToolbeltComponent::CycleTool(int32 Delta)
 {
-	if (bLocked)
+	const int32 Step = FMath::Sign(Delta);
+
+	if (Step == 0 || NumSlots <= 0)
 	{
 		return;
 	}
 
-	EquipSlotInternal((EquippedIndex + Delta + NumSlots) % NumSlots);
+	// Walk the way the wheel turned, skipping what cannot be equipped, at most once around the belt.
+	int32 Candidate = EquippedIndex;
+
+	for (int32 Tried = 0; Tried < NumSlots; ++Tried)
+	{
+		Candidate = (Candidate + Step + NumSlots) % NumSlots;
+
+		if (IsSlotAvailable(Candidate))
+		{
+			EquipSlotInternal(Candidate);
+			return;
+		}
+	}
 }
 
 void UToolbeltComponent::SetLocked(bool bNewLocked)
@@ -69,6 +106,17 @@ void UToolbeltComponent::SetLocked(bool bNewLocked)
 	bLocked = bNewLocked;
 
 	if (bLocked)
+	{
+		EquipSlotInternal(HandsSlotIndex);
+	}
+}
+
+void UToolbeltComponent::SetDestructionAllowed(bool bNewAllowed)
+{
+	bDestructionAllowed = bNewAllowed;
+
+	// A tool in hand when the switch goes off goes back to the Hands.
+	if (!IsSlotAvailable(EquippedIndex))
 	{
 		EquipSlotInternal(HandsSlotIndex);
 	}
