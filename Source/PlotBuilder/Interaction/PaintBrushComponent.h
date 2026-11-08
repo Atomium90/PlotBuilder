@@ -39,6 +39,12 @@ public:
 	/** Primary use of the brush: paints the placed piece in focus, or tells the player why it cannot. */
 	void Paint();
 
+	/**
+	 *  The colour a paint bucket class stands for in this plot's palette, for the shop and the inventory to draw it.
+	 *  False when the class is not a bucket or the plot has no palette (the widgets then use the Paint category colour).
+	 */
+	bool GetBucketColor(TSubclassOf<AActor> BucketClass, FLinearColor& OutColor, FText& OutName) const;
+
 protected:
 
 	virtual void BeginPlay() override;

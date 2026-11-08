@@ -40,6 +40,21 @@ const UPaintPalette* UPaintBrushComponent::GetPalette() const
 	return (Palette && Palette->Num() > 0) ? Palette : nullptr;
 }
 
+bool UPaintBrushComponent::GetBucketColor(TSubclassOf<AActor> BucketClass, FLinearColor& OutColor, FText& OutName) const
+{
+	const UPaintPalette* Palette = GetPalette();
+
+	if (!Palette || !BucketClass || !BucketClass->IsChildOf(APaintBucket::StaticClass()))
+	{
+		return false;
+	}
+
+	const int32 Index = Palette->Wrap(BucketClass->GetDefaultObject<APaintBucket>()->PaletteIndex);
+	OutColor = Palette->GetColor(Index);
+	OutName = Palette->GetDisplayName(Index);
+	return true;
+}
+
 UPaintBrushComponent::EBrushState UPaintBrushComponent::ResolveColor(int32& OutPaletteIndex) const
 {
 	const UPaintPalette* Palette = GetPalette();

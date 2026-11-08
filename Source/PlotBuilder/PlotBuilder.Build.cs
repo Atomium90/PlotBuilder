@@ -15,7 +15,8 @@ public class PlotBuilder : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"UMG",
-			"Slate"
+			"Slate",
+			"SlateCore"
 		});
 
 		// ProceduralMeshComponent: the mission ground is a mesh built from a height function at the start of the level.
