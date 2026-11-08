@@ -7,6 +7,8 @@
 class AExplosiveCharge;
 class ADemolitionTool;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBeltChanged);
+
 /**
  *  Owned/equipped demolition tool slot, separate from UHotbarComponent (construction pieces/props)
  *  - see GDD §18.2. Slot 0 (Hands) routes straight to the sibling UPhysicsManipulationComponent:
@@ -112,6 +114,29 @@ public:
 
 	int32 GetEquippedIndex() const { return EquippedIndex; }
 	bool IsHandsEquipped() const { return EquippedIndex == HandsSlotIndex; }
+
+	/** Fired when the equipped slot changes, or when a switch changes what can be equipped. The belt widgets redraw on it. */
+	UPROPERTY(BlueprintAssignable, Category = "Toolbelt")
+	FOnBeltChanged OnBeltChanged;
+
+	/** The name of a slot as the player reads it ("Sledgehammer"). */
+	UFUNCTION(BlueprintPure, Category = "Toolbelt")
+	FText GetSlotName(int32 Index) const;
+
+	/** One line on what the two clicks do with a slot. */
+	UFUNCTION(BlueprintPure, Category = "Toolbelt")
+	FText GetSlotHint(int32 Index) const;
+
+	/**
+	 *  Whether the player owns Index. Always true for now: the tools cannot be bought yet, every one is owned from the start.
+	 *  When the purchase at the terminal exists, this is the one function to point at the saved list of owned tools.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Toolbelt")
+	bool IsSlotOwned(int32 Index) const;
+
+	/** How many slots the player does not own yet. The belt widgets show them as one padlock slot. */
+	UFUNCTION(BlueprintPure, Category = "Toolbelt")
+	int32 CountMissingTools() const;
 
 	/** Primary use (LMB) on the currently equipped tool. Slot 0 (Hands): Grab. Slot 1 (Charge): stick a charge on the surface in reach. Melee slots: swing. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")

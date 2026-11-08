@@ -126,6 +126,8 @@ void UToolbeltComponent::SetLocked(bool bNewLocked)
 	{
 		EquipSlotInternal(HandsSlotIndex);
 	}
+
+	OnBeltChanged.Broadcast();
 }
 
 void UToolbeltComponent::SetDestructionAllowed(bool bNewAllowed)
@@ -137,6 +139,8 @@ void UToolbeltComponent::SetDestructionAllowed(bool bNewAllowed)
 	{
 		EquipSlotInternal(HandsSlotIndex);
 	}
+
+	OnBeltChanged.Broadcast();
 }
 
 void UToolbeltComponent::SetPaintingAllowed(bool bNewAllowed)
@@ -148,6 +152,66 @@ void UToolbeltComponent::SetPaintingAllowed(bool bNewAllowed)
 	{
 		EquipSlotInternal(HandsSlotIndex);
 	}
+
+	OnBeltChanged.Broadcast();
+}
+
+FText UToolbeltComponent::GetSlotName(int32 Index) const
+{
+	switch (Index)
+	{
+	case HandsSlotIndex:
+		return NSLOCTEXT("Toolbelt", "Hands", "Hands");
+	case ChargeSlotIndex:
+		return NSLOCTEXT("Toolbelt", "Charge", "Explosive charge");
+	case FirstMeleeSlotIndex:
+		return NSLOCTEXT("Toolbelt", "Sledgehammer", "Sledgehammer");
+	case FirstMeleeSlotIndex + 1:
+		return NSLOCTEXT("Toolbelt", "Crowbar", "Crowbar");
+	case FirstMeleeSlotIndex + 2:
+		return NSLOCTEXT("Toolbelt", "Jackhammer", "Jackhammer");
+	case BrushSlotIndex:
+		return NSLOCTEXT("Toolbelt", "Brush", "Paint brush");
+	default:
+		return FText::GetEmpty();
+	}
+}
+
+FText UToolbeltComponent::GetSlotHint(int32 Index) const
+{
+	switch (Index)
+	{
+	case HandsSlotIndex:
+		return NSLOCTEXT("Toolbelt", "HandsHint", "Left click: grab  |  Right click: throw");
+	case ChargeSlotIndex:
+		return NSLOCTEXT("Toolbelt", "ChargeHint", "Left click: place  |  Right click: throw, then detonate");
+	case FirstMeleeSlotIndex:
+	case FirstMeleeSlotIndex + 1:
+		return NSLOCTEXT("Toolbelt", "MeleeHint", "Left click: swing");
+	case FirstMeleeSlotIndex + 2:
+		return NSLOCTEXT("Toolbelt", "JackhammerHint", "Hold left click");
+	case BrushSlotIndex:
+		return NSLOCTEXT("Toolbelt", "BrushHint", "Left click: paint the piece you look at");
+	default:
+		return FText::GetEmpty();
+	}
+}
+
+bool UToolbeltComponent::IsSlotOwned(int32 Index) const
+{
+	return Index >= 0 && Index < NumSlots;
+}
+
+int32 UToolbeltComponent::CountMissingTools() const
+{
+	int32 Missing = 0;
+
+	for (int32 Index = 0; Index < NumSlots; ++Index)
+	{
+		Missing += IsSlotOwned(Index) ? 0 : 1;
+	}
+
+	return Missing;
 }
 
 void UToolbeltComponent::EquipSlotInternal(int32 Index)
@@ -170,6 +234,8 @@ void UToolbeltComponent::EquipSlotInternal(int32 Index)
 	{
 		NewlyEquipped->SetToolVisible(true);
 	}
+
+	OnBeltChanged.Broadcast();
 }
 
 void UToolbeltComponent::PrimaryUse()
