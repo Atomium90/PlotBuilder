@@ -1,4 +1,5 @@
 #include "BuildablePiece.h"
+#include "PaintPalette.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -82,6 +83,21 @@ void ABuildablePiece::UpdateDamageVisual()
 	{
 		MeshComponent->SetCustomPrimitiveDataFloat(1, 1.f - DurabilityComponent->GetHPRatio());
 	}
+}
+
+void ABuildablePiece::ApplyPaint(int32 NewIndex, const UPaintPalette* Palette)
+{
+	if (!MeshComponent || !Palette)
+	{
+		return;
+	}
+
+	PaintIndex = Palette->Wrap(NewIndex);
+
+	// The colour is written even for the neutral entry (it is simply not shown): a stale colour never lingers next to a blend of 0.
+	const FLinearColor Color = Palette->GetColor(PaintIndex);
+	MeshComponent->SetCustomPrimitiveDataVector3(UPaintPalette::ColorIndex, FVector(Color.R, Color.G, Color.B));
+	MeshComponent->SetCustomPrimitiveDataFloat(UPaintPalette::BlendIndex, Palette->IsNeutral(PaintIndex) ? 0.f : 1.f);
 }
 
 void ABuildablePiece::Interact_Implementation(AActor* InteractingActor)

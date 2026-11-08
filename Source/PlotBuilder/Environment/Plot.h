@@ -10,6 +10,7 @@ class ADropZone;
 class AProtectedZone;
 class UBoxComponent;
 class UInstancedStaticMeshComponent;
+class UPaintPalette;
 class UStaticMesh;
 class UStructuralSupportComponent;
 
@@ -124,6 +125,10 @@ public:
 	/** Size of the tape across its length, in cm: how tall the band is, and how thick. The mesh is scaled to it, so the default fits SM_CautionTape (12 x 0.5 cm) and a 100 cm cube alike. */
 	UPROPERTY(EditAnywhere, Category = "Plot|Tape", meta = (ClampMin = "0.1"))
 	FVector2D TapeSize = FVector2D(12.f, 0.5f);
+
+	/** The colours the paint brush offers on this plot, and the ones the home restore reads back. Empty = the brush has nothing to apply. Set once on the plot Blueprint. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Plot|Paint")
+	TObjectPtr<UPaintPalette> PaintPalette;
 
 protected:
 

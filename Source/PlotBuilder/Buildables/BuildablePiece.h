@@ -14,6 +14,7 @@ class UStaticMeshComponent;
 class UPrimitiveComponent;
 class UStructuralSupportComponent;
 class UDurabilityComponent;
+class UPaintPalette;
 
 UENUM(BlueprintType)
 enum class EBuildablePieceState : uint8
@@ -167,6 +168,17 @@ public:
 	const FVector& GetPlacedScale() const { return PlacedScale; }
 	void SetPlacedScale(const FVector& NewScale) { PlacedScale = NewScale; }
 
+	/** Which entry of the plot's UPaintPalette this piece wears. 0 is neutral (the material's own colour), and what every piece starts with. The home snapshot stores this index. */
+	int32 GetPaintIndex() const { return PaintIndex; }
+
+	/**
+	 *  Paints this piece with entry NewIndex of Palette (wrapped into range) by writing the colour and its blend into the
+	 *  mesh's Custom Primitive Data (UPaintPalette::ColorIndex and BlendIndex). Index 0 is neutral and switches the paint
+	 *  off. Does not touch slot 0 (stability) or slot 1 (damage tint), so the damage tint still lands on top of the paint.
+	 *  Does nothing without a palette. The paint belongs to the placed piece: a piece taken back and placed again is neutral.
+	 */
+	void ApplyPaint(int32 NewIndex, const UPaintPalette* Palette);
+
 	/** Called once by UBuildModeComponent::ConfirmPlacement right after spawning a non-Legacy piece - never meaningful for a Legacy one. NewRoofStep defaults to 0 - meaningless for anything but a Roof_* piece. */
 	void SetGridPlacement(const FIntVector& NewGridCoord, uint8 NewOrientation, int32 NewRoofStep = 0) { GridCoord = NewGridCoord; Orientation = NewOrientation; RoofStep = NewRoofStep; }
 
@@ -302,6 +314,10 @@ private:
 
 	/** See GetPlacedScale. */
 	FVector PlacedScale = FVector::OneVector;
+
+	/** See GetPaintIndex. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Paint", meta = (AllowPrivateAccess = "true"))
+	int32 PaintIndex = 0;
 
 	UPROPERTY()
 	TObjectPtr<UStructuralSupportComponent> StructuralComponent;
