@@ -48,15 +48,24 @@ void APlotBuilderHUD::DrawHUD()
 		Canvas->DrawItem(Item);
 	};
 
+	// Just above whatever the HUD widgets put at the bottom of the screen (the hotbar tells where it starts); a fixed
+	// share of the screen when none is up.
+	const float TextHeight = Font->GetMaxCharHeight() * Scale;
+	const float BottomLimit = Messages->GetBottomLimit();
+	const float PromptY = BottomLimit > 0.f
+		? BottomLimit - TextHeight - PromptGap * Scale
+		: Canvas->ClipY * PromptHeightShare - TextHeight;
+
 	if (!Messages->GetPrompt().IsEmpty())
 	{
-		DrawCentred(Messages->GetPrompt(), FLinearColor(1.f, 0.9f, 0.4f), Canvas->ClipY * PromptHeightShare);
+		DrawCentred(Messages->GetPrompt(), FLinearColor(1.f, 0.9f, 0.4f), PromptY);
 	}
 
-	// Oldest on top, so a new message appears at the bottom of the stack.
-	float Y = Canvas->ClipY * ToastHeightShare;
+	// Oldest on top, so a new message appears at the bottom of the stack, right above the prompt line.
+	const TArray<FPlayerToast>& Toasts = Messages->GetToasts();
+	float Y = PromptY - LineHeight * Toasts.Num();
 
-	for (const FPlayerToast& Toast : Messages->GetToasts())
+	for (const FPlayerToast& Toast : Toasts)
 	{
 		DrawCentred(Toast.Text, HudToneColor(Toast.Tone), Y);
 		Y += LineHeight;

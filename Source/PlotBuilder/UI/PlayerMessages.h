@@ -61,7 +61,19 @@ public:
 	/** The messages still up, oldest first. Drops the ones that expired. */
 	const TArray<FPlayerToast>& GetToasts();
 
+	/**
+	 *  Where the widgets at the bottom of the screen begin, in viewport pixels from the top. The hotbar says so every frame it
+	 *  is up, and the HUD draws the prompt and the messages just above that line, so the position follows the real layout
+	 *  instead of a value guessed by eye. Cleared (negative), the HUD falls back to a fixed share of the screen.
+	 */
+	void SetBottomLimit(float ViewportY) { BottomLimitY = ViewportY; }
+	void ClearBottomLimit() { BottomLimitY = -1.f; }
+	float GetBottomLimit() const { return BottomLimitY; }
+
 private:
+
+	float BottomLimitY = -1.f;
+
 
 	static constexpr float DefaultSeconds = 4.f;
 	static constexpr int32 MaxToasts = 4;
