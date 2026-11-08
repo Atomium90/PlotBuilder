@@ -51,11 +51,41 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
 	int32 FragmentCount = 4;
 
+	/** Whether a hard enough contact hurts this prop (a chair thrown at a wall, furniture caught in a collapse). Turn off for a prop that must survive anything. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Impact")
+	bool bTakesImpactDamage = true;
+
+	/** Speed change at a contact, in cm/s, under which nothing happens. A 1 m drop is about 440 cm/s, so the default keeps drops, rolls and settling harmless. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Impact", meta = (ClampMin = "0"))
+	float ImpactSpeedThreshold = 600.f;
+
+	/** Damage per cm/s above the threshold. With the defaults a 1500 cm/s hit deals 72 damage, more than the 50 HP of a default prop, and a 1000 cm/s hit deals 32. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Impact", meta = (ClampMin = "0"))
+	float ImpactDamagePerSpeed = 0.08f;
+
+	/** Seconds after BeginPlay during which contacts are ignored: the generator, the home restore and the hotbar drop props that settle against the floor. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Impact", meta = (ClampMin = "0"))
+	float ImpactGraceSeconds = 1.f;
+
+	/** Minimum seconds between two damaging contacts: one bounce reports several. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Impact", meta = (ClampMin = "0"))
+	float ImpactMinInterval = 0.2f;
+
 protected:
 
 	virtual void BeginPlay() override;
 
 private:
+
+	/** MeshComponent->OnComponentHit handler: turns the speed change of a contact into damage on DurabilityComponent when it is above ImpactSpeedThreshold. */
+	UFUNCTION()
+	void HandleImpact(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+
+	/** World time of BeginPlay, for the grace period. */
+	float SpawnTime = 0.f;
+
+	/** World time of the last contact that dealt damage, for the minimum interval. */
+	float LastImpactTime = -1000.f;
 
 	/** DurabilityComponent->OnDurabilityDestroyed handler: spawns generic fragments and removes this prop - furniture's "simple break on destruction" (GDD, Sprint 2 Monday), no per-mesh fracture. */
 	UFUNCTION()
