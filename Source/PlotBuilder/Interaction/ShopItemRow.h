@@ -16,6 +16,8 @@ enum class EShopItemCategory : uint8
 	Roof,
 	/** Furniture/decor - APhysicsProp items. */
 	Prop,
+	/** Paint buckets (APaintBucket): one per colour, used by the brush, never placed. Added last so saved rows keep their value. */
+	Paint,
 };
 
 /**

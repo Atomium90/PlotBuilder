@@ -1,6 +1,7 @@
 #include "ToolbeltComponent.h"
 #include "Debug/DebugDisplay.h"
 #include "PhysicsManipulationComponent.h"
+#include "PaintBrushComponent.h"
 #include "Destruction/ExplosiveCharge.h"
 #include "Destruction/DemolitionTool.h"
 #include "GameFramework/Controller.h"
@@ -15,6 +16,13 @@ UToolbeltComponent::UToolbeltComponent()
 void UToolbeltComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// NumSlots was 5 before the brush: a Blueprint that stored that value would leave the brush slot out of reach.
+	if (NumSlots <= BrushSlotIndex)
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("UToolbeltComponent: NumSlots is %d, the paint brush needs %d. Using %d."), NumSlots, BrushSlotIndex + 1, BrushSlotIndex + 1);
+		NumSlots = BrushSlotIndex + 1;
+	}
 
 	SpawnMeleeTools();
 }
@@ -34,6 +42,10 @@ void UToolbeltComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		else if (EquippedIndex == ChargeSlotIndex)
 		{
 			SlotName = TEXT("Charge");
+		}
+		else if (EquippedIndex == BrushSlotIndex)
+		{
+			SlotName = TEXT("Brush");
 		}
 		else if (const ADemolitionTool* MeleeTool = GetMeleeToolForSlot(EquippedIndex))
 		{
@@ -61,7 +73,12 @@ bool UToolbeltComponent::IsSlotAvailable(int32 Index) const
 		return false;
 	}
 
-	// Every slot after the Hands is a demolition tool for now.
+	if (Index == BrushSlotIndex)
+	{
+		return bPaintingAllowed;
+	}
+
+	// The rest (the charge and the melee tools) are the demolition tools.
 	return bDestructionAllowed;
 }
 
@@ -122,6 +139,17 @@ void UToolbeltComponent::SetDestructionAllowed(bool bNewAllowed)
 	}
 }
 
+void UToolbeltComponent::SetPaintingAllowed(bool bNewAllowed)
+{
+	bPaintingAllowed = bNewAllowed;
+
+	// Same as above: the brush in hand goes back to the Hands when painting is switched off.
+	if (!IsSlotAvailable(EquippedIndex))
+	{
+		EquipSlotInternal(HandsSlotIndex);
+	}
+}
+
 void UToolbeltComponent::EquipSlotInternal(int32 Index)
 {
 	Index = FMath::Clamp(Index, 0, NumSlots - 1);
@@ -159,6 +187,16 @@ void UToolbeltComponent::PrimaryUse()
 	if (EquippedIndex == ChargeSlotIndex)
 	{
 		PlaceCharge();
+		return;
+	}
+
+	if (EquippedIndex == BrushSlotIndex)
+	{
+		if (UPaintBrushComponent* Brush = GetOwner() ? GetOwner()->FindComponentByClass<UPaintBrushComponent>() : nullptr)
+		{
+			Brush->Paint();
+		}
+
 		return;
 	}
 

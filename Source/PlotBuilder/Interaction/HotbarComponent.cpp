@@ -2,6 +2,7 @@
 #include "Debug/DebugDisplay.h"
 #include "ShopItemRow.h"
 #include "Buildables/BuildablePiece.h"
+#include "Props/PaintBucket.h"
 #include "Progress/ProgressSubsystem.h"
 #include "UI/PlayerMessages.h"
 #include "GameFramework/Pawn.h"
@@ -242,6 +243,13 @@ void UHotbarComponent::TryPlace()
 		{
 			Messages->Notify(NSLOCTEXT("Hotbar", "EnterBuildMode", "Enter Build Mode to place buildables."), EMessageTone::Info);
 		}
+		return;
+	}
+
+	// A paint bucket is an item for the brush, never an object to spawn. No message: painting is done with the brush,
+	// and a click with the brush in hand must not complain about the bucket it is painting with.
+	if (SelectedEntry.ActorClass->IsChildOf(APaintBucket::StaticClass()))
+	{
 		return;
 	}
 

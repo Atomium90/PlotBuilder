@@ -18,7 +18,11 @@ class ADemolitionTool;
  *  see SpawnAndThrowCharge and PlaceCharge. Slots 2-4 (Sledgehammer/Crowbar/Jackhammer) are ADemolitionTool
  *  instances, spawned once in BeginPlay from MeleeToolClasses and kept for the owner's lifetime
  *  (unlike the consumable charge) - PrimaryUse for those slots just forwards to the matching
- *  instance's own ADemolitionTool::PrimaryUse.
+ *  instance's own ADemolitionTool::PrimaryUse. Slot 5 (Brush) forwards PrimaryUse to the sibling
+ *  UPaintBrushComponent, the way slot 0 forwards to UPhysicsManipulationComponent.
+ *
+ *  Which slots can be held is decided by three switches a map sets on its own, see SetLocked. All the tools
+ *  are unlocked by default: there is no purchase of tools yet, so no notion of owning one.
  */
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class UToolbeltComponent : public UActorComponent
@@ -29,9 +33,9 @@ public:
 
 	UToolbeltComponent();
 
-	/** Slot 0 = Hands, slots 1-4 = the four demolition tools - see GDD §14. */
+	/** Slot 0 = Hands, slots 1-4 = the four demolition tools (GDD §14), slot 5 = the paint brush. The brush is last so that adding it renumbers nothing. */
 	UPROPERTY(EditDefaultsOnly, Category = "Toolbelt")
-	int32 NumSlots = 5;
+	int32 NumSlots = 6;
 
 	/** Class spawned by slot 1's secondary use - see SpawnAndThrowCharge. */
 	UPROPERTY(EditDefaultsOnly, Category = "Toolbelt")
@@ -70,7 +74,7 @@ public:
 	 *  the home allows building only, the hub allows neither):
 	 *   - SetLocked: the whole belt. Only the Hands remain, and the legacy Grab/Push bindings take over (see below).
 	 *   - SetDestructionAllowed: the demolition tools (the charge and the three melee tools).
-	 *   - building (APlayerCharacter::SetBuildingAllowed) also decides whether the paint brush can be used.
+	 *   - SetPaintingAllowed: the paint brush. Painting is part of building, so APlayerCharacter::SetBuildingAllowed sets it.
 	 *  The Hands are always available.
 	 *
 	 *  While locked, EquipSlot/CycleTool keep the Hands and the equipped slot is forced back to Hands. It is also the signal
@@ -90,6 +94,17 @@ public:
 	void SetDestructionAllowed(bool bNewAllowed);
 
 	bool IsDestructionAllowed() const { return bDestructionAllowed; }
+
+	/**
+	 *  Allows or forbids the paint brush (slot 5), like SetDestructionAllowed does for the tools. Normally set through
+	 *  APlayerCharacter::SetBuildingAllowed, since painting belongs to building. On by default.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
+	void SetPaintingAllowed(bool bNewAllowed);
+
+	bool IsPaintingAllowed() const { return bPaintingAllowed; }
+
+	bool IsBrushEquipped() const { return EquippedIndex == BrushSlotIndex; }
 
 	/** Whether Index can be equipped right now: in range, and either the Hands or a slot that neither the lock nor its own switch forbids. */
 	UFUNCTION(BlueprintPure, Category = "Toolbelt")
@@ -120,6 +135,7 @@ private:
 	static constexpr int32 HandsSlotIndex = 0;
 	static constexpr int32 ChargeSlotIndex = 1;
 	static constexpr int32 FirstMeleeSlotIndex = 2;
+	static constexpr int32 BrushSlotIndex = 5;
 
 	void EquipSlotInternal(int32 Index);
 	/** Spawns the charge and tracks it as ActiveCharge. Null if the class is unset or there is no controller. */
@@ -141,6 +157,7 @@ private:
 	int32 EquippedIndex = HandsSlotIndex;
 	bool bLocked = false;
 	bool bDestructionAllowed = true;
+	bool bPaintingAllowed = true;
 
 	UPROPERTY()
 	TObjectPtr<AExplosiveCharge> ActiveCharge;

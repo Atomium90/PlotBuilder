@@ -15,6 +15,7 @@
 #include "Interaction/BuildModeComponent.h"
 #include "Interaction/ShopItemRow.h"
 #include "Interaction/ToolbeltComponent.h"
+#include "Interaction/PaintBrushComponent.h"
 #include "Destruction/Damageable.h"
 #include "Destruction/DemolitionTypes.h"
 #include "Destruction/CrushDetectionComponent.h"
@@ -74,6 +75,9 @@ APlayerCharacter::APlayerCharacter()
 
 	// Equipped demolition tool slot, separate from the hotbar
 	ToolbeltComponent = CreateDefaultSubobject<UToolbeltComponent>(TEXT("ToolbeltComponent"));
+
+	// What the belt's brush slot does: paints the piece in focus with the bucket selected in the hotbar
+	PaintBrushComponent = CreateDefaultSubobject<UPaintBrushComponent>(TEXT("PaintBrushComponent"));
 
 	// Accumulated crush energy from Falling pieces, stun gating for movement/camera/tool input
 	CrushDetectionComponent = CreateDefaultSubobject<UCrushDetectionComponent>(TEXT("CrushDetectionComponent"));
@@ -396,6 +400,12 @@ void APlayerCharacter::SetBuildingAllowed(bool bAllowed)
 	if (HotbarComponent)
 	{
 		HotbarComponent->SetAllowed(bAllowed);
+	}
+
+	// Painting is part of building: it follows the same switch.
+	if (ToolbeltComponent)
+	{
+		ToolbeltComponent->SetPaintingAllowed(bAllowed);
 	}
 }
 

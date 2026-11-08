@@ -16,6 +16,7 @@ class UPhysicsManipulationComponent;
 class UHotbarComponent;
 class UBuildModeComponent;
 class UToolbeltComponent;
+class UPaintBrushComponent;
 class UCrushDetectionComponent;
 struct FInputActionValue;
 
@@ -56,6 +57,10 @@ class APlayerCharacter : public ACharacter
 	/** Equipped demolition tool slot, separate from the hotbar - see GDD §18.2 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UToolbeltComponent* ToolbeltComponent;
+
+	/** What the paint brush (tool belt slot 5) does: paints the piece in focus with the bucket selected in the hotbar */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UPaintBrushComponent* PaintBrushComponent;
 
 	/** Accumulated crush energy from Falling pieces, stun gating for movement/camera/tool input - see GDD §7.9 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
@@ -241,7 +246,8 @@ public:
 
 	/**
 	 *  Switches the building side of the game on or off in one call: Build Mode, and the hotbar's picking up,
-	 *  buying and placing (see UBuildModeComponent::SetAllowed, UHotbarComponent::SetAllowed). A mission level
+	 *  buying and placing (see UBuildModeComponent::SetAllowed, UHotbarComponent::SetAllowed), and the paint brush
+	 *  (UToolbeltComponent::SetPaintingAllowed: painting is part of building). A mission level
 	 *  turns it off, leaving the tool belt and the hands as the only way to act on the house. On by default.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Player")

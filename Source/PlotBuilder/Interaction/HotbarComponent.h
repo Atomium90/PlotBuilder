@@ -161,7 +161,8 @@ public:
 	/**
 	 *  Spawns the selected entry, grid-snapped, in front of the view. Instant placement, no
 	 *  preview: this is the APhysicsProp path. ABuildablePiece entries are refused here - they
-	 *  go through UBuildModeComponent's preview + confirm flow instead.
+	 *  go through UBuildModeComponent's preview + confirm flow instead - and so are the paint
+	 *  buckets (APaintBucket), which only the brush uses and which are never spawned.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	void TryPlace();
