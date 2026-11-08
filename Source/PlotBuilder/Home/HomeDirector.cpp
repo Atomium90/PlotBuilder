@@ -56,8 +56,9 @@ void AHomeDirector::BeginPlay()
 	if (bRestoreOnBeginPlay)
 	{
 		RestorePlot();
-		ApplyInventory();
 	}
+
+	ApplyToPlayer();
 }
 
 void AHomeDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -72,7 +73,7 @@ void AHomeDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		LeaveHandle.Reset();
 	}
 
-	GetWorldTimerManager().ClearTimer(InventoryTimer);
+	GetWorldTimerManager().ClearTimer(PlayerTimer);
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -176,61 +177,71 @@ void AHomeDirector::RestorePlot()
 	Report((PiecesRefused > 0 || PaintsLost > 0) ? FColor::Orange : FColor::Green);
 }
 
-void AHomeDirector::ApplyInventory()
+void AHomeDirector::ApplyToPlayer()
 {
-	const UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
+	APlayerCharacter* Character = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
 
-	if (!Progress || !Progress->GetHome().bValid)
+	if (!Character)
 	{
-		GetWorldTimerManager().ClearTimer(InventoryTimer);
-		return;
-	}
-
-	const APlayerCharacter* Character = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
-	UHotbarComponent* Hotbar = Character ? Character->GetHotbarComponent() : nullptr;
-
-	if (Hotbar)
-	{
-		const TArray<FHomeSlotRecord>& Records = Progress->GetHome().Slots;
-
-		TArray<FInventorySlot> Slots;
-		Slots.SetNum(Records.Num());
-
-		int32 Filled = 0;
-
-		for (int32 Index = 0; Index < Records.Num(); ++Index)
+		if (++PlayerAttempts > MaxPlayerAttempts)
 		{
-			Slots[Index].ActorClass = Records[Index].ActorClass.LoadSynchronous();
-			Slots[Index].Scale = Records[Index].Scale;
-			Slots[Index].Count = Records[Index].Count;
-			Slots[Index].StackSize = Records[Index].StackSize;
-
-			if (!Slots[Index].IsEmpty())
-			{
-				++Filled;
-			}
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHomeDirector: no player character after %d tries, demolition stays allowed and the inventory is not restored."), MaxPlayerAttempts);
+			GetWorldTimerManager().ClearTimer(PlayerTimer);
+			return;
 		}
 
-		Hotbar->RestoreSlots(Slots);
+		if (!GetWorldTimerManager().IsTimerActive(PlayerTimer))
+		{
+			GetWorldTimerManager().SetTimer(PlayerTimer, this, &AHomeDirector::ApplyToPlayer, PlayerRetryInterval, true);
+		}
 
-		Summary += FString::Printf(TEXT(", inventory %d stacks"), Filled);
-		Report(FColor::Green);
-
-		GetWorldTimerManager().ClearTimer(InventoryTimer);
 		return;
 	}
 
-	if (++InventoryAttempts > MaxInventoryAttempts)
+	GetWorldTimerManager().ClearTimer(PlayerTimer);
+
+	Character->SetDestructionAllowed(!bDisableDestruction);
+
+	if (bRestoreOnBeginPlay)
 	{
-		UE_LOG(LogPlotBuilder, Warning, TEXT("AHomeDirector: no player character after %d tries, the inventory is not restored."), MaxInventoryAttempts);
-		GetWorldTimerManager().ClearTimer(InventoryTimer);
+		RestoreInventory(*Character);
+	}
+}
+
+void AHomeDirector::RestoreInventory(const APlayerCharacter& Character)
+{
+	const UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
+	UHotbarComponent* Hotbar = Character.GetHotbarComponent();
+
+	if (!Progress || !Progress->GetHome().bValid || !Hotbar)
+	{
 		return;
 	}
 
-	if (!GetWorldTimerManager().IsTimerActive(InventoryTimer))
+	const TArray<FHomeSlotRecord>& Records = Progress->GetHome().Slots;
+
+	TArray<FInventorySlot> Slots;
+	Slots.SetNum(Records.Num());
+
+	int32 Filled = 0;
+
+	for (int32 Index = 0; Index < Records.Num(); ++Index)
 	{
-		GetWorldTimerManager().SetTimer(InventoryTimer, this, &AHomeDirector::ApplyInventory, InventoryRetryInterval, true);
+		Slots[Index].ActorClass = Records[Index].ActorClass.LoadSynchronous();
+		Slots[Index].Scale = Records[Index].Scale;
+		Slots[Index].Count = Records[Index].Count;
+		Slots[Index].StackSize = Records[Index].StackSize;
+
+		if (!Slots[Index].IsEmpty())
+		{
+			++Filled;
+		}
 	}
+
+	Hotbar->RestoreSlots(Slots);
+
+	Summary += FString::Printf(TEXT(", inventory %d stacks"), Filled);
+	Report(FColor::Green);
 }
 
 void AHomeDirector::SaveSnapshot()

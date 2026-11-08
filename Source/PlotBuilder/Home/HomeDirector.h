@@ -5,6 +5,7 @@
 #include "HomeDirector.generated.h"
 
 class APhysicsProp;
+class APlayerCharacter;
 class APlot;
 
 /**
@@ -39,6 +40,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Home")
 	bool bRestoreOnBeginPlay = true;
 
+	/**
+	 *  The home is a place to build, not to take apart: the demolition tools cannot be equipped here (APlayerCharacter::SetDestructionAllowed).
+	 *  Building and painting stay on, and the tool belt is not locked, so the Hands and the paint brush are on it.
+	 *  Off to allow demolition in this map as well.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Home")
+	bool bDisableDestruction = true;
+
 	/** Writes the pieces, props and inventory that are in the level to the progress save. Does nothing without a plot. */
 	UFUNCTION(BlueprintCallable, Category = "Home")
 	void SaveSnapshot();
@@ -56,8 +65,8 @@ protected:
 
 private:
 
-	static constexpr int32 MaxInventoryAttempts = 50;
-	static constexpr float InventoryRetryInterval = 0.1f;
+	static constexpr int32 MaxPlayerAttempts = 50;
+	static constexpr float PlayerRetryInterval = 0.1f;
 
 	/** On-screen key of the summary line (7600 to 7699 belong to the progress and hub readouts). */
 	static constexpr int32 SummaryMessageKey = 7640;
@@ -65,8 +74,11 @@ private:
 	/** Puts the saved pieces and props back. Fills Summary with what it did. */
 	void RestorePlot();
 
-	/** Puts the saved inventory back. The pawn may not exist yet when the level starts: retried until it does. */
-	void ApplyInventory();
+	/** What the home asks of the player: the demolition switch, then the saved inventory. The pawn may not exist yet when the level starts: retried until it does. */
+	void ApplyToPlayer();
+
+	/** Puts the saved inventory back into Character's hotbar. Does nothing without a saved home. */
+	void RestoreInventory(const APlayerCharacter& Character);
 
 	/** Prints Summary on screen and in the log. */
 	void Report(const FColor& Color) const;
@@ -74,8 +86,8 @@ private:
 	APlot* ResolvePlot() const;
 
 	FDelegateHandle LeaveHandle;
-	FTimerHandle InventoryTimer;
-	int32 InventoryAttempts = 0;
+	FTimerHandle PlayerTimer;
+	int32 PlayerAttempts = 0;
 	FString Summary;
 
 	/** The props the level already held when it started: they come back with the level, so they are never saved. */
