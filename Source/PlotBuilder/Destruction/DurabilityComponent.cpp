@@ -1,5 +1,7 @@
 #include "DurabilityComponent.h"
 #include "DemolitionRules.h"
+#include "DamageLogSubsystem.h"
+#include "Engine/World.h"
 #include "PlotBuilder.h"
 
 UDurabilityComponent::UDurabilityComponent()
@@ -46,6 +48,16 @@ void UDurabilityComponent::ApplyDamage(const FDamageInfo& DamageInfo)
 
 	const EDurabilityState OldState = State;
 	const EDurabilityState NewState = ComputeStateForRatio(GetHPRatio());
+
+	// The one place a hit is logged for pb.ShowDamageLog, whatever dealt it. Recorded before the state change is
+	// broadcast, so a destroyed piece is in the log before anything reacts to its destruction.
+	if (const UWorld* World = GetWorld())
+	{
+		if (UDamageLogSubsystem* DamageLog = World->GetSubsystem<UDamageLogSubsystem>())
+		{
+			DamageLog->Record(DamageInfo, GetOwner(), Material, CurrentHP, MaxHP, NewState);
+		}
+	}
 
 	if (NewState != OldState)
 	{

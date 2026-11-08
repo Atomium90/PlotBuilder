@@ -65,6 +65,10 @@ struct FDamageInfo
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	float Amount = 0.f;
 
+	/** The tool x material factor already inside Amount, 1 when there is none (an impact, a debug hit). Read only by the damage log; the damage itself never uses it. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	float Multiplier = 1.f;
+
 	/** Which tool dealt this damage (Crowbar, Sledgehammer, Jackhammer, Charge, Debug...), for logging/evaluation. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	FName ToolId;

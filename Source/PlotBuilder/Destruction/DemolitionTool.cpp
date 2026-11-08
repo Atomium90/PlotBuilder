@@ -184,6 +184,7 @@ void ADemolitionTool::ResolveHit()
 
 		FDamageInfo DamageInfo;
 		DamageInfo.Amount = FinalDamage;
+		DamageInfo.Multiplier = ToolData->BaseDamage > 0.f ? FinalDamage / ToolData->BaseDamage : 1.f;
 		DamageInfo.ToolId = FName(*StaticEnum<EDemolitionTool>()->GetNameStringByValue(static_cast<int64>(ToolData->Tool)));
 		DamageInfo.HitLocation = Hit.Location;
 		DamageInfo.Instigator = this;

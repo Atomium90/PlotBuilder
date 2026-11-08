@@ -8,6 +8,7 @@
 #include "Buildables/BuildablePiece.h"
 #include "Contracts/MissionDirector.h"
 #include "Destruction/CrushDetectionComponent.h"
+#include "Destruction/DamageLogSubsystem.h"
 #include "Destruction/Damageable.h"
 #include "Destruction/DemolitionTypes.h"
 #include "Environment/DropZone.h"
@@ -187,6 +188,20 @@ static FAutoConsoleCommandWithWorldAndArgs PbShowCrushCommand(
 				Crush->SetShowGauge(ParseBoolArg(Args));
 			}
 		}
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbShowDamageLogCommand(
+	TEXT("pb.ShowDamageLog"),
+	TEXT("pb.ShowDamageLog 0|1 - toggles the on-screen log of the last 10 damaging hits (tool, target, material, damage, HP left, state), with the hits of one frame merged per tool and material, and the totals. It records all the time, so turning it on shows what just happened."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		if (UDamageLogSubsystem* DamageLog = World ? World->GetSubsystem<UDamageLogSubsystem>() : nullptr)
+		{
+			DamageLog->SetShowLog(ParseBoolArg(Args));
+			return;
+		}
+
+		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.ShowDamageLog: no damage log in this world"));
 	}));
 
 static FAutoConsoleCommandWithWorldAndArgs PbShowCollapseQueueCommand(

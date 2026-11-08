@@ -153,6 +153,7 @@ void AExplosiveCharge::Detonate()
 
 			FDamageInfo DamageInfo;
 			DamageInfo.Amount = FinalDamage;
+			DamageInfo.Multiplier = Damage > 0.f ? FinalDamage / Damage : 1.f;
 			DamageInfo.ToolId = FName("Charge");
 			DamageInfo.HitLocation = Origin;
 			DamageInfo.Instigator = this;
