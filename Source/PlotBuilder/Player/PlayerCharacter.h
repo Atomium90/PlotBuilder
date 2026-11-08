@@ -18,6 +18,7 @@ class UBuildModeComponent;
 class UToolbeltComponent;
 class UPaintBrushComponent;
 class UCrushDetectionComponent;
+class UShopCartComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPlayerCharacter, Log, All);
@@ -61,6 +62,10 @@ class APlayerCharacter : public ACharacter
 	/** What the paint brush (tool belt slot 5) does: paints the piece in focus with the bucket selected in the hotbar */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UPaintBrushComponent* PaintBrushComponent;
+
+	/** The shop cart: what the player means to buy, confirmed in one purchase. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UShopCartComponent* ShopCartComponent;
 
 	/** Accumulated crush energy from Falling pieces, stun gating for movement/camera/tool input - see GDD §7.9 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
@@ -128,7 +133,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* ToggleShopAction;
 
-	/** Cycle Equipped Tool Input Action (Axis1D: +1/-1 per step, e.g. mouse wheel) - mission context only, see IMC_Mission */
+	/** Cycle Equipped Tool Input Action (Axis1D: -1 / +1 per press, the Left and Right arrow keys) - mission context only, see IMC_Mission */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* CycleToolAction;
 
@@ -240,6 +245,9 @@ public:
 
 	/** Returns ToolbeltComponent subobject **/
 	UToolbeltComponent* GetToolbeltComponent() const { return ToolbeltComponent; }
+
+	/** Returns ShopCartComponent subobject **/
+	UShopCartComponent* GetShopCartComponent() const { return ShopCartComponent; }
 
 	/** Returns CrushDetectionComponent subobject **/
 	UCrushDetectionComponent* GetCrushDetectionComponent() const { return CrushDetectionComponent; }

@@ -3,7 +3,10 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Engine/DataTable.h"
+#include "ShopCartTypes.h"
 #include "HotbarComponent.generated.h"
+
+struct FShopItemRow;
 
 /** One inventory slot: class to respawn, the scale its stack was picked up/bought at, how many, and the max for that stack. Empty when ActorClass is null or Count is 0. */
 USTRUCT(BlueprintType)
@@ -33,6 +36,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSelectedSlotChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCursorSlotChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnMoneyChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAllowedChanged);
 
 /**
  *  Minecraft-style grid inventory: NumColumns x NumRows fixed slots, each stacking up to its own
@@ -102,6 +106,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Hotbar")
 	FOnMoneyChanged OnMoneyChanged;
 
+	/** Fired when SetAllowed turns the inventory side of the game on or off (a mission turns it off). The HUD hides the hotbar on it. */
+	UPROPERTY(BlueprintAssignable, Category = "Hotbar")
+	FOnAllowedChanged OnAllowedChanged;
+
 protected:
 
 	virtual void BeginPlay() override;
@@ -133,7 +141,7 @@ public:
 	 *  apart there. Pieces check it too, before a Placed one can be demolished by hand (ABuildablePiece::Interact).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
-	void SetAllowed(bool bNewAllowed) { bAllowed = bNewAllowed; }
+	void SetAllowed(bool bNewAllowed);
 
 	UFUNCTION(BlueprintPure, Category = "Hotbar")
 	bool IsAllowed() const { return bAllowed; }
@@ -157,6 +165,44 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	bool PurchaseRow(FName RowName);
+
+	/** How many units of ActorClass the player holds, in the grid and on the cursor. */
+	UFUNCTION(BlueprintPure, Category = "Hotbar")
+	int32 CountOf(TSubclassOf<AActor> ActorClass) const;
+
+	/** Slots of the grid, hotbar and backpack together. Known from the settings, so it is right before BeginPlay has made the grid. */
+	UFUNCTION(BlueprintPure, Category = "Hotbar")
+	int32 GetTotalSlotCount() const { return FMath::Max(NumColumns * NumRows, 0); }
+
+	/** Empty slots of the grid, hotbar and backpack together. */
+	UFUNCTION(BlueprintPure, Category = "Hotbar")
+	int32 GetFreeSlotCount() const;
+
+	/**
+	 *  What buying Lines would cost and whether it fits, without changing anything: the money is checked against the
+	 *  total, and the items are placed on a copy of the grid with the same rules as a purchase.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Hotbar")
+	FCartQuote QuoteLines(const TArray<FCartLine>& Lines) const;
+
+	/**
+	 *  Buys every line or none: nothing is taken and nothing is added unless QuoteLines says the whole cart can be paid and
+	 *  stored. The shop cart calls this on Confirm.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	bool PurchaseLines(const TArray<FCartLine>& Lines);
+
+	/** The catalog row of that name, or nullptr. */
+	const FShopItemRow* FindRow(FName RowName) const;
+
+	/**
+	 *  How many more of a catalog row the player may still buy: what FShopItemRow::MaxOwned allows minus what is already held,
+	 *  or no limit at all (a very large number) when the row has none.
+	 */
+	int32 GetPurchaseLimit(const FShopItemRow& Row) const;
+
+	/** The catalog row whose ActorClass is ActorClass, or nullptr. The widgets read the name, the price and the category of a stack from it. */
+	const FShopItemRow* FindRowForClass(TSubclassOf<AActor> ActorClass) const;
 
 	/**
 	 *  Spawns the selected entry, grid-snapped, in front of the view. Instant placement, no
@@ -236,8 +282,11 @@ private:
 	/** Adds Count units of ActorClass/Scale (capped at StackSize per slot) starting at the first slot that fits - an existing matching stack with room before any empty slot, both scanned in index order. Returns how many units didn't fit anywhere (0 = fully added). */
 	int32 AddItem(TSubclassOf<AActor> ActorClass, const FVector& Scale, int32 StackSize, int32 Count = 1);
 
+	/** Adds Count units to Target with the AddItem rules and returns how many did not fit. Static so a quote can try it on a copy of the grid. */
+	static int32 AddToSlots(TArray<FInventorySlot>& Target, TSubclassOf<AActor> ActorClass, const FVector& Scale, int32 StackSize, int32 Count);
+
 	/** ShopCatalog row whose ActorClass matches, or nullptr. Used by Store() - PurchaseRow already has its row directly. */
-	const struct FShopItemRow* FindCatalogRowFor(TSubclassOf<AActor> ActorClass) const;
+	const FShopItemRow* FindCatalogRowFor(TSubclassOf<AActor> ActorClass) const;
 
 	void SetSelectedIndex(int32 NewIndex);
 

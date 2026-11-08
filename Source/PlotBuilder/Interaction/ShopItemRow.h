@@ -47,6 +47,13 @@ struct FShopItemRow : public FTableRowBase
 	EShopItemCategory Category = EShopItemCategory::Structure;
 
 	/**
+	 *  The most of this item the player may own at once, 0 for no limit. A paint bucket is 1: it is never used up, so a second
+	 *  one is useless. The shop cart cannot go past it (what the player already holds counts).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shop Item")
+	int32 MaxOwned = 0;
+
+	/**
 	 *  The row of Catalog whose ActorClass is exactly ActorClass, or nullptr (no catalog, no class, no such row).
 	 *  The one lookup by class: the hotbar uses it to store a prop, the mission director to weigh a piece.
 	 *  The catalog is the source of truth for costs; the Cost field on the piece Blueprints is not read.

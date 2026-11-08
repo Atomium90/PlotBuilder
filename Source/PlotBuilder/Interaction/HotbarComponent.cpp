@@ -79,15 +79,22 @@ void UHotbarComponent::RestoreSlots(const TArray<FInventorySlot>& NewSlots)
 
 bool UHotbarComponent::SlotQualifies(const FInventorySlot& Slot, bool bBuildablesOnly)
 {
-	if (Slot.IsEmpty())
+	// Outside build mode the wheel visits every slot, empty ones too: the player sees the selection move even on an empty hotbar.
+	if (!bBuildablesOnly)
 	{
-		return false;
+		return true;
 	}
 
-	return !bBuildablesOnly || Slot.ActorClass->IsChildOf(ABuildablePiece::StaticClass());
+	// Build mode can only build what is there.
+	return !Slot.IsEmpty() && Slot.ActorClass->IsChildOf(ABuildablePiece::StaticClass());
 }
 
 int32 UHotbarComponent::AddItem(TSubclassOf<AActor> ActorClass, const FVector& Scale, int32 StackSize, int32 Count)
+{
+	return AddToSlots(Slots, ActorClass, Scale, StackSize, Count);
+}
+
+int32 UHotbarComponent::AddToSlots(TArray<FInventorySlot>& Target, TSubclassOf<AActor> ActorClass, const FVector& Scale, int32 StackSize, int32 Count)
 {
 	if (!ActorClass || Count <= 0 || StackSize <= 0)
 	{
@@ -97,7 +104,7 @@ int32 UHotbarComponent::AddItem(TSubclassOf<AActor> ActorClass, const FVector& S
 	int32 Remaining = Count;
 
 	// An existing stack with room, in index order, before any empty slot.
-	for (FInventorySlot& Slot : Slots)
+	for (FInventorySlot& Slot : Target)
 	{
 		if (Remaining <= 0)
 		{
@@ -112,7 +119,7 @@ int32 UHotbarComponent::AddItem(TSubclassOf<AActor> ActorClass, const FVector& S
 		}
 	}
 
-	for (FInventorySlot& Slot : Slots)
+	for (FInventorySlot& Slot : Target)
 	{
 		if (Remaining <= 0)
 		{
@@ -136,6 +143,142 @@ int32 UHotbarComponent::AddItem(TSubclassOf<AActor> ActorClass, const FVector& S
 const FShopItemRow* UHotbarComponent::FindCatalogRowFor(TSubclassOf<AActor> ActorClass) const
 {
 	return FShopItemRow::FindForClass(ShopCatalog, ActorClass);
+}
+
+const FShopItemRow* UHotbarComponent::FindRowForClass(TSubclassOf<AActor> ActorClass) const
+{
+	return FindCatalogRowFor(ActorClass);
+}
+
+const FShopItemRow* UHotbarComponent::FindRow(FName RowName) const
+{
+	return ShopCatalog ? ShopCatalog->FindRow<FShopItemRow>(RowName, TEXT("UHotbarComponent::FindRow"), false) : nullptr;
+}
+
+int32 UHotbarComponent::GetPurchaseLimit(const FShopItemRow& Row) const
+{
+	return Row.MaxOwned > 0 ? FMath::Max(0, Row.MaxOwned - CountOf(Row.ActorClass)) : TNumericLimits<int32>::Max();
+}
+
+void UHotbarComponent::SetAllowed(bool bNewAllowed)
+{
+	if (bAllowed == bNewAllowed)
+	{
+		return;
+	}
+
+	bAllowed = bNewAllowed;
+	OnAllowedChanged.Broadcast();
+}
+
+int32 UHotbarComponent::CountOf(TSubclassOf<AActor> ActorClass) const
+{
+	if (!ActorClass)
+	{
+		return 0;
+	}
+
+	int32 Total = 0;
+
+	for (const FInventorySlot& Slot : Slots)
+	{
+		Total += (!Slot.IsEmpty() && Slot.ActorClass == ActorClass) ? Slot.Count : 0;
+	}
+
+	// The stack on the cursor is still the player's.
+	Total += (!CursorSlot.IsEmpty() && CursorSlot.ActorClass == ActorClass) ? CursorSlot.Count : 0;
+
+	return Total;
+}
+
+int32 UHotbarComponent::GetFreeSlotCount() const
+{
+	// Total minus the slots in use, so it is right before BeginPlay has made the grid (nothing is in use then).
+	int32 Used = 0;
+
+	for (const FInventorySlot& Slot : Slots)
+	{
+		Used += Slot.IsEmpty() ? 0 : 1;
+	}
+
+	return GetTotalSlotCount() - Used;
+}
+
+FCartQuote UHotbarComponent::QuoteLines(const TArray<FCartLine>& Lines) const
+{
+	FCartQuote Quote;
+	Quote.FreeSlots = GetFreeSlotCount();
+
+	// The items go on a copy of the grid with the same rules as a real purchase, so what the quote promises is what happens.
+	TArray<FInventorySlot> Simulated = Slots;
+	int32 EstimatedExtraSlots = 0;
+
+	for (const FCartLine& Line : Lines)
+	{
+		const FShopItemRow* Row = Line.Quantity > 0 ? FindRow(Line.RowName) : nullptr;
+
+		if (!Row || !Row->ActorClass)
+		{
+			continue;
+		}
+
+		Quote.Units += Line.Quantity;
+		Quote.TotalCost += Row->Cost * Line.Quantity;
+
+		const int32 NotPlaced = AddToSlots(Simulated, Row->ActorClass, FVector::OneVector, Row->StackSize, Line.Quantity);
+
+		if (NotPlaced > 0)
+		{
+			Quote.bFits = false;
+			EstimatedExtraSlots += FMath::DivideAndRoundUp(NotPlaced, FMath::Max(1, Row->StackSize));
+		}
+	}
+
+	int32 FreeAfter = 0;
+
+	for (const FInventorySlot& Slot : Simulated)
+	{
+		FreeAfter += Slot.IsEmpty() ? 1 : 0;
+	}
+
+	Quote.SlotsNeeded = (Quote.FreeSlots - FreeAfter) + EstimatedExtraSlots;
+	Quote.bAffordable = bInfiniteMoney || Money >= Quote.TotalCost;
+
+	return Quote;
+}
+
+bool UHotbarComponent::PurchaseLines(const TArray<FCartLine>& Lines)
+{
+	if (!ShopCatalog || !bAllowed)
+	{
+		return false;
+	}
+
+	const FCartQuote Quote = QuoteLines(Lines);
+
+	if (!Quote.CanConfirm())
+	{
+		return false;
+	}
+
+	for (const FCartLine& Line : Lines)
+	{
+		const FShopItemRow* Row = Line.Quantity > 0 ? FindRow(Line.RowName) : nullptr;
+
+		if (Row && Row->ActorClass)
+		{
+			AddItem(Row->ActorClass, FVector::OneVector, Row->StackSize, Line.Quantity);
+		}
+	}
+
+	if (!bInfiniteMoney)
+	{
+		Money -= Quote.TotalCost;
+		OnMoneyChanged.Broadcast();
+	}
+
+	OnInventoryChanged.Broadcast();
+	return true;
 }
 
 void UHotbarComponent::SetSelectedIndex(int32 NewIndex)

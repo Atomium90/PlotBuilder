@@ -16,6 +16,7 @@
 #include "Interaction/ShopItemRow.h"
 #include "Interaction/ToolbeltComponent.h"
 #include "Interaction/PaintBrushComponent.h"
+#include "Interaction/ShopCartComponent.h"
 #include "Destruction/Damageable.h"
 #include "Destruction/DemolitionTypes.h"
 #include "Destruction/CrushDetectionComponent.h"
@@ -78,6 +79,7 @@ APlayerCharacter::APlayerCharacter()
 
 	// What the belt's brush slot does: paints the piece in focus with the bucket selected in the hotbar
 	PaintBrushComponent = CreateDefaultSubobject<UPaintBrushComponent>(TEXT("PaintBrushComponent"));
+	ShopCartComponent = CreateDefaultSubobject<UShopCartComponent>(TEXT("ShopCartComponent"));
 
 	// Accumulated crush energy from Falling pieces, stun gating for movement/camera/tool input
 	CrushDetectionComponent = CreateDefaultSubobject<UCrushDetectionComponent>(TEXT("CrushDetectionComponent"));
