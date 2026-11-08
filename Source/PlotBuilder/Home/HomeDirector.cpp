@@ -1,6 +1,7 @@
 #include "HomeDirector.h"
 #include "Debug/DebugDisplay.h"
 #include "Buildables/BuildablePiece.h"
+#include "Buildables/PaintPalette.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -111,22 +112,43 @@ void AHomeDirector::RestorePlot()
 
 	int32 PiecesPlaced = 0;
 	int32 PiecesRefused = 0;
+	int32 PiecesPainted = 0;
+	int32 PaintsLost = 0;
 
 	for (const FHomePieceRecord& Record : Pieces)
 	{
 		UClass* PieceClass = Record.PieceClass.LoadSynchronous();
-		const ABuildablePiece* Piece = PieceClass
+		ABuildablePiece* Piece = PieceClass
 			? Plot->PlacePiece(TSubclassOf<ABuildablePiece>(PieceClass), Record.Cell, Record.QuarterTurns, Record.RoofStep, Record.Scale)
 			: nullptr;
 
 		if (Piece)
 		{
 			++PiecesPlaced;
+
+			// The index is applied, not the colour: the palette has the last word, so retuning it changes a saved house too.
+			if (Record.PaintIndex != 0)
+			{
+				if (Plot->PaintPalette)
+				{
+					Piece->ApplyPaint(Record.PaintIndex, Plot->PaintPalette);
+					++PiecesPainted;
+				}
+				else
+				{
+					++PaintsLost;
+				}
+			}
 		}
 		else
 		{
 			++PiecesRefused;
 		}
+	}
+
+	if (PaintsLost > 0)
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHomeDirector: the plot '%s' has no paint palette, %d painted pieces come back neutral. The next save would drop their paint."), *Plot->GetName(), PaintsLost);
 	}
 
 	int32 PropsPlaced = 0;
@@ -150,8 +172,8 @@ void AHomeDirector::RestorePlot()
 		}
 	}
 
-	Summary = FString::Printf(TEXT("Home restored: %d pieces (%d refused), %d of %d props"), PiecesPlaced, PiecesRefused, PropsPlaced, Home.Props.Num());
-	Report(PiecesRefused > 0 ? FColor::Orange : FColor::Green);
+	Summary = FString::Printf(TEXT("Home restored: %d pieces (%d refused, %d painted), %d of %d props"), PiecesPlaced, PiecesRefused, PiecesPainted, PropsPlaced, Home.Props.Num());
+	Report((PiecesRefused > 0 || PaintsLost > 0) ? FColor::Orange : FColor::Green);
 }
 
 void AHomeDirector::ApplyInventory()
@@ -250,6 +272,7 @@ void AHomeDirector::SaveSnapshot()
 		Record.QuarterTurns = Piece->GetOrientation();
 		Record.RoofStep = Piece->GetRoofStep();
 		Record.Scale = Piece->GetPlacedScale();
+		Record.PaintIndex = Piece->GetPaintIndex();
 	}
 
 	const FTransform PlotTransform = Plot->GetActorTransform();
