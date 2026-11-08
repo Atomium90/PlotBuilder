@@ -234,7 +234,7 @@ Payout       = BasePayout × Completion × (1 − Penalty)
 
 | Parameter | Start value | Comment |
 |---|---|---|
-| `weight` of a piece | its catalogue cost | Reuses the existing `Cost` on `ABuildablePiece`; no new data. |
+| `weight` of a piece or prop | the cost of its `DT_Shop` row (`FShopItemRow::Cost`), found by actor class | One source for costs. The `Cost` field on the piece Blueprints is unused (left at 0). A class with no shop row weighs its `Value` (props) or 1, and is counted in the mission summary. |
 | `kCollateral` | 1.5 | Collateral is weighed heavier than its raw share. |
 | `kFurniture` | 1.0 | Value-weighted. |
 | `PenaltyCap` | 0.8 | Never below 20% of the earned amount. |
@@ -285,6 +285,7 @@ Furniture uses the same enum (wood furniture, metal appliances, glass tables...)
 | Stairs | 0.9 |
 | Roof tile (slope/ridge/hip/valley/flat/gable) | 0.6 |
 | Door leaf | 0.3 (always wood, free to break) |
+| Window pane | 1.0 (always glass, so 60 HP) |
 
 Resulting examples: concrete foundation 1 200 HP; brick wall 500 HP; wood wall 250 HP; plaster interior wall ≈ 96 HP; wood roof tile 150 HP.
 
@@ -345,7 +346,9 @@ Readability is the key requirement (P2). Each piece moves through states by rema
 
 **Stability coupling.** A damaged piece transmits less stability to the pieces resting on it: `transmitted = stability × c(h)`, with `c = 1` for h ≥ 0.75, ~0.6 at h = 0.35, ~0.3 at h = 0. This makes an attacked load-bearing wall progressively *weaker for everything above it*, which is what makes the player "feel they are thinking".
 
-**Compromised.** A load-bearing piece in the Critical state that other pieces depend on enters **Compromised**: after a random delay (0.5–3 s) it fails by itself, with a clear warning (creak, dust, shake) beforehand. This is the **bounded unpredictability** the design asks for: the collapse may come on its own, but never with zero warning. It is the main punishment for hammering the base of a structure.
+**Compromised.** A load-bearing piece in the Critical state **that other pieces depend on** enters **Compromised**: after a random delay (0.5–3 s) it fails by itself, with a clear warning (creak, dust, shake) beforehand. This is the **bounded unpredictability** the design asks for: the collapse may come on its own, but never with zero warning. It is the main punishment for hammering the base of a structure.
+
+*"Depend on" means sole support* `[LOCKED 2026-10-31]`. A Critical load-bearing piece is Compromised only if it is a **true bottleneck**: if it were removed, at least one other piece would fall below the collapse threshold (`0.1`) or lose its chain to an anchor. A piece that merely lies on the best path of a neighbour, while another path would still hold that neighbour, stays Critical (cracks, creaks) but is not Compromised. The test is a **dry run of the cascade computation**: the same evaluation that returns the set `U` of §7.7, with the piece removed from the graph (not with its damaged transmission value: `c(h)` is already applied separately), and nothing destroyed. It runs once when the piece enters Critical and again after each batch of destructions (the batching of §18.6); during a mission nothing is built, so redundancy only decreases, and a piece that stops being a bottleneck because its dependants are gone has its timer cancelled. A looser reading ("any piece whose best path passes through it") was rejected: it depends on tie-breaking between equal paths, cannot be tested, and would put almost every load-bearing wall of a house into Compromised.
 
 ### 7.7 Collapse cascade `[PROPOSAL, with fallbacks]`
 
@@ -369,7 +372,7 @@ Readability is the key requirement (P2). Each piece moves through states by rema
 
 ### 7.8 Fracture and debris `[LOCKED: simple, short lifetime]`
 
-- On destruction a piece is swapped for a **pre-fractured Geometry Collection of 3–6 fragments** per *piece mesh*, authored once and reused for all instances (so no per-instance fracturing cost).
+- On destruction a piece is swapped for a **pre-fractured Geometry Collection per *piece mesh***, authored once and reused for all instances (so no per-instance fracturing cost). Fragment count is set per mesh rather than one fixed number: **8–10** for a larger mesh (3–6 looked too chunky in testing), down to **3–6** for a small one (e.g. a corner post). The 3–6 range stays as-is for the generic per-class fallback used by any mesh without an authored override.
 - Fragments have a **short life** — a few seconds (start at 6 s, matching today's behaviour of the falling chunk), then shrink/fade and despawn.
 - A **`UDebrisSubsystem`** enforces a global cap on active fragments (start ~300), removes the oldest first, and puts slow fragments to sleep to save physics cost.
 - A dedicated **Debris** collision channel/object type: fragments collide with the world and each other only as needed, never block the player's movement, and are ignored by build-mode obstruction checks.
@@ -408,11 +411,12 @@ The existing portance graph (`UStructuralSupportComponent`, `DA_StructuralRules`
 | Direction | Neighbour-centroid impulse; optional overload accumulation. |
 | Generated houses | The generator registers through the **same API** as build mode, so generated structures are valid by construction. |
 | Debugging | Heat-map view of stability; wave visualisation; HP overlay (§18.7). |
-| Stairwell walls | **Direct wall link.** Walls bordering a stairwell hole have no slab beneath or above them at any level, so they have nothing to pass stability through, and a slab cannot be placed in a hole that is empty on purpose. A direct `WallTop` ↔ `WallBottom` link between a wall and the wall stacked on it on the same edge (vertical class, same loss as the other vertical links, listed in the pair table of `DA_StructuralRules`) lets stability climb through the stack. It only passes a value along, it creates none: a wall stack still needs a chain back to an anchor. This is the original bug; the sub-anchor below does *not* fix it. Tests in Appendix B (T9). `[PROPOSAL]` |
-| Tall buildings | **Sub-anchor slab.** With `VerticalLoss` 0.1 and a collapse threshold of 0.1, a plain stack of walls and slabs reaches the threshold around the fifth storey, so a tall building cannot exist even at full health. A reinforced slab variant (same footprint and same 20 cm height as the normal slab, so storeys stay 300 cm and nothing is stacked) resets the stability to 1.0 like the foundation's Anchor, *provided the chain below it is valid*. The tall archetypes place one every `SubAnchorInterval` slabs (data); the player can place one in build mode. Tests in Appendix B (T8). `[PROPOSAL]` |
+| Stairwell walls | **Direct wall link.** Walls bordering a stairwell hole have no slab beneath or above them at any level, so they have nothing to pass stability through, and a slab cannot be placed in a hole that is empty on purpose. A direct `WallTop` ↔ `WallBottom` link between a wall and the wall stacked on it on the same edge (vertical class, same loss as the other vertical links) lets stability climb through the stack. It only passes a value along, it creates none: a wall stack still needs a chain back to an anchor. This is the original bug; the sub-anchor below does *not* fix it. Tests in Appendix B (T9), passed 2026-11-01. `[LOCKED: D28]` |
+| Tall buildings | **Sub-anchor slab.** With `VerticalLoss` 0.1 and a collapse threshold of 0.1, a plain stack of walls and slabs reaches the threshold around the fifth storey, so a tall building cannot exist even at full health. A reinforced slab variant (same footprint and same 20 cm height as the normal slab, so storeys stay 300 cm and nothing is stacked) resets the stability to 1.0 like the foundation's Anchor, *provided the chain below it is valid*. The tall archetypes place one every `SubAnchorInterval` slabs (data); the player can place one in build mode. Tests in Appendix B (T8), passed 2026-11-01. `[LOCKED: D28]` |
+| Roofs | Under every roof there is a **ceiling slab, always a reinforcement slab** (sub-anchor, above) whatever the storey interval, and a roof tile can rest on a slab edge (`RoofLow` on `FloorEdge`). A wide roof on a tall house therefore starts from a stability reset. A roof without a slab (high ceilings) stays a backlog idea. `[LOCKED: D32]` |
 | Visual overlaps | Exterior walls back to 300 cm (visual only); parity bias at wall corners; slabs and stairs retreat near exterior walls. Scheduled Oct 29, Oct 31 and Nov 5 (§19.1). No change to sockets or the graph. |
 
-No new sockets are required. The author's note holds: structurally the kit is varied enough; the glass window will be a Blueprint like the door (a frame piece plus a glass sub-piece, two assets, one Blueprint; scheduled Nov 2, bonus tier), and a different staircase is possible but optional.
+No new sockets are required. The author's note holds: structurally the kit is varied enough; the glass window will be a Blueprint like the door (a frame piece plus a glass sub-piece, two assets, one Blueprint; scheduled Nov 3, bonus tier), and a different staircase is possible but optional.
 
 ---
 
@@ -453,6 +457,8 @@ Contract (archetype, seed, area target, type)
 
 B1 needs **2–3 of the first three**; two are enough if the generator is solid.
 
+**Roof shape `[LOCKED: D31]`.** The roof (flat, two-sided, four-sided) is a parameter rolled by the seed, from weights on the archetype tilted by the footprint: a square leans towards four sides, a long house towards two. The number of storeys is not rolled: it is a data choice, one archetype per count.
+
 ### 9.4 Rooms and furniture `[LOCKED: five room types]`, `[PROPOSAL: counts]`
 
 Room types: **bathroom, kitchen, living room, bedroom, office**.
@@ -466,6 +472,10 @@ Props come from the **Kenney Furniture Kit** (existing assets, imported and tagg
 | Bedroom | bed, wardrobe, nightstand, desk, lamp | 3 tiers (bed especially) |
 | Living room | sofa, armchair, table, TV unit, shelves | 2 tiers |
 | Office | desk, chair, shelves, filing cabinet | 2 tiers |
+
+**Standing `[LOCKED: D30]`.** Each generated house rolls a standing (1 to 3) from the seed. It tilts the quality tier of the furniture in every room: a furniture row's weight is multiplied by a falloff for each tier it is away from the standing, so a house is coherently modest or well off instead of random room by room. A group with a single row is furnished at any standing. The standing can later feed the contract's tier.
+
+**Standing per storey `[LOCKED: D33]`.** A plan that repeats its typical storeys (the apartment block) also gives each typical storey a standing of its own, 1 to 3. It decides how often that storey is stacked at each height (high standings go up) and moves the furniture of its rooms one tier up or down from the house's own standing, so a block can mix modest and well-off storeys. A storey with no standing of its own follows the house's.
 
 Each prop is a Blueprint (`BP_Prop_*`) with tags: **room type**, **quality tier**, **material**, **HP**, **value**, **placement rule** (against wall, in corner, centred, near plumbing…). Rules live in a `DT_FurnishingRules` Data Table; adding a variant is a new row, not new code. The variant count is "filling", as the author says — the pipeline is the work.
 
@@ -564,10 +574,12 @@ Default if this is ever built: **B**.
 - **Mechanics:** exactly the Week 2 build mode (grid, sockets, portance, hotbar/inventory, shop). It stays valid and unchanged; it is simply *no longer the core loop*.
 - **Extensions:** garden, workshop, etc. (author: extensible).
 - **Furniture:** new from the shop (the "Keep" zone is dropped for now).
-- **Paint tool** (B1 bonus tier, 2026-10-31): a "Peinture" shop category; the tool applies a colour from a palette data asset to any placed piece (a `PaintIndex` per piece, saved with the home). Build mode only. Using it in renovation contracts (break partitions, re-place them, paint) is the idea behind it but needs build mode inside missions, so it stays beyond B1.
+- **Paint tool** (B1 bonus tier, 2026-10-31; reworked 2026-11-08 `[LOCKED: D34]`): the **brush** is a slot of the tool belt (the last one), available wherever building is allowed. Colours are **paint buckets** sold in the shop (category "Paint"), one item per colour of a palette data asset; the brush paints a placed piece with the bucket selected in the hotbar. A bucket is infinite for now and can be made finite later. A `PaintIndex` per piece is saved with the home, and the paint stays on the placed piece: a piece taken back and placed again is neutral. Painting belongs to the building side, so a renovation contract that allows building (break partitions, re-place them, repaint) gets it with no extra work; that contract needs build mode inside missions, so it stays beyond B1.
 - **Priority:** B1 bonus tier, shipped or cut as one block (parcel purchase + `Lvl_Home` + access point + persistence). Nothing in the must-have loop depends on it.
 
 **Existing systems affected.** In mission levels the build mode, hotbar and shop are **disabled** (the mission uses a separate tool belt, §18.2). They are active only in `Lvl_Home` and the test map.
+
+**What a map allows `[LOCKED: D34]`.** Three independent switches, set per map: the **belt lock** (the player holds only the Hands; the hub), **building** (build mode, hotbar, shop and the paint brush; off in the hub and in missions), and **destruction** (the demolition tools; off in the home). Any mix is valid, so a renovation contract can allow building and demolition together.
 
 ---
 
@@ -617,10 +629,11 @@ B1: a **navigable v1** (bonus tier): hall, mezzanine office with the PC reached 
 | Action | Input |
 |---|---|
 | Move / Look / Jump | ZQSD / Mouse / Space (unchanged) |
-| Equip tool | 1–5 or Mouse Wheel (slot 0 = Hands); **tool wheel** (B1 bonus tier): hold a key, move the mouse towards a slot, release to equip |
+| Equip tool | Left / Right arrow keys (slot 0 = Hands); **tool wheel** (B1 bonus tier): hold a key, move the mouse towards a slot, release to equip |
 | Primary use | Left Click |
 | Secondary use | Right Click (charge: place → detonate; Hands: throw) |
 | Hands: grab / carry | Left Click on a prop with Hands equipped |
+| Brush: paint | Left Click on a placed piece with the brush equipped (last belt slot, where building is allowed); paints with the bucket selected in the hotbar |
 | Interact | E (truck, PC, doors) |
 | Controls overlay | H |
 
@@ -726,6 +739,7 @@ Naming follows existing conventions: `A`/`U`/`I` prefixes, short role-descriptiv
 | `AExplosiveCharge` | C++ + BP | Placeable physics actor; manual detonation; radial damage + impulse. |
 | `UDemolitionToolData` / `DA_DemolitionRules` | Data assets | Tool stats; tool × material matrix; HP table; state thresholds; `c(h)` curve. |
 | `UCrushDetectionComponent` | C++ | Impact accumulation on the player, crush events. |
+| `UPaintBrushComponent`, `UPaintPalette`, `APaintBucket` | C++ + data | The brush (last belt slot), the plot's palette of colours, a colour as an inventory item (D34). |
 | `UDebrisSubsystem` | C++ world subsystem | Fragment cap, oldest-first eviction, sleeping. |
 | `UFractureLibrary` (or data table) | C++ + assets | Piece mesh → Geometry Collection mapping. |
 | `UContractSubsystem` | C++ game instance subsystem | Offers, active contract, evaluation, payment, progression hooks. |
@@ -841,7 +855,7 @@ Dialogue and negotiation → client profiles and evolution → reputation → Se
 Testable acceptance checks:
 
 - [ ] Each of the four tools damages pieces according to the matrix (spot-checked against §7.5).
-- [ ] Removing a ground-floor load-bearing wall of a two-storey house produces a **multi-wave** staggered collapse with a visible warning beforehand.
+- [ ] Removing a ground-floor load-bearing wall of a two-storey house produces a **multi-wave** staggered collapse with a visible warning beforehand; only true bottlenecks go Compromised (T10).
 - [ ] Attacking the base of a structure with the wrong tool is clearly slower than the right tool.
 - [ ] A single wall falling on the player does **not** trigger a crush event; a multi-piece collapse does.
 - [ ] A seed generates the same house every time, and every generated house is stable at spawn.
@@ -857,7 +871,7 @@ Bonus tier (checked only if shipped):
 - [ ] Tools can be bought at the PC terminal and stay owned across levels.
 - [ ] A parcel bought at the PC opens `Lvl_Home` from the hub access point; a house built there is still there after hub → mission → home.
 - [ ] The hub is navigable (hall, mezzanine office with the PC, door with the truck trigger, access-point trigger).
-- [ ] Sticky charge sticks to an aimed surface and falls if its piece is destroyed; the jackhammer drill loop plays only while held; the paint tool colours placed pieces (and the colour survives the home's persistence); the tool wheel equips by direction.
+- [ ] Sticky charge sticks to an aimed surface and falls if its piece is destroyed; the jackhammer drill loop plays only while held; the paint brush, with a bucket selected, colours placed pieces (and the colour survives the home's persistence); the tool wheel equips by direction.
 
 ### 21.2 Mapping to the CDC criteria (`CDC_GTech4_Fil_Rouge`)
 
@@ -945,6 +959,12 @@ The course states that **two projects during the year must be completed entirely
 | D26 | Props come from the Kenney Furniture Kit; "about thirty" is a ballpark. |
 | D27 | Sprint estimates stay in the original conservative units (the author's observed pace is ≈ 0.7×); the bonus tier is cut first if time is short. |
 | D28 | 2026-10-31: five `Ideas_Backlog.md` items promoted, plus one fix the backlog pointed at but did not schedule. The **stairwell wall link** (direct `WallTop`/`WallBottom` match between stacked walls) is core (Sprint 2, Nov 1): it fixes the original bug of walls bordering a stairwell hole, which the sub-anchor cannot. The **sub-anchor slab** is core (Sprint 2, Nov 1): a reinforced slab variant of the same 20 cm height that resets stability to 1.0 if the chain below is valid. **Sticky charge, jackhammer drill-loop sound, paint tool and tool wheel** are bonus tier, cut before every other bonus item in this order: tool wheel, paint tool, jackhammer sound, sticky charge. The author's own priority order is sub-anchor, sticky charge, jackhammer sound, paint, tool wheel. |
+| D29 | 2026-10-31: Compromised means sole support. A Critical load-bearing piece is Compromised only if removing it would make another piece fall below the collapse threshold or lose its anchor chain (dry run of the cascade computation, no destruction), re-evaluated per destruction batch (§7.6). |
+| D30 | 2026-11-05: Each generated house rolls a **standing** (1 to 3) from the seed. It tilts the quality tier of the furniture in every room: a furniture row's weight is multiplied by a falloff for each tier it is away from the standing, so a house is coherently modest or well off instead of random room by room. A group with a single row is furnished at any standing. The standing can later feed the contract's tier. |
+| D31 | 2026-11-05: The **roof shape** (flat, two-sided, four-sided) is a parameter rolled by the seed, from weights on the archetype tilted by the footprint (a square leans towards four sides, a long house towards two). The number of storeys is not rolled: it is a data choice, one archetype per count. |
+| D32 | 2026-11-05: Under every roof there is a **ceiling slab, always a reinforcement slab** (sub-anchor, §8) whatever the storey interval, and a roof tile can rest on a slab edge, so a wide roof on a tall house starts from a stability reset. A roof without a slab (high ceilings) stays a backlog idea. |
+| D33 | 2026-11-08: The standing also applies **per storey** for a plan that repeats its typical storeys (the apartment block): each typical storey has its own standing (1 to 3) that decides how often it is stacked at each height and moves its rooms' furniture one tier from the house's own standing (§9.4). |
+| D34 | 2026-11-08: Two decisions by the author. **Paint rework:** the brush is the last slot of the tool belt, not a build mode function; colours are paint buckets sold in the shop (category Paint), one item per colour of the plot's palette, infinite for now; the brush paints with the bucket selected in the hotbar. A backpack of paints opened from the bucket stays possible if the colours outgrow the hotbar. **What a map allows:** three independent switches per map, the belt lock, building (painting included) and destruction, so a renovation contract can allow building and demolition together; `Lvl_Home` no longer locks the belt and turns destruction off instead (§12). |
 
 ### 23.2 Changes to existing documents
 
@@ -965,7 +985,7 @@ The course states that **two projects during the year must be completed entirely
 | **Socket** | Data declared on a piece Blueprint (type, grid offset, `RoofStep`); not a mesh socket. |
 | **Anchor** | Foundation socket giving stability 1.0. |
 | **Load-bearing** | Flag on a piece: it transmits stability to what rests on it. |
-| **Compromised** | A critical load-bearing piece about to fail within a random delay, after a warning. |
+| **Compromised** | A critical load-bearing piece that is a true bottleneck (removing it would drop another piece below the threshold or cut its anchor chain), about to fail within a random delay, after a warning. |
 | **Falling** | State of a released piece simulating as a rigid body before fracturing. |
 | **Crush event** | Accumulated impact energy on the player over a threshold → payment penalty and stun. |
 | **Target set** | Pieces that must be destroyed for the contract. |
@@ -1043,6 +1063,7 @@ FDebriefResult
 | T7 | Contract with salvage + protected zone, partially failed. | Debrief itemises each penalty, money matches the formula. |
 | T8 | Single-column tower of 8 storeys, without and with a sub-anchor slab every third slab; then remove a wall under a sub-anchor, and destroy a sub-anchor with the storeys below intact. | Without: the upper storeys fall below the threshold. With: stable. Wall removed: everything above falls in waves. Sub-anchor destroyed: only the part above falls. A sub-anchor with no valid chain below does not reset. |
 | T9 | Walls around a stairwell hole with no slab at any level. | Before the fix: yellow or falling. After: stable when the stack below is; the stack above falls when its bottom wall is removed; a wall stacked on an unsupported wall does not hold. |
+| T10 | A Critical load-bearing wall that has a second support path, then the same wall with no alternative path. | With the alternative: stays Critical, no Compromised warning. Without: warning, then failure within 0.5–3 s, and the dependants fall in waves. |
 
 ## Appendix C — One-paragraph version (for the defence)
 
