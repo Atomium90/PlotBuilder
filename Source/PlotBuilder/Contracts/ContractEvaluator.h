@@ -44,9 +44,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Contracts")
 	static float ComputeZoneDamage(const FMissionSnapshot& Snapshot, const FScoringParams& Params);
 
-	/** Estimated duration of a job in minutes (GDD §6.4): 0.06 x area x the type's factor (total 1.0, partial 0.6, renovation 0.5). */
+	/** Minutes it takes to carry one piece of furniture out to the client: find it, grab it, walk it to the drop zone. */
+	static constexpr float MinutesPerSalvageItem = 0.5f;
+
+	/**
+	 *  Estimated duration of a job in minutes (GDD §6.4): 0.06 x area x the type's factor (total 1.0, partial 0.6, renovation 0.5),
+	 *  plus MinutesPerSalvageItem for each piece of furniture the client wants carried out, so that the time on the offer stays honest.
+	 */
 	UFUNCTION(BlueprintPure, Category = "Contracts")
-	static float EstimateMinutes(EContractType Type, float AreaM2);
+	static float EstimateMinutes(EContractType Type, float AreaM2, int32 SalvageCount = 0);
 
 	/** Money for a perfect job (GDD §11.2): 12 per m2 x the type's factor, rounded to the nearest 10. */
 	UFUNCTION(BlueprintPure, Category = "Contracts")

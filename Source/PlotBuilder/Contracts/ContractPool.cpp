@@ -110,7 +110,7 @@ FContractDefinition UContractPool::DrawContract(const FContractTemplate& Templat
 
 	// The estimates come from the request: the generator may stretch the footprint a little, the debug log compares the two.
 	Contract.AreaM2 = static_cast<float>(Contract.FootprintCells.X * Contract.FootprintCells.Y * Contract.Floors) * SquareMetresPerCell;
-	Contract.EstimatedMinutes = UContractEvaluator::EstimateMinutes(Contract.Type, Contract.AreaM2);
+	Contract.EstimatedMinutes = UContractEvaluator::EstimateMinutes(Contract.Type, Contract.AreaM2, Salvage);
 	Contract.BasePayout = FMath::RoundToInt(static_cast<float>(UContractEvaluator::EstimateBasePayout(Contract.Type, Contract.AreaM2)) * FMath::Max(0.f, Template.PayoutMultiplier) / 10.f) * 10;
 
 	return Contract;

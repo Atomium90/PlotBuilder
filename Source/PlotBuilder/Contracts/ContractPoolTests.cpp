@@ -56,6 +56,16 @@ bool FPBPoolEstimatesTest::RunTest(const FString& Parameters)
 
 	TestEqual(TEXT("payout with a 1.5 multiplier"), Better.BasePayout, 1800);
 
+	// Four pieces of furniture to carry out add two minutes to the time on the offer and nothing to the pay.
+	Template.PayoutMultiplier = 1.f;
+	Template.MinSalvage = 4;
+	Template.MaxSalvage = 4;
+	FRandomStream SalvageStream(1);
+	const FContractDefinition Carrying = Pool->DrawContract(Template, SalvageStream);
+
+	TestNearlyEqual(TEXT("minutes with 4 pieces to carry"), Carrying.EstimatedMinutes, 8.f, 0.001f);
+	TestEqual(TEXT("payout with 4 pieces to carry"), Carrying.BasePayout, 1200);
+
 	return true;
 }
 

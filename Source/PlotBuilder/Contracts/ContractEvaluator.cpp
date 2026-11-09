@@ -14,9 +14,9 @@ float UContractEvaluator::TypeFactor(EContractType Type)
 	}
 }
 
-float UContractEvaluator::EstimateMinutes(EContractType Type, float AreaM2)
+float UContractEvaluator::EstimateMinutes(EContractType Type, float AreaM2, int32 SalvageCount)
 {
-	return 0.06f * FMath::Max(0.f, AreaM2) * TypeFactor(Type);
+	return 0.06f * FMath::Max(0.f, AreaM2) * TypeFactor(Type) + MinutesPerSalvageItem * FMath::Max(0, SalvageCount);
 }
 
 int32 UContractEvaluator::EstimateBasePayout(EContractType Type, float AreaM2)

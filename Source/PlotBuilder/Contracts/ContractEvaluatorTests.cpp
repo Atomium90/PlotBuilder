@@ -308,6 +308,11 @@ bool FPBEvaluatorEstimatesTest::RunTest(const FString& Parameters)
 	TestNearlyEqual(TEXT("renovation minutes"), UContractEvaluator::EstimateMinutes(EContractType::Renovation, 100.f), 3.f, 0.001f);
 	TestEqual(TEXT("renovation payout"), UContractEvaluator::EstimateBasePayout(EContractType::Renovation, 100.f), 600);
 
+	// Each piece of furniture to carry out adds half a minute, whatever the type; the payout does not move.
+	TestNearlyEqual(TEXT("total minutes with 10 pieces to carry"), UContractEvaluator::EstimateMinutes(EContractType::TotalDemolition, 100.f, 10), 11.f, 0.001f);
+	TestNearlyEqual(TEXT("renovation minutes with 4 pieces to carry"), UContractEvaluator::EstimateMinutes(EContractType::Renovation, 100.f, 4), 5.f, 0.001f);
+	TestNearlyEqual(TEXT("a negative count adds nothing"), UContractEvaluator::EstimateMinutes(EContractType::TotalDemolition, 100.f, -3), 6.f, 0.001f);
+
 	return true;
 }
 
