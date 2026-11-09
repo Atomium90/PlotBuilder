@@ -145,6 +145,88 @@ bool FPBPoolOffersTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// The board only offers the kinds at or under the player's tier. Kinds are told apart by their tier: tier 0 and 1 weigh 1, tier 2 weighs 1.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBPoolTierFilterTest, "PlotBuilder.Contracts.Pool.TierFilter", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBPoolTierFilterTest::RunTest(const FString& Parameters)
+{
+	const UContractPool* Pool = PBPoolTests::MakePool({PBPoolTests::MakeTemplate(0, 1.f), PBPoolTests::MakeTemplate(1, 1.f), PBPoolTests::MakeTemplate(2, 1.f)});
+
+	for (int32 Seed = 1; Seed <= 50; ++Seed)
+	{
+		for (int32 MaxTier = 0; MaxTier <= 2; ++MaxTier)
+		{
+			FRandomStream Stream(Seed);
+			const TArray<FContractDefinition> Offers = Pool->DrawOffers(3, Stream, MaxTier);
+
+			TestEqual(TEXT("three offers at any tier"), Offers.Num(), 3);
+
+			for (const FContractDefinition& Offer : Offers)
+			{
+				TestTrue(TEXT("no kind above the tier"), Offer.ReputationRequired <= MaxTier);
+			}
+
+			// The same stream and the same tier give the same board.
+			FRandomStream Again(Seed);
+			const TArray<FContractDefinition> Repeat = Pool->DrawOffers(3, Again, MaxTier);
+
+			TestEqual(TEXT("same seed, same tier, same number of offers"), Repeat.Num(), Offers.Num());
+
+			for (int32 Index = 0; Index < FMath::Min(Offers.Num(), Repeat.Num()); ++Index)
+			{
+				TestEqual(TEXT("same seed, same tier, same house seed"), Repeat[Index].Seed, Offers[Index].Seed);
+			}
+		}
+	}
+
+	// Tier 1 lets two kinds through for three offers: the third repeats one of them, and the tier 2 kind never shows.
+	TSet<int32> TiersAtOne;
+
+	for (int32 Seed = 1; Seed <= 50; ++Seed)
+	{
+		FRandomStream Stream(Seed);
+
+		for (const FContractDefinition& Offer : Pool->DrawOffers(3, Stream, 1))
+		{
+			TiersAtOne.Add(Offer.ReputationRequired);
+		}
+	}
+
+	TestTrue(TEXT("tier 1 offers the kinds 0 and 1 over many boards"), TiersAtOne.Num() == 2 && TiersAtOne.Contains(0) && TiersAtOne.Contains(1));
+
+	// The default lets every kind through: tiers 0, 1 and 2 are all on a board of three.
+	FRandomStream OpenStream(3);
+	TSet<int32> OpenTiers;
+
+	for (const FContractDefinition& Offer : Pool->DrawOffers(3, OpenStream))
+	{
+		OpenTiers.Add(Offer.ReputationRequired);
+	}
+
+	TestEqual(TEXT("no filter: three different kinds"), OpenTiers.Num(), 3);
+
+	// A pool whose kinds are all at the tier draws what it drew without the filter.
+	const UContractPool* Flat = PBPoolTests::MakePool({PBPoolTests::MakeTemplate(0, 1.f), PBPoolTests::MakeTemplate(0, 2.f), PBPoolTests::MakeTemplate(0, 3.f)});
+	FRandomStream Filtered(11);
+	FRandomStream Unfiltered(11);
+	const TArray<FContractDefinition> A = Flat->DrawOffers(3, Filtered, 0);
+	const TArray<FContractDefinition> B = Flat->DrawOffers(3, Unfiltered);
+
+	TestEqual(TEXT("all kinds at the tier: same number of offers as unfiltered"), A.Num(), B.Num());
+
+	for (int32 Index = 0; Index < FMath::Min(A.Num(), B.Num()); ++Index)
+	{
+		TestEqual(TEXT("all kinds at the tier: same board as unfiltered"), A[Index].Seed, B[Index].Seed);
+	}
+
+	// Nothing at or under the tier: no offers.
+	const UContractPool* High = PBPoolTests::MakePool({PBPoolTests::MakeTemplate(2, 1.f), PBPoolTests::MakeTemplate(3, 1.f)});
+	FRandomStream HighStream(1);
+
+	TestEqual(TEXT("every kind above the tier: empty board"), High->DrawOffers(3, HighStream, 1).Num(), 0);
+
+	return true;
+}
+
 // A partial demolition needs two storeys; a type with all the weight is always the one drawn; conditions come with their count.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBPoolTypesTest, "PlotBuilder.Contracts.Pool.TypesAndConditions", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPBPoolTypesTest::RunTest(const FString& Parameters)

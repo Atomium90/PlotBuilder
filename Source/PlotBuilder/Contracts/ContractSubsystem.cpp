@@ -33,6 +33,19 @@ void UContractSubsystem::SetPool(UContractPool* NewPool)
 	bOffersStale = true;
 }
 
+void UContractSubsystem::SetPlayerTier(int32 NewTier)
+{
+	NewTier = FMath::Max(0, NewTier);
+
+	if (NewTier == PlayerTier)
+	{
+		return;
+	}
+
+	PlayerTier = NewTier;
+	bOffersStale = true;
+}
+
 void UContractSubsystem::RefreshOffers(int32 Seed)
 {
 	if (!Pool)
@@ -46,12 +59,12 @@ void UContractSubsystem::RefreshOffers(int32 Seed)
 		OfferStream.Initialize(Seed);
 	}
 
-	Offers = Pool->DrawOffers(OfferCount, OfferStream);
+	Offers = Pool->DrawOffers(OfferCount, OfferStream, PlayerTier);
 	bOffersStale = false;
 
 	if (Offers.IsEmpty())
 	{
-		UE_LOG(LogPlotBuilder, Warning, TEXT("UContractSubsystem: the pool '%s' has no template with a weight, the board stays empty."), *Pool->GetName());
+		UE_LOG(LogPlotBuilder, Warning, TEXT("UContractSubsystem: the pool '%s' has no template with a weight at tier %d or under, the board stays empty."), *Pool->GetName(), PlayerTier);
 	}
 
 	OnOffersChanged.Broadcast();
@@ -131,10 +144,10 @@ FString UContractSubsystem::DescribeBoard() const
 {
 	if (Offers.IsEmpty())
 	{
-		return TEXT("Contract board: no offers.");
+		return FString::Printf(TEXT("Contract board (tier %d): no offers."), PlayerTier);
 	}
 
-	FString Text = TEXT("Contract board:");
+	FString Text = FString::Printf(TEXT("Contract board (tier %d):"), PlayerTier);
 
 	for (int32 Index = 0; Index < Offers.Num(); ++Index)
 	{

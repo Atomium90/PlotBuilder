@@ -116,7 +116,7 @@ FContractDefinition UContractPool::DrawContract(const FContractTemplate& Templat
 	return Contract;
 }
 
-TArray<FContractDefinition> UContractPool::DrawOffers(int32 Count, FRandomStream& Stream) const
+TArray<FContractDefinition> UContractPool::DrawOffers(int32 Count, FRandomStream& Stream, int32 MaxTier) const
 {
 	TArray<FContractDefinition> Offers;
 
@@ -124,7 +124,8 @@ TArray<FContractDefinition> UContractPool::DrawOffers(int32 Count, FRandomStream
 
 	for (int32 Index = 0; Index < Templates.Num(); ++Index)
 	{
-		if (Templates[Index].Weight > 0.f)
+		// A kind above the player's tier is not offered, whatever its weight.
+		if (Templates[Index].Weight > 0.f && Templates[Index].Tier <= MaxTier)
 		{
 			Candidates.Add(Index);
 		}

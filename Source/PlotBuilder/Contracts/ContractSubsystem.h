@@ -42,6 +42,14 @@ public:
 	UContractPool* GetPool() const { return Pool; }
 
 	/**
+	 *  The tier the board is drawn for: a kind of contract whose Tier is above it is not offered. 0 by default, which is every
+	 *  kind of the current pool. Nothing earns tiers yet (reputation is Block 3): pb.SetTier is the only way to move it, and it
+	 *  is not saved. A different tier makes the offers stale.
+	 */
+	int32 GetPlayerTier() const { return PlayerTier; }
+	void SetPlayerTier(int32 NewTier);
+
+	/**
 	 *  Throws the board away and draws OfferCount new offers. A Seed of 0 or more restarts the random stream from it (the
 	 *  same seed then gives the same offers, for tests); -1 goes on with the stream as it is. Does nothing, with a warning,
 	 *  when there is no pool.
@@ -103,6 +111,8 @@ private:
 
 	bool bHasActive = false;
 	bool bHasLastResult = false;
+
+	int32 PlayerTier = 0;
 
 	/** The board needs a new draw: true at the start, and after a mission ends. */
 	bool bOffersStale = true;

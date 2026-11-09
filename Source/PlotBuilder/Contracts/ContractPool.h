@@ -127,6 +127,9 @@ public:
 	/**
 	 *  Count offers by weight, never the same kind twice in a set. If the pool has fewer kinds than Count, a kind comes
 	 *  back only once every one has been drawn. Empty when no template has a weight.
+	 *
+	 *  MaxTier is the player's tier: a kind whose Tier is above it is not on the board. The default lets every kind through,
+	 *  and a pool whose kinds are all at or under MaxTier draws exactly what it drew without the filter.
 	 */
-	TArray<FContractDefinition> DrawOffers(int32 Count, FRandomStream& Stream) const;
+	TArray<FContractDefinition> DrawOffers(int32 Count, FRandomStream& Stream, int32 MaxTier = TNumericLimits<int32>::Max()) const;
 };

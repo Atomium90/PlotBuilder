@@ -388,6 +388,30 @@ static FAutoConsoleCommandWithWorldAndArgs PbRefreshOffersCommand(
 		Contracts->ShowOnScreen(30.f);
 	}));
 
+static FAutoConsoleCommandWithWorldAndArgs PbSetTierCommand(
+	TEXT("pb.SetTier"),
+	TEXT("pb.SetTier [n] - sets the player's tier (0 or more) the contract board is drawn for: a kind of contract whose Tier is above it is not offered. Draws a new board right away and prints it. Without an argument, prints the current tier. Not saved: it goes back to 0 when the game restarts."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		UContractSubsystem* Contracts = World ? UContractSubsystem::Get(World) : nullptr;
+
+		if (!Contracts)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.SetTier: no contract subsystem (no game instance)"));
+			return;
+		}
+
+		if (Args.IsEmpty())
+		{
+			UE_LOG(LogPlotBuilder, Log, TEXT("pb.SetTier: the board is drawn for tier %d"), Contracts->GetPlayerTier());
+			return;
+		}
+
+		Contracts->SetPlayerTier(FCString::Atoi(*Args[0]));
+		Contracts->RefreshOffers();
+		Contracts->ShowOnScreen(30.f);
+	}));
+
 static FAutoConsoleCommandWithWorldAndArgs PbShowOffersCommand(
 	TEXT("pb.ShowOffers"),
 	TEXT("pb.ShowOffers - prints the contract board as it stands (the three offers and the active contract), on screen and in the log. Draws nothing new."),
