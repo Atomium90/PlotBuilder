@@ -39,6 +39,29 @@ struct FBindingItem
 	 *  so it is neither to destroy nor to leave alone. Compute puts it in FMissionSets::Salvage and in neither of the two sets.
 	 */
 	bool bSalvage = false;
+
+	/** A piece placed on the grid (a Legacy-anchored piece has no cell): its grid coordinate, X and Y on the grid, Z the storey. Meaningless for a prop and a Legacy piece. */
+	FIntVector GridCoord = FIntVector::ZeroValue;
+	bool bGridPiece = false;
+
+	/**
+	 *  Set by whoever picks the part the contract asks to keep standing (the keep-standing condition): the item stays, whatever
+	 *  the contract type would have said. Compute puts it in the must-stay set, so destroying it is collateral.
+	 */
+	bool bKeep = false;
+};
+
+/**
+ *  One room of the house on the grid: its storey and the grid coordinates of its perimeter. A room of cells MinI..MaxI by
+ *  MinJ..MaxJ has its walls on the odd coordinates 2*MinI-1 and 2*MaxI+1 (and the same on the other axis), see FRoomRect.
+ */
+struct FGridRoom
+{
+	int32 Level = 0;
+	int32 MinX = 0;
+	int32 MaxX = 0;
+	int32 MinY = 0;
+	int32 MaxY = 0;
 };
 
 /**
@@ -110,6 +133,13 @@ namespace MissionBinding
 	 *  Items whose actor is gone are skipped. OutNote, if given, receives a line when something was corrected.
 	 */
 	FMissionSets Compute(EContractType Type, int32 PartialFromLevel, int32 StoreyCount, const TArray<FBindingItem>& Items, FString* OutNote = nullptr);
+
+	/**
+	 *  Whether a piece is part of Room, for the keep-standing condition: what stands on the room's storey inside its perimeter
+	 *  (its walls, the posts at its corners, its floor slab), and the slab right above it, its ceiling. Nothing else: not the walls
+	 *  of the storey above, not the furniture. A prop, or a piece with no cell, is never part of a room. Coordinates only, no actor.
+	 */
+	bool IsPartOfRoom(const FBindingItem& Item, const FGridRoom& Room);
 
 	/** A short readable name for an item of the house: its class name without the Blueprint prefixes ("BP_Prop_Sofa_C" gives "Sofa"). */
 	FString ItemName(const AActor* Actor);

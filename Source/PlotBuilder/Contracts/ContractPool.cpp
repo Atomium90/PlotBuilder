@@ -68,6 +68,12 @@ FContractDefinition UContractPool::DrawContract(const FContractTemplate& Templat
 	Contract.Seed = Stream.RandRange(1, 99999);
 	Contract.ClientId = Clients.IsEmpty() ? FName(TEXT("Client")) : Clients[Stream.RandRange(0, Clients.Num() - 1)];
 
+	// The two conditions added later draw after everything above, so the contracts that already existed keep their size, type, seed and client for a given stream.
+	const float KeepRoll = Stream.FRand();
+	const int32 KeepPick = Stream.RandRange(0, FMath::Max(0, Template.KeepStandingRooms.Num() - 1));
+	const float ForbiddenRoll = Stream.FRand();
+	const int32 ForbiddenPick = Stream.RandRange(0, FMath::Max(0, Template.ForbiddenTools.Num() - 1));
+
 	if (Salvage > 0)
 	{
 		FContractCondition& Condition = Contract.Conditions.AddDefaulted_GetRef();
@@ -80,6 +86,23 @@ FContractDefinition UContractPool::DrawContract(const FContractTemplate& Templat
 		FContractCondition& Condition = Contract.Conditions.AddDefaulted_GetRef();
 		Condition.Type = EConditionType::ProtectedZone;
 		Condition.Count = Zones;
+	}
+
+	// A renovation already keeps the whole shell: asking to keep a room of it would add nothing.
+	if (Contract.Type != EContractType::Renovation && !Template.KeepStandingRooms.IsEmpty() && KeepRoll < Template.KeepStandingChance)
+	{
+		FContractCondition& Condition = Contract.Conditions.AddDefaulted_GetRef();
+		Condition.Type = EConditionType::KeepStanding;
+		Condition.Count = 1;
+		Condition.Param = FName(*StaticEnum<ERoomType>()->GetNameStringByValue(static_cast<int64>(Template.KeepStandingRooms[KeepPick])));
+	}
+
+	if (!Template.ForbiddenTools.IsEmpty() && ForbiddenRoll < Template.ForbiddenToolChance)
+	{
+		FContractCondition& Condition = Contract.Conditions.AddDefaulted_GetRef();
+		Condition.Type = EConditionType::ForbiddenTool;
+		Condition.Count = 1;
+		Condition.Param = Template.ForbiddenTools[ForbiddenPick];
 	}
 
 	Contract.ArchetypeId = Template.Archetype ? FName(*Template.Archetype->GetName()) : NAME_None;

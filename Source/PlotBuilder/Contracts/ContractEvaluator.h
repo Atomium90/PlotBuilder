@@ -18,7 +18,8 @@
  *  ZoneDamage    = sum over the active protected zones of min(1, tool damage ratio + fallen weight / house weight x ZoneFallFactor), at most 1
  *  FurnitureLoss = 1 - value kept / value asked, an item being kept only if delivered, for its value times the HP curve
  *  Safety        = min(SafetyCap, crush events x CrushPenalty + explosion events x ExplosionPenalty)
- *  Penalty       = min(PenaltyCap, kCollateral x Collateral + kZone x ZoneDamage + kFurniture x FurnitureLoss + Safety)
+ *  Forbidden     = ForbiddenToolPenalty if the tool the contract forbade was used at all, 0 otherwise (once for the mission)
+ *  Penalty       = min(PenaltyCap, kCollateral x Collateral + kZone x ZoneDamage + kFurniture x FurnitureLoss + Safety + Forbidden)
  *  Payout        = BasePayout x Completion x (1 - Penalty), in whole money
  *
  *  Money is rounded term by term (Earned, then each penalty term, then the cap), so the lines of the report always add

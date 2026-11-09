@@ -241,6 +241,13 @@ bool AMissionDirector::StartMission()
 	const UContractSubsystem* Contracts = UContractSubsystem::Get(this);
 	const FContractDefinition* Contract = (Contracts && Contracts->HasActiveContract()) ? &Contracts->GetActiveContract() : nullptr;
 
+	// The tool the contract forbade, if any: the first damage the mission deals with it is charged in the report.
+	if (UMissionResultSubsystem* Results = UMissionResultSubsystem::Get(this))
+	{
+		const FContractCondition* Forbidden = Contract ? Contract->FindCondition(EConditionType::ForbiddenTool) : nullptr;
+		Results->SetForbiddenTool(Forbidden ? Forbidden->Param : NAME_None);
+	}
+
 	// Archetype first: it decides how many storeys a partial demolition can use.
 	const FString ArchetypeOption = Contract ? (Contract->ArchetypeId.IsNone() ? FString() : Contract->ArchetypeId.ToString()) : UGameplayStatics::ParseOption(Options, TEXT("Archetype"));
 
@@ -323,11 +330,12 @@ bool AMissionDirector::StartMission()
 			*UContractSubsystem::Describe(*Contract), Contract->FootprintCells.X, Contract->FootprintCells.Y, Built.X, Built.Y, Contract->Floors, House->GetFloorCount());
 	}
 
-	Rebind(Type, FromLevel, Contract ? Contract->CountOf(EConditionType::SalvageFurniture) : 0);
+	const FContractCondition* KeepCondition = Contract ? Contract->FindCondition(EConditionType::KeepStanding) : nullptr;
+	Rebind(Type, FromLevel, Contract ? Contract->CountOf(EConditionType::SalvageFurniture) : 0, KeepCondition ? KeepCondition->Param : NAME_None);
 	return true;
 }
 
-void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 SalvageCount)
+void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 SalvageCount, FName KeepRoom)
 {
 	AHouseGenerator* House = ResolveGenerator();
 	APlot* Plot = ResolvePlot();
@@ -431,6 +439,8 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 Salvage
 		Item.bLoadBearing = Piece->IsLoadBearing();
 		Item.Level = Piece->GetGridCoord().Z;
 		Item.Weight = WeightOf(Piece->GetClass(), 0);
+		Item.GridCoord = Piece->GetGridCoord();
+		Item.bGridPiece = Piece->GetBuildAnchor() != EBuildAnchor::Legacy;
 	}
 
 	for (const TWeakObjectPtr<APhysicsProp>& WeakProp : House->GetProps())
@@ -514,6 +524,63 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 Salvage
 		}
 	}
 
+	// The room the contract asks to keep standing (keep-standing condition): one room of that type, picked by a stream of its own seeded
+	// from the house's seed. Its walls, posts, floor and ceiling stay, whatever the contract type says. The note goes in the summary.
+	FString KeptNote;
+
+	if (!KeepRoom.IsNone())
+	{
+		const UEnum* RoomEnum = StaticEnum<ERoomType>();
+		const int64 RoomValue = RoomEnum ? RoomEnum->GetValueByName(KeepRoom) : INDEX_NONE;
+
+		TArray<const FRoom*> Matching;
+
+		if (RoomValue != INDEX_NONE)
+		{
+			for (const FRoom& Room : House->GetRooms())
+			{
+				if (static_cast<int64>(Room.Type) == RoomValue)
+				{
+					Matching.Add(&Room);
+				}
+			}
+		}
+
+		if (RoomValue == INDEX_NONE)
+		{
+			KeptNote = FString::Printf(TEXT("Keep standing: '%s' is not a room type (Bathroom, Kitchen, LivingRoom, Bedroom, Office), nothing is kept."), *KeepRoom.ToString());
+		}
+		else if (Matching.IsEmpty())
+		{
+			KeptNote = FString::Printf(TEXT("Keep standing: this house has no %s, nothing is kept."), *KeepRoom.ToString());
+		}
+		else
+		{
+			FRandomStream KeepStream(HashCombine(static_cast<uint32>(House->GetEffectiveSeed()), 0x4B33u));
+			const FRoom& Chosen = *Matching[KeepStream.RandRange(0, Matching.Num() - 1)];
+
+			FGridRoom Box;
+			Box.Level = Chosen.Level;
+			Box.MinX = 2 * Chosen.Rect.MinI - 1;
+			Box.MaxX = 2 * Chosen.Rect.MaxI + 1;
+			Box.MinY = 2 * Chosen.Rect.MinJ - 1;
+			Box.MaxY = 2 * Chosen.Rect.MaxJ + 1;
+
+			int32 Kept = 0;
+
+			for (FBindingItem& Item : Items)
+			{
+				if (MissionBinding::IsPartOfRoom(Item, Box))
+				{
+					Item.bKeep = true;
+					++Kept;
+				}
+			}
+
+			KeptNote = FString::Printf(TEXT("Keep standing: the %s of storey %d (%d pieces)."), *KeepRoom.ToString(), Chosen.Level, Kept);
+		}
+	}
+
 	FString Note;
 	FMissionSets Sets = MissionBinding::Compute(Type, FromLevel, StoreyCount, Items, &Note);
 
@@ -522,6 +589,11 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 Salvage
 	if (!Note.IsEmpty())
 	{
 		Summary += TEXT("\n") + Note;
+	}
+
+	if (!KeptNote.IsEmpty())
+	{
+		Summary += TEXT("\n") + KeptNote;
 	}
 
 	if (!ShopCatalog)

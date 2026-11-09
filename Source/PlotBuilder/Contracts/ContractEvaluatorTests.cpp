@@ -261,6 +261,42 @@ bool FPBEvaluatorZonesTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// A forbidden tool used even once costs ForbiddenToolPenalty (0.15) of what was earned, once whatever the number of uses: 150 off a
+// 1000 base, payout 850. Not used: nothing, but the line is in the report because the contract forbade a tool.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorForbiddenToolTest, "PlotBuilder.Contracts.Evaluator.ForbiddenTool", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBEvaluatorForbiddenToolTest::RunTest(const FString& Parameters)
+{
+	FContractDefinition Contract = PBContractTests::MakeContract(1000);
+	FContractCondition& Condition = Contract.Conditions.AddDefaulted_GetRef();
+	Condition.Type = EConditionType::ForbiddenTool;
+	Condition.Param = FName(TEXT("Jackhammer"));
+
+	FMissionSnapshot Snapshot = PBContractTests::MakeCleanSnapshot();
+	Snapshot.ForbiddenToolName = FName(TEXT("Jackhammer"));
+	Snapshot.bForbiddenToolUsed = false;
+
+	const FDebriefResult Unused = UContractEvaluator::Evaluate(Contract, Snapshot, FScoringParams());
+
+	TestEqual(TEXT("not used, full pay"), Unused.Payout, 1000);
+	TestNearlyEqual(TEXT("not used, no penalty"), Unused.ForbiddenTool, 0.f, 0.001f);
+	TestEqual(TEXT("not used, the line is there"), Unused.Lines.Num(), 7);
+
+	Snapshot.bForbiddenToolUsed = true;
+
+	const FDebriefResult Used = UContractEvaluator::Evaluate(Contract, Snapshot, FScoringParams());
+
+	TestNearlyEqual(TEXT("used, the share"), Used.ForbiddenTool, 0.15f, 0.001f);
+	TestNearlyEqual(TEXT("used, the penalty"), Used.Penalty, 0.15f, 0.001f);
+	TestEqual(TEXT("used, payout"), Used.Payout, 850);
+	TestEqual(TEXT("lines add up"), PBContractTests::SumOfLinesBeforePayout(Used), Used.Payout);
+
+	// A contract that forbade nothing has no such line.
+	const FDebriefResult Plain = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), PBContractTests::MakeCleanSnapshot(), FScoringParams());
+	TestEqual(TEXT("no condition, no line"), Plain.Lines.Num(), 6);
+
+	return true;
+}
+
 // 100 m2: a total demolition shows 6 minutes and pays 1200 (0.06 min and 12 money per m2), a partial one 3.6 and 720 (x0.6), a renovation 3 and 600 (x0.5).
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorEstimatesTest, "PlotBuilder.Contracts.Evaluator.Estimates", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPBEvaluatorEstimatesTest::RunTest(const FString& Parameters)

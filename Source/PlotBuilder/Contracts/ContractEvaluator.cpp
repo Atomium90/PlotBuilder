@@ -101,10 +101,13 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 	Result.FurnitureLoss = ValueAsked > 0.f ? FMath::Clamp(1.f - ValueKept / ValueAsked, 0.f, 1.f) : 0.f;
 	Result.Safety = FMath::Min(Params.SafetyCap, Snapshot.CrushEvents * Params.CrushPenalty + Snapshot.ExplosionEvents * Params.ExplosionPenalty);
 
+	// Once for the whole mission, whatever the number of uses.
+	Result.ForbiddenTool = Snapshot.bForbiddenToolUsed ? Params.ForbiddenToolPenalty : 0.f;
+
 	const float CollateralShare = Params.CollateralCoefficient * Result.Collateral;
 	const float ZoneShare = Params.ZoneCoefficient * Result.ZoneDamage;
 	const float FurnitureShare = Params.FurnitureCoefficient * Result.FurnitureLoss;
-	const float Uncapped = CollateralShare + ZoneShare + FurnitureShare + Result.Safety;
+	const float Uncapped = CollateralShare + ZoneShare + FurnitureShare + Result.Safety + Result.ForbiddenTool;
 	const float Cap = FMath::Clamp(Params.PenaltyCap, 0.f, 1.f);
 
 	Result.bPenaltyCapped = Uncapped > Cap;
@@ -118,7 +121,8 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 	const int32 ZoneMoney = FMath::RoundToInt(Earned * ZoneShare);
 	const int32 FurnitureMoney = FMath::RoundToInt(Earned * FurnitureShare);
 	const int32 SafetyMoney = FMath::RoundToInt(Earned * Result.Safety);
-	const int32 TermsMoney = CollateralMoney + ZoneMoney + FurnitureMoney + SafetyMoney;
+	const int32 ForbiddenMoney = FMath::RoundToInt(Earned * Result.ForbiddenTool);
+	const int32 TermsMoney = CollateralMoney + ZoneMoney + FurnitureMoney + SafetyMoney + ForbiddenMoney;
 
 	// The cap can only give money back, never take more than the terms did.
 	const int32 PenaltyMoney = Result.bPenaltyCapped ? FMath::Min(TermsMoney, FMath::RoundToInt(Earned * Cap)) : TermsMoney;
@@ -153,6 +157,20 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 	AddLine(TEXT("Safety"),
 		FString::Printf(TEXT("%d crush, %d explosion (cap %.0f%%)"), Snapshot.CrushEvents, Snapshot.ExplosionEvents, Params.SafetyCap * 100.f),
 		Result.Safety, -SafetyMoney);
+
+	// Only a contract that forbade a tool has the line (or a mission where a tool was forbidden by hand and used).
+	const FContractCondition* ForbiddenCondition = Contract.FindCondition(EConditionType::ForbiddenTool);
+
+	if (ForbiddenCondition || Snapshot.bForbiddenToolUsed)
+	{
+		const FName Tool = !Snapshot.ForbiddenToolName.IsNone() ? Snapshot.ForbiddenToolName : (ForbiddenCondition ? ForbiddenCondition->Param : NAME_None);
+
+		AddLine(TEXT("Forbidden tool"),
+			Snapshot.bForbiddenToolUsed
+				? FString::Printf(TEXT("the %s was used, %.0f%% of what was earned (once for the mission)"), *Tool.ToString(), Params.ForbiddenToolPenalty * 100.f)
+				: FString::Printf(TEXT("the %s was not used"), *Tool.ToString()),
+			Result.ForbiddenTool, -ForbiddenMoney);
+	}
 
 	if (Result.bPenaltyCapped)
 	{

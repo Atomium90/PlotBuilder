@@ -110,7 +110,12 @@ FString UContractSubsystem::Describe(const FContractDefinition& Contract)
 	for (const FContractCondition& Condition : Contract.Conditions)
 	{
 		const UEnum* ConditionEnum = StaticEnum<EConditionType>();
-		Conditions += FString::Printf(TEXT("%s%s x%d"), Conditions.IsEmpty() ? TEXT("") : TEXT(", "), *ConditionEnum->GetNameStringByValue(static_cast<int64>(Condition.Type)), Condition.Count);
+
+		// A count means something for the furniture and the zones; the other two name a room or a tool.
+		const bool bNamesSomething = Condition.Type == EConditionType::KeepStanding || Condition.Type == EConditionType::ForbiddenTool;
+		const FString Detail = bNamesSomething ? FString::Printf(TEXT("(%s)"), *Condition.Param.ToString()) : FString::Printf(TEXT(" x%d"), Condition.Count);
+
+		Conditions += FString::Printf(TEXT("%s%s%s"), Conditions.IsEmpty() ? TEXT("") : TEXT(", "), *ConditionEnum->GetNameStringByValue(static_cast<int64>(Condition.Type)), *Detail);
 	}
 
 	return FString::Printf(TEXT("%s | %s | %s | %dx%d cells, %d storey(s) = %.0f m2 | ~%.1f min | pay %d | tier %d | seed %d | %s"),

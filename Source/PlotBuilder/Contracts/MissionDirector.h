@@ -96,10 +96,14 @@ public:
 	 *  SalvageCount is how many pieces of furniture the client wants back (the salvage condition, 0 = none): they are drawn
 	 *  from the house's props with a stream of their own (seeded from the house seed, so the same house gives the same
 	 *  ones), the more valuable more likely, and leave both sets.
+	 *  KeepRoom is the room type the keep-standing condition asks to leave standing ("Bathroom", "Bedroom", "Kitchen",
+	 *  "LivingRoom", "Office"; none = no such condition): one room of that type is picked by the house's seed, and its walls,
+	 *  posts, floor and ceiling join the must-stay set whatever the contract type says. A house with no room of that type
+	 *  keeps nothing and says so.
 	 *  Callable at any time on a built house, so a type can be compared without rebuilding.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Mission")
-	void Rebind(EContractType Type, int32 FromLevel, int32 SalvageCount = 0);
+	void Rebind(EContractType Type, int32 FromLevel, int32 SalvageCount = 0, FName KeepRoom = NAME_None);
 
 	/** Draws a box on every piece and prop for as long as it is on: green for what must be destroyed, blue for what must stay, magenta for the furniture to carry out. */
 	void SetShowTargets(bool bShow);

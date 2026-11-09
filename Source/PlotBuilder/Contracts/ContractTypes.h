@@ -156,6 +156,10 @@ struct FScoringParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scoring", meta = (ClampMin = "0"))
 	float ZoneFallFactor = 3.f;
 
+	/** Penalty for using the tool a contract forbade, once for the whole mission whatever the number of uses (a share of what was earned). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scoring", meta = (ClampMin = "0", ClampMax = "1"))
+	float ForbiddenToolPenalty = 0.15f;
+
 	/**
 	 *  Share of a salvaged item's value that is left, by its HP ratio: points (HP ratio, multiplier) sorted by HP ratio,
 	 *  linear between them and flat beyond the ends. The default is the GDD §10.3 curve: the value drops by half fast, then
@@ -255,6 +259,13 @@ struct FMissionSnapshot
 	/** Times an explosion caught the player. */
 	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
 	int32 ExplosionEvents = 0;
+
+	/** The tool the contract forbade (none if it forbade nothing), and whether it was used at least once: that is all that counts. */
+	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
+	FName ForbiddenToolName;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
+	bool bForbiddenToolUsed = false;
 };
 
 /** One line of the report: a term of the formula, what it measured, and what it did to the money. */
@@ -300,6 +311,10 @@ struct FDebriefResult
 
 	UPROPERTY(BlueprintReadOnly, Category = "Debrief")
 	float Safety = 0.f;
+
+	/** The share taken for using a forbidden tool: the penalty if it was used, 0 otherwise. */
+	UPROPERTY(BlueprintReadOnly, Category = "Debrief")
+	float ForbiddenTool = 0.f;
 
 	/** The share of the earned money taken away, after the cap. */
 	UPROPERTY(BlueprintReadOnly, Category = "Debrief")

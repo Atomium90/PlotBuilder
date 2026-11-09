@@ -315,7 +315,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbSpawnHouseCommand(
 
 static FAutoConsoleCommandWithWorldAndArgs PbBindContractCommand(
 	TEXT("pb.BindContract"),
-	TEXT("pb.BindContract <total|partial|renovation> [fromLevel] [salvage] - recomputes the target and must-stay sets of the current house for that contract type and prints them (counts and weights by piece class, props apart). fromLevel is the first storey a partial demolition removes (default: rolled from the seed). salvage is how many pieces of furniture the client wants back (default 0): they are drawn from the props and listed apart, in neither set. Needs the level's AMissionDirector. After pb.GenerateHouse or pb.SpawnHouse, run it again: the sets still describe the house that was cleared."),
+	TEXT("pb.BindContract <total|partial|renovation> [fromLevel] [salvage] [keepRoom] - recomputes the target and must-stay sets of the current house for that contract type and prints them (counts and weights by piece class, props apart). fromLevel is the first storey a partial demolition removes (default: rolled from the seed). salvage is how many pieces of furniture the client wants back (default 0): they are drawn from the props and listed apart, in neither set. keepRoom (Bathroom, Kitchen, LivingRoom, Bedroom or Office) keeps one room of that type standing: its walls, floor and ceiling join the must-stay set, whatever the type. Needs the level's AMissionDirector. After pb.GenerateHouse or pb.SpawnHouse, run it again: the sets still describe the house that was cleared."),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 	{
 		AMissionDirector* Director = World ? AMissionDirector::Find(World) : nullptr;
@@ -330,11 +330,11 @@ static FAutoConsoleCommandWithWorldAndArgs PbBindContractCommand(
 
 		if (Args.IsEmpty() || !AMissionDirector::ParseType(Args[0], Type))
 		{
-			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.BindContract: usage pb.BindContract <total|partial|renovation> [fromLevel] [salvage]"));
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.BindContract: usage pb.BindContract <total|partial|renovation> [fromLevel] [salvage] [keepRoom]"));
 			return;
 		}
 
-		Director->Rebind(Type, Args.Num() > 1 ? FCString::Atoi(*Args[1]) : 0, Args.Num() > 2 ? FMath::Max(0, FCString::Atoi(*Args[2])) : 0);
+		Director->Rebind(Type, Args.Num() > 1 ? FCString::Atoi(*Args[1]) : 0, Args.Num() > 2 ? FMath::Max(0, FCString::Atoi(*Args[2])) : 0, Args.Num() > 3 ? FName(*Args[3]) : NAME_None);
 	}));
 
 static FAutoConsoleCommandWithWorldAndArgs PbShowTargetsCommand(
@@ -455,6 +455,30 @@ static FAutoConsoleCommandWithWorldAndArgs PbEndMissionCommand(
 		{
 			PBDebug::Message(UContractSubsystem::MessageKey + 10, 60.f, FColor::Cyan, Text);
 		}
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbForbidToolCommand(
+	TEXT("pb.ForbidTool"),
+	TEXT("pb.ForbidTool <Sledgehammer|Crowbar|Jackhammer|Charge|none> - forbids a tool for the mission as if the contract had: the first damage dealt with it warns on screen and costs a share of what was earned in the report (pb.EndMission). 'none' lifts it. Starting a mission again (pb.SetSeed, pb.AcceptOffer) sets it from the contract. Without an argument, prints the current one."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		UMissionResultSubsystem* Results = World ? UMissionResultSubsystem::Get(World) : nullptr;
+
+		if (!Results)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.ForbidTool: no mission result subsystem in this world"));
+			return;
+		}
+
+		if (Args.IsEmpty())
+		{
+			UE_LOG(LogPlotBuilder, Log, TEXT("pb.ForbidTool: forbidden tool '%s', %s"), *Results->GetForbiddenTool().ToString(), Results->WasForbiddenToolUsed() ? TEXT("used") : TEXT("not used"));
+			return;
+		}
+
+		const bool bNone = Args[0].Equals(TEXT("none"), ESearchCase::IgnoreCase);
+		Results->SetForbiddenTool(bNone ? NAME_None : FName(*Args[0]));
+		UE_LOG(LogPlotBuilder, Log, TEXT("pb.ForbidTool: %s"), bNone ? TEXT("no tool is forbidden") : *FString::Printf(TEXT("the %s is forbidden"), *Args[0]));
 	}));
 
 static FAutoConsoleCommandWithWorldAndArgs PbClearContractCommand(

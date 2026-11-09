@@ -13,6 +13,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "PlotBuilder.h"
 #include "Props/PhysicsProp.h"
+#include "UI/PlayerMessages.h"
 
 const FName UMissionResultSubsystem::CrushSource(TEXT("Crush"));
 const FName UMissionResultSubsystem::ExplosionSource(TEXT("Explosion"));
@@ -67,6 +68,30 @@ void UMissionResultSubsystem::ResetCounters()
 {
 	CrushEvents = 0;
 	ExplosionEvents = 0;
+	bForbiddenToolUsed = false;
+}
+
+void UMissionResultSubsystem::SetForbiddenTool(FName ToolId)
+{
+	ForbiddenTool = ToolId;
+	bForbiddenToolUsed = false;
+}
+
+void UMissionResultSubsystem::RecordToolUse(FName ToolId)
+{
+	if (ForbiddenTool.IsNone() || bForbiddenToolUsed || ToolId != ForbiddenTool)
+	{
+		return;
+	}
+
+	bForbiddenToolUsed = true;
+
+	UE_LOG(LogPlotBuilder, Log, TEXT("UMissionResultSubsystem: the forbidden tool '%s' was used, the report will charge it."), *ForbiddenTool.ToString());
+
+	if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
+	{
+		Messages->Notify(FText::Format(NSLOCTEXT("Mission", "ForbiddenToolUsed", "The client forbade the {0}. It will show in the report."), FText::FromName(ForbiddenTool)), EMessageTone::Warning, 6.f);
+	}
 }
 
 void UMissionResultSubsystem::RecordSafetyEvent(FName Source)
@@ -175,6 +200,8 @@ FMissionSnapshot UMissionResultSubsystem::BuildSnapshot() const
 
 	Snapshot.CrushEvents = CrushEvents;
 	Snapshot.ExplosionEvents = ExplosionEvents;
+	Snapshot.ForbiddenToolName = ForbiddenTool;
+	Snapshot.bForbiddenToolUsed = bForbiddenToolUsed;
 
 	return Snapshot;
 }
@@ -184,6 +211,11 @@ FString UMissionResultSubsystem::DescribeSnapshot(const FMissionSnapshot& Snapsh
 	FString Text = FString::Printf(TEXT("Snapshot: to destroy %lld of %lld | to keep, destroyed %lld of %lld | house weight %lld | crush %d, explosion %d"),
 		Snapshot.TargetDestroyedWeight, Snapshot.TargetWeight, Snapshot.MustStayDestroyedWeight, Snapshot.MustStayWeight,
 		Snapshot.HouseWeight, Snapshot.CrushEvents, Snapshot.ExplosionEvents);
+
+	if (!Snapshot.ForbiddenToolName.IsNone())
+	{
+		Text += FString::Printf(TEXT(" | forbidden tool %s: %s"), *Snapshot.ForbiddenToolName.ToString(), Snapshot.bForbiddenToolUsed ? TEXT("used") : TEXT("not used"));
+	}
 
 	for (const FSalvageResult& Item : Snapshot.Salvage)
 	{

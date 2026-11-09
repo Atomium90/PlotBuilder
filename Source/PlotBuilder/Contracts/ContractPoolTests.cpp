@@ -187,4 +187,54 @@ bool FPBPoolTypesTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// The keep-standing and forbidden-tool conditions: always there with a chance of 1, never with 0; never keep-standing on a renovation;
+// the room and the tool come from the template's lists, and a template with an empty list never asks.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBPoolNamedConditionsTest, "PlotBuilder.Contracts.Pool.NamedConditions", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBPoolNamedConditionsTest::RunTest(const FString& Parameters)
+{
+	UContractPool* Pool = PBPoolTests::MakePool({});
+
+	FContractTemplate Always = PBPoolTests::MakeTemplate(0, 1.f);
+	Always.KeepStandingChance = 1.f;
+	Always.KeepStandingRooms = {ERoomType::Bathroom};
+	Always.ForbiddenToolChance = 1.f;
+	Always.ForbiddenTools = {FName(TEXT("Jackhammer"))};
+
+	FContractTemplate Never = Always;
+	Never.KeepStandingChance = 0.f;
+	Never.ForbiddenToolChance = 0.f;
+
+	FContractTemplate NoList = Always;
+	NoList.KeepStandingRooms.Reset();
+	NoList.ForbiddenTools.Reset();
+
+	FContractTemplate Strip = Always;
+	Strip.TotalWeight = 0.f;
+	Strip.RenovationWeight = 1.f;
+
+	for (int32 Seed = 1; Seed <= 20; ++Seed)
+	{
+		FRandomStream A(Seed), B(Seed), C(Seed), D(Seed);
+
+		const FContractDefinition Yes = Pool->DrawContract(Always, A);
+		TestEqual(TEXT("keep-standing is asked"), Yes.CountOf(EConditionType::KeepStanding), 1);
+		TestTrue(TEXT("keep-standing room"), Yes.FindCondition(EConditionType::KeepStanding) && Yes.FindCondition(EConditionType::KeepStanding)->Param == FName(TEXT("Bathroom")));
+		TestEqual(TEXT("a tool is forbidden"), Yes.CountOf(EConditionType::ForbiddenTool), 1);
+		TestTrue(TEXT("the tool"), Yes.FindCondition(EConditionType::ForbiddenTool) && Yes.FindCondition(EConditionType::ForbiddenTool)->Param == FName(TEXT("Jackhammer")));
+
+		const FContractDefinition No = Pool->DrawContract(Never, B);
+		TestTrue(TEXT("a chance of 0 never asks"), !No.FindCondition(EConditionType::KeepStanding) && !No.FindCondition(EConditionType::ForbiddenTool));
+
+		const FContractDefinition Empty = Pool->DrawContract(NoList, C);
+		TestTrue(TEXT("an empty list never asks"), !Empty.FindCondition(EConditionType::KeepStanding) && !Empty.FindCondition(EConditionType::ForbiddenTool));
+
+		const FContractDefinition Renovation = Pool->DrawContract(Strip, D);
+		TestTrue(TEXT("renovation"), Renovation.Type == EContractType::Renovation);
+		TestTrue(TEXT("no keep-standing on a renovation"), !Renovation.FindCondition(EConditionType::KeepStanding));
+		TestEqual(TEXT("a renovation can still forbid a tool"), Renovation.CountOf(EConditionType::ForbiddenTool), 1);
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

@@ -1,4 +1,5 @@
 #include "DurabilityComponent.h"
+#include "Contracts/MissionResultSubsystem.h"
 #include "DemolitionRules.h"
 #include "DamageLogSubsystem.h"
 #include "Engine/World.h"
@@ -56,6 +57,12 @@ void UDurabilityComponent::ApplyDamage(const FDamageInfo& DamageInfo)
 		if (UDamageLogSubsystem* DamageLog = World->GetSubsystem<UDamageLogSubsystem>())
 		{
 			DamageLog->Record(DamageInfo, GetOwner(), Material, CurrentHP, MaxHP, NewState);
+		}
+
+		// A tool that dealt damage was used: if the contract forbade it, this is where the mission finds out.
+		if (UMissionResultSubsystem* Mission = World->GetSubsystem<UMissionResultSubsystem>())
+		{
+			Mission->RecordToolUse(DamageInfo.ToolId);
 		}
 	}
 

@@ -266,6 +266,9 @@ public:
 	/** Every piece this generator placed and still owns (a stale entry is a piece already demolished: check the pointer). The contract binding reads them. */
 	const TArray<TWeakObjectPtr<ABuildablePiece>>& GetPieces() const { return Pieces; }
 
+	/** The rooms of the current house, every storey, in emission order: type, storey and rectangle of room cells. The contract's keep-standing condition picks one. Empty when there is no house. */
+	const TArray<FRoom>& GetRooms() const { return Rooms; }
+
 	/** Every prop this generator spawned and still owns (a stale entry is a prop already broken). */
 	const TArray<TWeakObjectPtr<APhysicsProp>>& GetProps() const { return Props; }
 

@@ -65,6 +65,12 @@ FMissionSets MissionBinding::Compute(EContractType Type, int32 PartialFromLevel,
 			break;
 		}
 
+		// What the contract asks to keep standing stays, whatever the type says.
+		if (Item.bKeep)
+		{
+			bTarget = false;
+		}
+
 		if (bTarget)
 		{
 			Sets.Targets.Add(Item);
@@ -80,6 +86,30 @@ FMissionSets MissionBinding::Compute(EContractType Type, int32 PartialFromLevel,
 	}
 
 	return Sets;
+}
+
+bool MissionBinding::IsPartOfRoom(const FBindingItem& Item, const FGridRoom& Room)
+{
+	if (Item.bIsProp || !Item.bGridPiece)
+	{
+		return false;
+	}
+
+	const FIntVector& Cell = Item.GridCoord;
+
+	// On the room's storey, inside its perimeter (the perimeter included): walls, corner posts and the floor slab.
+	if (Cell.Z == Room.Level)
+	{
+		return Cell.X >= Room.MinX && Cell.X <= Room.MaxX && Cell.Y >= Room.MinY && Cell.Y <= Room.MaxY;
+	}
+
+	// The slab right above, strictly inside the perimeter: the ceiling. The walls of the storey above stand on it, and are not the room's.
+	if (Cell.Z == Room.Level + 1 && Item.PieceClass == EPieceClass::FloorSlab)
+	{
+		return Cell.X > Room.MinX && Cell.X < Room.MaxX && Cell.Y > Room.MinY && Cell.Y < Room.MaxY;
+	}
+
+	return false;
 }
 
 FString MissionBinding::ItemName(const AActor* Actor)

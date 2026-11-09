@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Contracts/ContractTypes.h"
+#include "Generation/FurnishingRuleRow.h"
 #include "ContractPool.generated.h"
 
 class UHouseArchetype;
@@ -69,6 +70,26 @@ struct FContractTemplate
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conditions", meta = (ClampMin = "0"))
 	int32 MaxZones = 0;
+
+	/**
+	 *  Chance, 0 to 1, that a job of this kind asks to keep a room standing. Never on a renovation, which keeps the whole shell
+	 *  already. The room is one of KeepStandingRooms, drawn here; which of the house's rooms of that type is kept is decided when
+	 *  the house is built.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conditions", meta = (ClampMin = "0", ClampMax = "1"))
+	float KeepStandingChance = 0.f;
+
+	/** The room types the job may ask to keep. Bathroom, Kitchen, LivingRoom and Bedroom are in every plan of the project; the Office is not, leave it out. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conditions")
+	TArray<ERoomType> KeepStandingRooms;
+
+	/** Chance, 0 to 1, that a job of this kind forbids one of ForbiddenTools. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conditions", meta = (ClampMin = "0", ClampMax = "1"))
+	float ForbiddenToolChance = 0.f;
+
+	/** The tools the job may forbid, by tool id as in the damage log: Sledgehammer, Crowbar, Jackhammer or Charge. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conditions")
+	TArray<FName> ForbiddenTools;
 
 	/** Multiplier on the base payout of the GDD formula (12 per m2 times the type factor). 1 leaves it alone. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pay", meta = (ClampMin = "0"))

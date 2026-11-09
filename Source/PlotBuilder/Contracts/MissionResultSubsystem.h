@@ -31,8 +31,26 @@ public:
 	/** The subsystem of the world WorldContext is in, or nullptr. */
 	static UMissionResultSubsystem* Get(const UObject* WorldContext);
 
-	/** A new mission starts (or the house is rebuilt): the counters go back to zero. */
+	/** A new mission starts (or the house is rebuilt): the counters go back to zero, and so does the forbidden-tool flag (the tool itself stays: SetForbiddenTool says it). */
 	void ResetCounters();
+
+	/**
+	 *  The tool the mission forbids (a FDamageInfo::ToolId: "Sledgehammer", "Crowbar", "Jackhammer", "Charge"), or none. Set by
+	 *  the mission director from the contract's ForbiddenTool condition when a mission starts; pb.ForbidTool sets it by hand.
+	 *  Setting it clears "used".
+	 */
+	void SetForbiddenTool(FName ToolId);
+
+	FName GetForbiddenTool() const { return ForbiddenTool; }
+
+	/**
+	 *  A tool dealt damage (called by UDurabilityComponent, where every hit passes, whatever dealt it). If ToolId is the
+	 *  forbidden tool, this is its first use of the mission: the player is warned on screen and the report will charge it. Later
+	 *  uses do nothing more: the penalty is once for the whole mission.
+	 */
+	void RecordToolUse(FName ToolId);
+
+	bool WasForbiddenToolUsed() const { return bForbiddenToolUsed; }
 
 	/**
 	 *  The rules asset the pieces of the house carry (DA_DemolitionRules), which holds the scoring. The mission director
@@ -70,4 +88,8 @@ private:
 
 	int32 CrushEvents = 0;
 	int32 ExplosionEvents = 0;
+
+	/** See SetForbiddenTool and RecordToolUse. */
+	FName ForbiddenTool;
+	bool bForbiddenToolUsed = false;
 };
