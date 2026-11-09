@@ -8,6 +8,7 @@
 class AHouseGenerator;
 class AMissionGround;
 class APlot;
+class UContractPool;
 class UDataTable;
 
 /**
@@ -15,11 +16,11 @@ class UDataTable;
  *  the house, then binds the contract to it (GDD §9.2 steps 1 to 7) and puts the building side of the game to
  *  sleep (a mission is played with the tool belt only).
  *
- *  What the mission is comes from the level's travel options, so the hub can send the player there with a plain
- *  OpenLevel: "Lvl_Mission?Seed=7?Archetype=twostorey?Type=partial?From=1". Anything missing falls back to the
- *  defaults below. For an archetype with a floor range, "?Floors=8" forces the storey count and "?Floors=random" lets the
- *  seed draw it. pb.SetSeed overrides the seed for the rest of the session, for demos and tests. The contract
- *  subsystem will replace the option reading: it will set the same values from the active contract.
+ *  What the mission is comes first from the active contract (UContractSubsystem): its type, seed, archetype, size and
+ *  storeys. With no active contract it comes from the level's travel options, so a plain OpenLevel still works:
+ *  "Lvl_Mission?Seed=7?Archetype=twostorey?Type=partial?From=1". Anything missing falls back to the defaults below. For
+ *  an archetype with a floor range, "?Floors=8" forces the storey count and "?Floors=random" lets the seed draw it.
+ *  pb.SetSeed overrides the seed, contract or not, for the rest of the session, for demos and tests.
  *
  *  The result (the target and must-stay sets) is stored on the level's plot (APlot::GetMissionSets), which is
  *  where the evaluator reads it.
@@ -45,6 +46,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission")
 	TObjectPtr<UDataTable> ShopCatalog;
 
+	/** The pool the contract board draws from. Handed to the contract subsystem when the level starts, so a mission level played on its own can still draw offers (pb.RefreshOffers). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission")
+	TObjectPtr<UContractPool> ContractPool;
+
 	/** Build the house and bind the contract when the level starts. Off for a level that drives it by hand (Blueprint, console). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission")
 	bool bStartOnBeginPlay = true;
@@ -69,8 +74,9 @@ public:
 	static int32 DebugSeed;
 
 	/**
-	 *  Reads the mission from the travel options and the defaults, builds the house (GenerateValid: a house
-	 *  always exists unless every attempt failed) and binds the contract to it. False if no house could be built.
+	 *  Reads the mission from the active contract, else from the travel options and the defaults, builds the house
+	 *  (GenerateValid: a house always exists unless every attempt failed) and binds the contract to it. False if no
+	 *  house could be built.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Mission")
 	bool StartMission();

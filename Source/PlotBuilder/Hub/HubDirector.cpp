@@ -1,4 +1,5 @@
 #include "HubDirector.h"
+#include "Contracts/ContractSubsystem.h"
 #include "Engine/World.h"
 #include "Interaction/ToolbeltComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -14,6 +15,13 @@ AHubDirector::AHubDirector()
 void AHubDirector::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// The board the mission board will show: the pool in, and a new draw if a mission ended since the last one (or none was ever made).
+	if (UContractSubsystem* Contracts = UContractSubsystem::Get(this))
+	{
+		Contracts->SetPool(ContractPool);
+		Contracts->EnsureFreshOffers();
+	}
 
 	ApplyHubInput();
 }

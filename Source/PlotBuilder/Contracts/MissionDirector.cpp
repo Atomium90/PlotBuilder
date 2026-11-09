@@ -10,6 +10,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "Generation/HouseArchetype.h"
 #include "Generation/HouseGenerator.h"
+#include "Contracts/ContractSubsystem.h"
 #include "Contracts/MissionBinding.h"
 #include "Environment/MissionGround.h"
 #include "Interaction/ShopItemRow.h"
@@ -26,6 +27,9 @@ namespace
 	constexpr int32 DirectorMessageKey = 7300;
 	constexpr int32 MaxInputAttempts = 50;
 	constexpr float InputRetryInterval = 0.1f;
+
+	/** Tries GenerateValid gives the mission's house before the fallback seed: the generator's own default. */
+	constexpr int32 MissionGenerateAttempts = 5;
 }
 
 AMissionDirector::AMissionDirector()
@@ -103,6 +107,14 @@ void AMissionDirector::BeginPlay()
 		Plot->bShowDebugBounds = false;
 	}
 
+	if (ContractPool)
+	{
+		if (UContractSubsystem* Contracts = UContractSubsystem::Get(this))
+		{
+			Contracts->SetPool(ContractPool);
+		}
+	}
+
 	if (bDisableBuilding)
 	{
 		ApplyMissionInput();
@@ -153,21 +165,33 @@ bool AMissionDirector::StartMission()
 		Options = GameMode->OptionsString;
 	}
 
+	// The contract the player took decides first; without one the travel options and the defaults do, as they always did.
+	const UContractSubsystem* Contracts = UContractSubsystem::Get(this);
+	const FContractDefinition* Contract = (Contracts && Contracts->HasActiveContract()) ? &Contracts->GetActiveContract() : nullptr;
+
 	// Archetype first: it decides how many storeys a partial demolition can use.
-	const FString ArchetypeOption = UGameplayStatics::ParseOption(Options, TEXT("Archetype"));
+	const FString ArchetypeOption = Contract ? (Contract->ArchetypeId.IsNone() ? FString() : Contract->ArchetypeId.ToString()) : UGameplayStatics::ParseOption(Options, TEXT("Archetype"));
 
 	if (!ArchetypeOption.IsEmpty())
 	{
 		House->SelectArchetype(ArchetypeOption);
 	}
 
-	// Storeys, for an archetype with a floor range (the apartment block): "Floors=8" forces the count, "Floors=random" lets the
-	// seed draw it, "Floors=default" goes back to the archetype's. Without the option the generator keeps its own settings.
-	const FString FloorsOption = UGameplayStatics::ParseOption(Options, TEXT("Floors"));
-
-	if (!FloorsOption.IsEmpty() && !House->SetFloorsFromText(FloorsOption))
+	if (Contract)
 	{
-		UE_LOG(LogPlotBuilder, Warning, TEXT("AMissionDirector: the Floors option '%s' is not a number, 'random' or 'default', it is ignored."), *FloorsOption);
+		// The contract carries its own storeys (below, as a generation override): a setting left on the generator by an earlier option must not leak into it.
+		House->SetFloorsFromText(TEXT("default"));
+	}
+	else
+	{
+		// Storeys, for an archetype with a floor range (the apartment block): "Floors=8" forces the count, "Floors=random" lets the
+		// seed draw it, "Floors=default" goes back to the archetype's. Without the option the generator keeps its own settings.
+		const FString FloorsOption = UGameplayStatics::ParseOption(Options, TEXT("Floors"));
+
+		if (!FloorsOption.IsEmpty() && !House->SetFloorsFromText(FloorsOption))
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AMissionDirector: the Floors option '%s' is not a number, 'random' or 'default', it is ignored."), *FloorsOption);
+		}
 	}
 
 	int32 Seed = DefaultSeed;
@@ -176,15 +200,26 @@ bool AMissionDirector::StartMission()
 	{
 		Seed = DebugSeed;
 	}
+	else if (Contract)
+	{
+		Seed = Contract->Seed;
+	}
 	else if (UGameplayStatics::HasOption(Options, TEXT("Seed")))
 	{
 		Seed = UGameplayStatics::GetIntOption(Options, TEXT("Seed"), DefaultSeed);
 	}
 
-	EContractType Type = DefaultType;
-	ParseType(UGameplayStatics::ParseOption(Options, TEXT("Type")), Type);
+	EContractType Type = Contract ? Contract->Type : DefaultType;
 
-	const int32 FromLevel = UGameplayStatics::GetIntOption(Options, TEXT("From"), DefaultPartialFromLevel);
+	if (!Contract)
+	{
+		ParseType(UGameplayStatics::ParseOption(Options, TEXT("Type")), Type);
+	}
+
+	const int32 FromLevel = Contract ? Contract->PartialFromLevel : UGameplayStatics::GetIntOption(Options, TEXT("From"), DefaultPartialFromLevel);
+
+	// The size and the storeys the contract asked for take the place of the archetype's own bounds for this house.
+	const FGenerationOverrides Overrides = Contract ? FGenerationOverrides::Exactly(Contract->FootprintCells, Contract->Floors) : FGenerationOverrides();
 
 	// The ground first: the house and its props need something to stand on while they are placed.
 	if (AMissionGround* Terrain = ResolveGround())
@@ -192,7 +227,7 @@ bool AMissionDirector::StartMission()
 		Terrain->Generate(Seed);
 	}
 
-	if (!House->GenerateValid(Seed))
+	if (!House->GenerateValid(Seed, MissionGenerateAttempts, Overrides))
 	{
 		const FString Message = FString::Printf(TEXT("AMissionDirector: no house could be built from seed %d, not even the fallback."), Seed);
 		UE_LOG(LogPlotBuilder, Error, TEXT("%s"), *Message);
@@ -203,6 +238,14 @@ bool AMissionDirector::StartMission()
 		}
 
 		return false;
+	}
+
+	if (Contract)
+	{
+		// The estimates on the board come from the request; the plan may have stretched the footprint to what it can reach.
+		const FIntPoint Built = House->GetFootprintCells();
+		UE_LOG(LogPlotBuilder, Log, TEXT("AMissionDirector: contract %s. Footprint asked %dx%d, built %dx%d; storeys asked %d, built %d."),
+			*UContractSubsystem::Describe(*Contract), Contract->FootprintCells.X, Contract->FootprintCells.Y, Built.X, Built.Y, Contract->Floors, House->GetFloorCount());
 	}
 
 	Rebind(Type, FromLevel);

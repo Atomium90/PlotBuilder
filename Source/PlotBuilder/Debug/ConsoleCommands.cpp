@@ -6,6 +6,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "PlotBuilder.h"
 #include "Buildables/BuildablePiece.h"
+#include "Contracts/ContractPool.h"
+#include "Contracts/ContractSubsystem.h"
 #include "Contracts/MissionDirector.h"
 #include "Destruction/CrushDetectionComponent.h"
 #include "Destruction/DamageLogSubsystem.h"
@@ -366,6 +368,79 @@ static FAutoConsoleCommandWithWorldAndArgs PbSetSeedCommand(
 		{
 			Director->StartMission();
 		}
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbRefreshOffersCommand(
+	TEXT("pb.RefreshOffers"),
+	TEXT("pb.RefreshOffers [seed] - throws the contract board away and draws three new offers from the pool, then prints them. With a seed (0 or more) the same seed gives the same three offers again, for tests. Needs a ContractPool on the hub or mission director of a level that ran in this session."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		UContractSubsystem* Contracts = World ? UContractSubsystem::Get(World) : nullptr;
+
+		if (!Contracts)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.RefreshOffers: no contract subsystem (no game instance)"));
+			return;
+		}
+
+		Contracts->RefreshOffers(Args.Num() > 0 ? FCString::Atoi(*Args[0]) : -1);
+		Contracts->ShowOnScreen(30.f);
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbShowOffersCommand(
+	TEXT("pb.ShowOffers"),
+	TEXT("pb.ShowOffers - prints the contract board as it stands (the three offers and the active contract), on screen and in the log. Draws nothing new."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		if (UContractSubsystem* Contracts = World ? UContractSubsystem::Get(World) : nullptr)
+		{
+			Contracts->ShowOnScreen(30.f);
+			return;
+		}
+
+		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.ShowOffers: no contract subsystem (no game instance)"));
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbAcceptOfferCommand(
+	TEXT("pb.AcceptOffer"),
+	TEXT("pb.AcceptOffer <n> - takes offer n (1 to 3) of the board as the active contract. If the level has a mission director, the mission is rebuilt from the contract right away: its archetype, size, storeys, type and seed."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		UContractSubsystem* Contracts = World ? UContractSubsystem::Get(World) : nullptr;
+
+		if (!Contracts || Args.IsEmpty())
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.AcceptOffer: usage pb.AcceptOffer <n>, n being 1 to 3 (pb.ShowOffers lists them)"));
+			return;
+		}
+
+		if (!Contracts->AcceptOffer(FCString::Atoi(*Args[0]) - 1))
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.AcceptOffer: there is no offer '%s' on the board (pb.RefreshOffers draws them)"), *Args[0]);
+			return;
+		}
+
+		Contracts->ShowOnScreen(30.f);
+
+		if (AMissionDirector* Director = AMissionDirector::Find(World))
+		{
+			Director->StartMission();
+		}
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbClearContractCommand(
+	TEXT("pb.ClearContract"),
+	TEXT("pb.ClearContract - forgets the active contract. The next mission goes back to its travel options and editor values."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		if (UContractSubsystem* Contracts = World ? UContractSubsystem::Get(World) : nullptr)
+		{
+			Contracts->ClearActiveContract();
+			UE_LOG(LogPlotBuilder, Log, TEXT("pb.ClearContract: no active contract"));
+			return;
+		}
+
+		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.ClearContract: no contract subsystem (no game instance)"));
 	}));
 
 static FAutoConsoleCommandWithWorldAndArgs PbGenerateGroundCommand(
