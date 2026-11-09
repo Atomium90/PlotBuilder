@@ -46,9 +46,8 @@ struct FWallClearance
  *  placed kinematically (fixed transform, no Push/Pull/Launch). The one deliberate exception is
  *  Collapsing (see BeginCollapse) - a piece that has lost structural support has left that cycle
  *  entirely and become debris, same category as Chaos gravats, which Push/Pull/Launch already
- *  covers. Cost is authored per-Blueprint for now, independent of the shop catalog's own
- *  FShopItemRow::Cost - the two aren't wired together yet (see UHotbarComponent::ShopCatalog),
- *  since there's no economy system to enforce either value.
+ *  covers. A piece has no price of its own: what it costs is the FShopItemRow::Cost of its row in
+ *  UHotbarComponent::ShopCatalog, found by actor class.
  */
 UCLASS(abstract)
 class ABuildablePiece : public AActor, public IInteractable, public IDamageable
@@ -61,9 +60,6 @@ public:
 
 	UStaticMeshComponent* GetMeshComponent() const { return MeshComponent; }
 	UDurabilityComponent* GetDurabilityComponent() const { return DurabilityComponent; }
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buildable")
-	int32 Cost = 0;
 
 	/** What this piece is made of - see GDD §7.2. Set per-Blueprint class default, not per-instance. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
