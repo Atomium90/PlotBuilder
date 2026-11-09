@@ -553,7 +553,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbCollapseAllCommand(
 
 static FAutoConsoleCommandWithWorldAndArgs PbTestHousesCommand(
 	TEXT("pb.TestHouses"),
-	TEXT("pb.TestHouses [firstSeed] [lastSeed] - builds every seed of the range (default 1 to 20, at most 100) twice with the level's AHouseGenerator and prints a summary: valid houses, re-rolls, same hash twice (T6), room types seen, props per house. Leaves the last house in the world."),
+	TEXT("pb.TestHouses [firstSeed] [lastSeed] [width depth] [floors] - builds every seed of the range (default 1 to 20, at most 100) twice with the level's AHouseGenerator and prints a summary: valid houses, re-rolls, same hash twice (T6), room types seen, props per house. Leaves the last house in the world. width and depth (room cells, 0 = the archetype's) and floors (0 = the archetype's) ask for the size and the storeys a contract can ask for, the same for every seed."),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 	{
 		if (!World)
@@ -564,9 +564,12 @@ static FAutoConsoleCommandWithWorldAndArgs PbTestHousesCommand(
 		const int32 FirstSeed = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : 1;
 		const int32 LastSeed = Args.Num() > 1 ? FCString::Atoi(*Args[1]) : FirstSeed + 19;
 
+		const FIntPoint Footprint(Args.Num() > 2 ? FMath::Max(0, FCString::Atoi(*Args[2])) : 0, Args.Num() > 3 ? FMath::Max(0, FCString::Atoi(*Args[3])) : 0);
+		const FGenerationOverrides Overrides = FGenerationOverrides::Exactly(Footprint, Args.Num() > 4 ? FMath::Max(0, FCString::Atoi(*Args[4])) : 0);
+
 		for (TActorIterator<AHouseGenerator> It(World); It; ++It)
 		{
-			It->TestSeeds(FirstSeed, LastSeed);
+			It->TestSeeds(FirstSeed, LastSeed, Overrides);
 			return;
 		}
 

@@ -606,16 +606,25 @@ AHouseGenerator::AHouseGenerator()
 bool AHouseGenerator::Generate(int32 InSeed)
 {
 	AttemptNote.Reset();
+	ActiveOverrides = FGenerationOverrides();
 	return TryGenerate(InSeed, false);
 }
 
 bool AHouseGenerator::GenerateValid(int32 RequestedSeed, int32 MaxAttempts)
+{
+	return GenerateValid(RequestedSeed, MaxAttempts, FGenerationOverrides());
+}
+
+bool AHouseGenerator::GenerateValid(int32 RequestedSeed, int32 MaxAttempts, const FGenerationOverrides& Overrides)
 {
 	if (!Archetype)
 	{
 		// Nothing to re-roll with: Generate reports the missing archetype once instead of once per attempt.
 		return Generate(RequestedSeed);
 	}
+
+	// Set once for every attempt of this call (the re-rolls and the fallback seed included), and replaced by the next call.
+	ActiveOverrides = Overrides;
 
 	const int32 Attempts = FMath::Max(1, MaxAttempts);
 	int32 ForcedLeft = FMath::Max(0, DebugForcedFailures);
@@ -664,6 +673,11 @@ bool AHouseGenerator::GenerateValid(int32 RequestedSeed, int32 MaxAttempts)
 
 void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 {
+	TestSeeds(FirstSeed, LastSeed, FGenerationOverrides());
+}
+
+void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed, const FGenerationOverrides& Overrides)
+{
 	// Every build spawns a whole house and its furniture, so the batch stays small enough not to freeze the editor.
 	constexpr int32 MaxSeeds = 100;
 	constexpr int32 TypeCount = 5;
@@ -702,7 +716,7 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 	{
 		const int32 TestSeed = FirstSeed + Offset;
 
-		if (!GenerateValid(TestSeed))
+		if (!GenerateValid(TestSeed, 5, Overrides))
 		{
 			Failed.Add(TestSeed);
 			continue;
@@ -746,7 +760,7 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 		MaxFloorsSeen = FMath::Max(MaxFloorsSeen, ActiveFloors);
 
 		// T6: asking again for the same seed must give the same house, furniture included.
-		if (!GenerateValid(TestSeed) || GetLayoutHash() != FirstHash || Seed != FirstEffectiveSeed)
+		if (!GenerateValid(TestSeed, 5, Overrides) || GetLayoutHash() != FirstHash || Seed != FirstEffectiveSeed)
 		{
 			HashDiffers.Add(TestSeed);
 		}
@@ -786,7 +800,8 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed)
 		};
 
 		TArray<FString> Result;
-		Result.Add(FString::Printf(TEXT("Seed test %d..%d: %d of %d valid"), FirstSeed, FirstSeed + Count - 1, ValidCount, Count));
+		const FString AskedNote = Overrides.IsEmpty() ? FString() : FString::Printf(TEXT(" | asked: footprint %dx%d to %dx%d, storeys %d"), Overrides.MinCells.X, Overrides.MinCells.Y, Overrides.MaxCells.X, Overrides.MaxCells.Y, Overrides.Floors);
+		Result.Add(FString::Printf(TEXT("Seed test %d..%d: %d of %d valid%s"), FirstSeed, FirstSeed + Count - 1, ValidCount, Count, *AskedNote));
 		Result.Add(FString::Printf(TEXT("Failed: %s"), *Join(Failed)));
 		Result.Add(FString::Printf(TEXT("Re-rolled or fallback: %s"), *Join(Rerolled)));
 		Result.Add(FString::Printf(TEXT("Same seed twice (T6): %d of %d gave the same hash (differs: %s)"), ValidCount - HashDiffers.Num(), ValidCount, *Join(HashDiffers)));
@@ -1324,14 +1339,17 @@ int32 AHouseGenerator::ResolveFloors(FRandomStream& Stream) const
 {
 	const int32 Default = FMath::Max(1, Archetype->Floors);
 
+	// The storeys a contract asked for come before the generator's own setting.
+	const int32 Forced = ActiveOverrides.Floors > 0 ? ActiveOverrides.Floors : FloorsOverride;
+
 	// 0 on either end means no range: the plans of this archetype have a fixed number of storeys.
 	const bool bHasRange = Archetype->MinFloors > 0 && Archetype->MaxFloors >= Archetype->MinFloors;
 
 	if (!bHasRange)
 	{
-		if (FloorsOverride > 0 && FloorsOverride != Default)
+		if (Forced > 0 && Forced != Default)
 		{
-			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' has no MinFloors/MaxFloors range, the request for %d storeys is ignored (%d storey(s) built)"), *GetName(), *Archetype->GetName(), FloorsOverride, Default);
+			UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' has no MinFloors/MaxFloors range, the request for %d storeys is ignored (%d storey(s) built)"), *GetName(), *Archetype->GetName(), Forced, Default);
 		}
 
 		return Default;
@@ -1340,9 +1358,9 @@ int32 AHouseGenerator::ResolveFloors(FRandomStream& Stream) const
 	const int32 Low = Archetype->MinFloors;
 	const int32 High = Archetype->MaxFloors;
 
-	if (FloorsOverride > 0)
+	if (Forced > 0)
 	{
-		return FMath::Clamp(FloorsOverride, Low, High);
+		return FMath::Clamp(Forced, Low, High);
 	}
 
 	if (bRandomFloors && Low < High)
@@ -1351,6 +1369,21 @@ int32 AHouseGenerator::ResolveFloors(FRandomStream& Stream) const
 	}
 
 	return FMath::Clamp(Default, Low, High);
+}
+
+void AHouseGenerator::GetSizeBounds(FIntPoint& OutMin, FIntPoint& OutMax) const
+{
+	OutMin = Archetype->MinRoomCells;
+	OutMax = Archetype->MaxRoomCells;
+
+	// Axis by axis: a contract may ask for the width only, the depth then stays the archetype's.
+	if (ActiveOverrides.MinCells.X > 0) { OutMin.X = ActiveOverrides.MinCells.X; }
+	if (ActiveOverrides.MinCells.Y > 0) { OutMin.Y = ActiveOverrides.MinCells.Y; }
+	if (ActiveOverrides.MaxCells.X > 0) { OutMax.X = ActiveOverrides.MaxCells.X; }
+	if (ActiveOverrides.MaxCells.Y > 0) { OutMax.Y = ActiveOverrides.MaxCells.Y; }
+
+	OutMax.X = FMath::Max(OutMax.X, OutMin.X);
+	OutMax.Y = FMath::Max(OutMax.Y, OutMin.Y);
 }
 
 bool AHouseGenerator::SetFloorsFromText(const FString& Text)
@@ -1519,12 +1552,17 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 	int32 Width = 0;
 	int32 Depth = 0;
 
+	// The archetype's size bounds, or the ones a contract asked for instead (same draws either way).
+	FIntPoint MinCells = FIntPoint::ZeroValue;
+	FIntPoint MaxCells = FIntPoint::ZeroValue;
+	GetSizeBounds(MinCells, MaxCells);
+
 	if (!UsableLayouts.IsEmpty())
 	{
 		const int32 Pick = Stream.RandRange(0, UsableLayouts.Num() - 1);
 		Layout = UsableLayouts[Pick].Key;
 		LevelStandingShifts = Layout->LevelStandingShifts;
-		Layout->Resolve(UsableLayouts[Pick].Value, Archetype->MinRoomCells, Archetype->MaxRoomCells, FIntPoint(FreeX, FreeY), Stream, Resolved);
+		Layout->Resolve(UsableLayouts[Pick].Value, MinCells, MaxCells, FIntPoint(FreeX, FreeY), Stream, Resolved);
 		Width = Resolved.Rows;
 		Depth = Resolved.Columns;
 	}
@@ -1538,8 +1576,8 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 			return Stream.RandRange(Low, High);
 		};
 
-		Width = PickSize(Archetype->MinRoomCells.X, Archetype->MaxRoomCells.X, FreeX);
-		Depth = PickSize(Archetype->MinRoomCells.Y, Archetype->MaxRoomCells.Y, FreeY);
+		Width = PickSize(MinCells.X, MaxCells.X, FreeX);
+		Depth = PickSize(MinCells.Y, MaxCells.Y, FreeY);
 	}
 
 	// Centred on the plot (the spare cell goes to the lower side when it doesn't divide evenly), then moved by up to PlacementJitter cells.

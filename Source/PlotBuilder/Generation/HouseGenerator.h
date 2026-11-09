@@ -67,6 +67,34 @@ struct FStairRun
 };
 
 /**
+ *  What a mission asks of the generator on top of the archetype: a size and a number of storeys that take the place of the
+ *  archetype's own bounds for one house. The archetype asset is never changed, so the next house starts from it again.
+ *  A zero means "not asked", and the archetype (or, for the storeys, FloorsOverride) decides as before. Same seed and same
+ *  overrides give the same house; with no overrides the house is exactly the one the archetype gives.
+ */
+struct FGenerationOverrides
+{
+	/** Smallest and largest footprint, in room cells (X, Y). A zero on an axis keeps the archetype's bound on that axis. A maximum below the minimum is raised to it. */
+	FIntPoint MinCells = FIntPoint::ZeroValue;
+	FIntPoint MaxCells = FIntPoint::ZeroValue;
+
+	/** Storeys, honoured by an archetype that has a floor range (it wins over FloorsOverride and bRandomFloors). */
+	int32 Floors = 0;
+
+	/** Exactly this footprint (the plan still clamps it to what it can stretch to) and this many storeys. */
+	static FGenerationOverrides Exactly(FIntPoint Footprint, int32 InFloors)
+	{
+		FGenerationOverrides Result;
+		Result.MinCells = Footprint;
+		Result.MaxCells = Footprint;
+		Result.Floors = InFloors;
+		return Result;
+	}
+
+	bool IsEmpty() const { return MinCells == FIntPoint::ZeroValue && MaxCells == FIntPoint::ZeroValue && Floors <= 0; }
+};
+
+/**
  *  Builds a house in a plot from a UHouseArchetype and a seed (GDD §9). It places every piece through
  *  APlot::PlacePiece, the same function build mode uses, so a generated house is a normal house for the
  *  structural graph: it can be demolished, it collapses, it shows in the heat-map.
@@ -182,6 +210,13 @@ public:
 	bool GenerateValid(int32 RequestedSeed, int32 MaxAttempts = 5);
 
 	/**
+	 *  GenerateValid with a size and a number of storeys asked by a contract (see FGenerationOverrides). They apply to every
+	 *  attempt of this call, the re-rolls and the fallback seed included, and to nothing after it: the next call without
+	 *  overrides builds what the archetype gives.
+	 */
+	bool GenerateValid(int32 RequestedSeed, int32 MaxAttempts, const FGenerationOverrides& Overrides);
+
+	/**
 	 *  Debug, for the Gate 2 checks: runs GenerateValid on every seed from FirstSeed to LastSeed (at most
 	 *  100), each one twice, and prints a summary: how many gave a house, how many needed a re-roll or the
 	 *  fallback, how many gave the same hash both times (T6), how many houses had each room type, and the
@@ -190,6 +225,9 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Generation|Debug")
 	void TestSeeds(int32 FirstSeed, int32 LastSeed);
+
+	/** TestSeeds under the same overrides for every seed, to check T6 and the validity of the houses a contract can ask for. */
+	void TestSeeds(int32 FirstSeed, int32 LastSeed, const FGenerationOverrides& Overrides);
 
 	/** Seed the current house was really built from: the requested one, a derived one after a re-roll, or the fallback. */
 	UFUNCTION(BlueprintPure, Category = "Generation")
@@ -212,6 +250,9 @@ public:
 	/** Storeys of the current house (the ground floor included): the count it was really built with, 0 when there is none. */
 	UFUNCTION(BlueprintPure, Category = "Generation")
 	int32 GetFloorCount() const { return ActiveFloors; }
+
+	/** Footprint of the current house in room cells (X, Y), the one it was really built with: (0, 0) when there is none. A contract asks for a size, the plan stretches towards it, this is what came out. */
+	FIntPoint GetFootprintCells() const { return ActiveFloors > 0 ? LastSize : FIntPoint::ZeroValue; }
 
 	/** Reads "random" (the seed draws the count) or a number (forced) into the two floor settings. False, nothing changed, for anything else. */
 	bool SetFloorsFromText(const FString& Text);
@@ -259,6 +300,9 @@ private:
 	 *  with a range and bRandomFloors, so every other house keeps its stream as it was.
 	 */
 	int32 ResolveFloors(FRandomStream& Stream) const;
+
+	/** The footprint bounds this attempt works within: the archetype's MinRoomCells and MaxRoomCells, axis by axis replaced by ActiveOverrides where it asks for something. */
+	void GetSizeBounds(FIntPoint& OutMin, FIntPoint& OutMax) const;
 
 	/**
 	 *  Cuts one storey's footprint into rooms and places the partition walls (GDD §9.2, step 4). The
@@ -378,6 +422,9 @@ private:
 
 	/** See GetFloorCount. Set by EmitHouse, cleared with the house. */
 	int32 ActiveFloors = 0;
+
+	/** What the current GenerateValid call was asked on top of the archetype (see FGenerationOverrides). Set at the start of every Generate and GenerateValid, so it never outlives the call that gave it. */
+	FGenerationOverrides ActiveOverrides;
 
 	/** The plans of this attempt that were expanded to ActiveFloors storeys (UHouseLayout::ExpandForFloors): kept here so they are not collected while the house is built. */
 	UPROPERTY(Transient)
