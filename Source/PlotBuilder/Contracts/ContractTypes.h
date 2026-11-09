@@ -158,11 +158,12 @@ struct FScoringParams
 
 	/**
 	 *  Share of a salvaged item's value that is left, by its HP ratio: points (HP ratio, multiplier) sorted by HP ratio,
-	 *  linear between them and flat beyond the ends (GDD §10.3: 1.0 at full HP, 0.5 at 0.8, 0.05 at 0). Fewer than two
-	 *  points mean a straight line from nothing at 0 HP to the full value at full HP.
+	 *  linear between them and flat beyond the ends. The default is the GDD §10.3 curve: the value drops by half fast, then
+	 *  slowly (1.0 at full HP, 0.5 at 0.8, 0.05 at 0). Empty, or one point, means a straight line from nothing at 0 HP to the
+	 *  full value at full HP.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scoring")
-	TArray<FVector2D> FurnitureValuePoints;
+	TArray<FVector2D> FurnitureValuePoints = {FVector2D(0.0, 0.05), FVector2D(0.8, 0.5), FVector2D(1.0, 1.0)};
 };
 
 /** A piece of furniture the client asked for, as it stands at the end of the mission. */
@@ -185,6 +186,14 @@ struct FSalvageResult
 	/** Inside the client drop zone at the end. Anything else is lost: destroyed, or not handed over. */
 	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
 	bool bDelivered = false;
+
+	/** Broken, or gone. Only a word in the report: a lost item costs the same whether it was destroyed or left behind. */
+	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
+	bool bDestroyed = false;
+
+	/** Not handed over and still standing on the plot (in or around the house) at the end, as opposed to carried out of the plot but not to the client zone. Again only a word in the report. */
+	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
+	bool bOnSite = false;
 };
 
 /** What happened to one protected zone. */

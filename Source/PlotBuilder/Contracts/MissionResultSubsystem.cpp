@@ -148,9 +148,14 @@ FMissionSnapshot UMissionResultSubsystem::BuildSnapshot() const
 		Result.Name = Item.Label.IsNone() ? MissionBinding::ItemName(Item.Actor.Get()) : Item.Label.ToString();
 		Result.Value = Item.Value;
 
-		const float* InZone = MissionResultIsGone(Item) ? nullptr : Delivered.Find(Item.Actor.Get());
+		const bool bGone = MissionResultIsGone(Item);
+		const float* InZone = bGone ? nullptr : Delivered.Find(Item.Actor.Get());
+		Result.bDestroyed = bGone;
 		Result.bDelivered = InZone != nullptr;
 		Result.HPRatio = InZone ? *InZone : 0.f;
+
+		// Alive and not handed over: still on the plot (in the house or around it), or carried off it. Only a word in the report.
+		Result.bOnSite = !bGone && !InZone && Plot->IsLocationInside(Item.Actor->GetActorLocation());
 	}
 
 	for (const TObjectPtr<AProtectedZone>& Zone : Plot->GetProtectedZones())
@@ -182,7 +187,9 @@ FString UMissionResultSubsystem::DescribeSnapshot(const FMissionSnapshot& Snapsh
 
 	for (const FSalvageResult& Item : Snapshot.Salvage)
 	{
-		Text += FString::Printf(TEXT("\n  Salvage %s: value %d, %s%s"), *Item.Name, Item.Value, Item.bDelivered ? TEXT("delivered") : TEXT("not delivered"),
+		const TCHAR* Fate = Item.bDelivered ? TEXT("delivered") : (Item.bDestroyed ? TEXT("destroyed") : (Item.bOnSite ? TEXT("left on the plot") : TEXT("left outside the plot")));
+
+		Text += FString::Printf(TEXT("\n  Salvage %s: value %d, %s%s"), *Item.Name, Item.Value, Fate,
 			Item.bDelivered ? *FString::Printf(TEXT(" at %.0f%% HP"), Item.HPRatio * 100.f) : TEXT(""));
 	}
 

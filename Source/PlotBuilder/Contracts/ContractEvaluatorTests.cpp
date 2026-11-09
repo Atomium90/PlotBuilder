@@ -98,8 +98,9 @@ bool FPBEvaluatorCollateralTest::RunTest(const FString& Parameters)
 }
 
 // Asked: a 300 item delivered whole and a 100 item not delivered. Kept 300 of 400, loss 0.25, kFurniture 1.0: 250 off a
-// 1000 base, payout 750. With the GDD curve (0 HP 0.05, 0.8 HP 0.5, full 1.0) and the 300 item at 0.8 HP: kept 150 of
-// 400, loss 0.625, payout 375. The curve itself: 0.9 HP is 0.75, 0.4 HP is 0.275, 0 HP is 0.05.
+// 1000 base, payout 750. The default is the GDD curve (0 HP 0.05, 0.8 HP 0.5, full 1.0): with the 300 item at 0.8 HP, kept
+// 150 of 400, loss 0.625, payout 375. The curve itself: 0.9 HP is 0.75, 0.4 HP is 0.275, 0 HP is 0.05. With no points at
+// all the value goes down in a straight line with the HP.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorFurnitureTest, "PlotBuilder.Contracts.Evaluator.Furniture", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPBEvaluatorFurnitureTest::RunTest(const FString& Parameters)
 {
@@ -109,26 +110,59 @@ bool FPBEvaluatorFurnitureTest::RunTest(const FString& Parameters)
 	Snapshot.Salvage.Add(PBContractTests::MakeSalvage(300, 1.f, true));
 	Snapshot.Salvage.Add(PBContractTests::MakeSalvage(100, 1.f, false));
 
-	const FDebriefResult Linear = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, FScoringParams());
+	const FScoringParams Defaults = FScoringParams();
+	const FDebriefResult Whole = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, Defaults);
 
-	TestNearlyEqual(TEXT("furniture loss"), Linear.FurnitureLoss, 0.25f, 0.001f);
-	TestEqual(TEXT("payout"), Linear.Payout, 750);
-	TestEqual(TEXT("lines add up"), PBContractTests::SumOfLinesBeforePayout(Linear), Linear.Payout);
-
-	FScoringParams Curved;
-	Curved.FurnitureValuePoints = {FVector2D(0.0, 0.05), FVector2D(0.8, 0.5), FVector2D(1.0, 1.0)};
+	TestNearlyEqual(TEXT("furniture loss"), Whole.FurnitureLoss, 0.25f, 0.001f);
+	TestEqual(TEXT("payout"), Whole.Payout, 750);
+	TestEqual(TEXT("lines add up"), PBContractTests::SumOfLinesBeforePayout(Whole), Whole.Payout);
 
 	Snapshot.Salvage[0].HPRatio = 0.8f;
 
-	const FDebriefResult Damaged = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, Curved);
+	const FDebriefResult Damaged = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, Defaults);
 
-	TestNearlyEqual(TEXT("furniture loss with the curve"), Damaged.FurnitureLoss, 0.625f, 0.001f);
-	TestEqual(TEXT("payout with the curve"), Damaged.Payout, 375);
+	TestNearlyEqual(TEXT("furniture loss with the default curve"), Damaged.FurnitureLoss, 0.625f, 0.001f);
+	TestEqual(TEXT("payout with the default curve"), Damaged.Payout, 375);
 
-	TestNearlyEqual(TEXT("curve at 0.9"), UContractEvaluator::FurnitureValueMultiplier(Curved, 0.9f), 0.75f, 0.001f);
-	TestNearlyEqual(TEXT("curve at 0.4"), UContractEvaluator::FurnitureValueMultiplier(Curved, 0.4f), 0.275f, 0.001f);
-	TestNearlyEqual(TEXT("curve at 0"), UContractEvaluator::FurnitureValueMultiplier(Curved, 0.f), 0.05f, 0.001f);
-	TestNearlyEqual(TEXT("no curve, straight line"), UContractEvaluator::FurnitureValueMultiplier(FScoringParams(), 0.3f), 0.3f, 0.001f);
+	TestNearlyEqual(TEXT("curve at 0.9"), UContractEvaluator::FurnitureValueMultiplier(Defaults, 0.9f), 0.75f, 0.001f);
+	TestNearlyEqual(TEXT("curve at 0.4"), UContractEvaluator::FurnitureValueMultiplier(Defaults, 0.4f), 0.275f, 0.001f);
+	TestNearlyEqual(TEXT("curve at 0"), UContractEvaluator::FurnitureValueMultiplier(Defaults, 0.f), 0.05f, 0.001f);
+
+	FScoringParams Straight;
+	Straight.FurnitureValuePoints.Reset();
+
+	TestNearlyEqual(TEXT("no points, straight line"), UContractEvaluator::FurnitureValueMultiplier(Straight, 0.3f), 0.3f, 0.001f);
+
+	return true;
+}
+
+// Three items asked, a 100 one delivered, a 100 one destroyed, a 100 one left standing on the plot: kept 100 of 300, and the
+// report says so in words (1 of 3 delivered, 1 destroyed, 1 left on the plot). The words change nothing to the money.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorFurnitureFateTest, "PlotBuilder.Contracts.Evaluator.FurnitureFate", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBEvaluatorFurnitureFateTest::RunTest(const FString& Parameters)
+{
+	FMissionSnapshot Snapshot = PBContractTests::MakeCleanSnapshot();
+
+	Snapshot.Salvage.Add(PBContractTests::MakeSalvage(100, 1.f, true));
+
+	FSalvageResult Destroyed = PBContractTests::MakeSalvage(100, 0.f, false);
+	Destroyed.bDestroyed = true;
+	Snapshot.Salvage.Add(Destroyed);
+
+	FSalvageResult Standing = PBContractTests::MakeSalvage(100, 1.f, false);
+	Standing.bOnSite = true;
+	Snapshot.Salvage.Add(Standing);
+
+	const FDebriefResult Result = UContractEvaluator::Evaluate(PBContractTests::MakeContract(900), Snapshot, FScoringParams());
+
+	// Kept 100 of 300, loss 2/3, so 600 off a 900 base.
+	TestNearlyEqual(TEXT("furniture loss"), Result.FurnitureLoss, 2.f / 3.f, 0.001f);
+	TestEqual(TEXT("payout"), Result.Payout, 300);
+
+	const FString& Detail = Result.Lines[3].Detail;
+	TestTrue(TEXT("says 1 of 3 delivered"), Detail.Contains(TEXT("1 of 3 delivered")));
+	TestTrue(TEXT("says 1 destroyed"), Detail.Contains(TEXT("1 destroyed")));
+	TestTrue(TEXT("says 1 left on the plot"), Detail.Contains(TEXT("1 left on the plot")));
 
 	return true;
 }

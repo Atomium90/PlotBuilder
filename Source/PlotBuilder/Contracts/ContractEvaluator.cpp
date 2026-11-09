@@ -81,6 +81,8 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 	float ValueAsked = 0.f;
 	float ValueKept = 0.f;
 	int32 Delivered = 0;
+	int32 Destroyed = 0;
+	int32 OnSite = 0;
 
 	for (const FSalvageResult& Item : Snapshot.Salvage)
 	{
@@ -91,6 +93,9 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 			ValueKept += static_cast<float>(Item.Value) * FurnitureValueMultiplier(Params, Item.HPRatio);
 			++Delivered;
 		}
+
+		Destroyed += Item.bDestroyed ? 1 : 0;
+		OnSite += Item.bOnSite ? 1 : 0;
 	}
 
 	Result.FurnitureLoss = ValueAsked > 0.f ? FMath::Clamp(1.f - ValueKept / ValueAsked, 0.f, 1.f) : 0.f;
@@ -142,7 +147,7 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 		Result.ZoneDamage, -ZoneMoney);
 
 	AddLine(TEXT("Furniture"),
-		FString::Printf(TEXT("kept %.0f of %.0f value, %d of %d delivered (x%.2f)"), ValueKept, ValueAsked, Delivered, Snapshot.Salvage.Num(), Params.FurnitureCoefficient),
+		FString::Printf(TEXT("kept %.0f of %.0f value, %d of %d delivered, %d destroyed, %d left on the plot (x%.2f)"), ValueKept, ValueAsked, Delivered, Snapshot.Salvage.Num(), Destroyed, OnSite, Params.FurnitureCoefficient),
 		Result.FurnitureLoss, -FurnitureMoney);
 
 	AddLine(TEXT("Safety"),
