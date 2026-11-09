@@ -46,6 +46,12 @@ void APhysicsProp::HandleImpact(UPrimitiveComponent* HitComponent, AActor* Other
 		return;
 	}
 
+	// A prop that does not simulate (a shed fixed to the ground) has no mass to read and takes no impact damage: leave before GetMass, which warns on every hit.
+	if (!MeshComponent->IsSimulatingPhysics())
+	{
+		return;
+	}
+
 	const float Mass = MeshComponent->GetMass();
 
 	if (Mass <= KINDA_SMALL_NUMBER)
