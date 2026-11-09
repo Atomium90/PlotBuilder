@@ -29,7 +29,13 @@ enum class EFurniturePlacement : uint8
 	/** As close to the middle of the room as it fits, any way round. */
 	Centred,
 	/** Fixtures that need a water supply. No plumbing wall exists yet, so for now this is AgainstWall. */
-	NearPlumbing
+	NearPlumbing,
+	/**
+	 *  Hung on a wall: back to a wall like AgainstWall, but MountHeight above the floor, and held there until the wall is
+	 *  hit or falls. Only goes where a plain wall segment stands behind it (no door, no window); nowhere else, it is skipped.
+	 *  Appended last so the values already saved in DT_FurnishingRules stay valid.
+	 */
+	OnWall
 };
 
 /**
@@ -80,6 +86,10 @@ struct FFurnishingRuleRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing")
 	EFurniturePlacement Placement = EFurniturePlacement::AgainstWall;
+
+	/** OnWall only: height of the bottom of the prop above the floor, in cm. Every other rule rests the prop on the floor and ignores it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing", meta = (ClampMin = "0", EditCondition = "Placement == EFurniturePlacement::OnWall"))
+	float MountHeight = 110.f;
 
 	/** Relative chance of this row among the rows of its group (a group with one row ignores it). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furnishing", meta = (ClampMin = "0"))

@@ -5,6 +5,7 @@
 #include "GameFramework/Controller.h"
 #include "DrawDebugHelpers.h"
 #include "Debug/DebugDisplay.h"
+#include "Props/PhysicsProp.h"
 
 UPhysicsManipulationComponent::UPhysicsManipulationComponent()
 {
@@ -41,6 +42,12 @@ UPrimitiveComponent* UPhysicsManipulationComponent::GetPhysicsBody(AActor* Actor
 	if (!Actor)
 	{
 		return nullptr;
+	}
+
+	// A prop hung on a wall does not simulate: the hands tool taking hold of it takes it off the wall first.
+	if (APhysicsProp* Prop = Cast<APhysicsProp>(Actor))
+	{
+		Prop->Release();
 	}
 
 	UPrimitiveComponent* Primitive = Actor->FindComponentByClass<UPrimitiveComponent>();

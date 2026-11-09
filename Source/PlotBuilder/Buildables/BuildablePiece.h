@@ -200,6 +200,9 @@ public:
 	/** Involuntary removal: this piece's stability fell below the collapse threshold (see UStructuralSupportComponent::RecomputeStability), usually because something it depended on was just demolished or collapsed itself. Topples under physics instead of vanishing, then cascades by leaving the structural graph. Safe to call more than once. */
 	void BeginCollapse();
 
+	/** Broadcast once, when this piece starts collapsing (BeginCollapse, after the state change). Whatever hangs on the piece, like a prop mounted on a wall, listens to let go. */
+	FSimpleMulticastDelegate OnCollapseStarted;
+
 	/** Writes Stability into the mesh's Custom Primitive Data (index 0) for the debug color gradient - see UStructuralSupportComponent::bShowDebug. */
 	void UpdateStabilityDebugColor();
 

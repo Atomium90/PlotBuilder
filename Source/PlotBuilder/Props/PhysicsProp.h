@@ -9,6 +9,7 @@
 
 class UStaticMeshComponent;
 class UDurabilityComponent;
+class ABuildablePiece;
 
 /**
  *  Generic physics-simulated prop (crate, barrel, furniture...). Mass and friction are tuned
@@ -34,6 +35,18 @@ public:
 
 	virtual void Interact_Implementation(AActor* InteractingActor) override;
 	virtual void ApplyDamage_Implementation(const FDamageInfo& DamageInfo) override;
+
+	/**
+	 *  Hangs this prop on Wall (a mirror, a cabinet): the body stops simulating, so it stays where the generator put it,
+	 *  and starts again (Release) as soon as the wall takes any damage, starts to collapse or is destroyed. Only the wall's
+	 *  fate is watched, the prop itself still takes tool damage. Does nothing if already mounted or Wall is null.
+	 */
+	void MountOn(ABuildablePiece* Wall);
+
+	/** Lets go of the wall (see MountOn) and wakes the physics body, so the prop falls, and the hands tool can grab it. Safe to call on a prop that is not mounted. */
+	void Release();
+
+	bool IsMounted() const { return bMounted; }
 
 	/** What this prop is made of - drives the fragment tint and the tool x material matrix, same as ABuildablePiece::Material. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
@@ -80,6 +93,18 @@ private:
 	/** MeshComponent->OnComponentHit handler: turns the speed change of a contact into damage on DurabilityComponent when it is above ImpactSpeedThreshold. */
 	UFUNCTION()
 	void HandleImpact(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+
+	/** The three ways the wall under MountedOn can stop holding the prop: hit, destroyed (UDurabilityComponent and AActor events), collapsing (ABuildablePiece::OnCollapseStarted). All end in Release. */
+	UFUNCTION()
+	void HandleMountDamaged(const FDamageInfo& DamageInfo);
+
+	UFUNCTION()
+	void HandleMountDestroyed(AActor* DestroyedActor);
+
+	/** The wall this prop hangs on, while bMounted. */
+	TWeakObjectPtr<ABuildablePiece> MountedOn;
+
+	bool bMounted = false;
 
 	/** World time of BeginPlay, for the grace period. */
 	float SpawnTime = 0.f;

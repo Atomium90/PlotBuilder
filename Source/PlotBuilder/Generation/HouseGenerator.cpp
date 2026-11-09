@@ -290,6 +290,9 @@ namespace
 
 		/** Distance from the middle of the room (Centred spots only). */
 		float Score = 0.f;
+
+		/** The wall the back is to (the four wall rules only). The OnWall rule reads it to find the wall piece the prop hangs on. */
+		EFootprintSide Wall = EFootprintSide::MinusX;
 	};
 
 	/** The floor of one room that furniture can use: inside the walls, minus what is already taken. */
@@ -378,8 +381,9 @@ namespace
 	}
 
 	/**
-	 *  Every place Prop can go in Floor under its row's rule. Against a wall (and NearPlumbing, which is the
-	 *  same for now): back to one of the four walls, front into the room, sliding along it. Corner: only the
+	 *  Every place Prop can go in Floor under its row's rule. Against a wall (and NearPlumbing and OnWall, which are the
+	 *  same here: OnWall only differs in height, and in the wall piece behind it, checked by the caller): back to one of
+	 *  the four walls, front into the room, sliding along it. Corner: only the
 	 *  ends of that slide. Centred: around the middle of the room, in the four directions, keeping only the
 	 *  spots nearest to the middle that are free.
 	 */
@@ -461,7 +465,7 @@ namespace
 
 				if (Floor.IsFree(Box))
 				{
-					OutSpots.Add(FSpot{Box, FacingYaw, FacingYaw + YawOffset, 0.f});
+					OutSpots.Add(FSpot{Box, FacingYaw, FacingYaw + YawOffset, 0.f, Wall});
 				}
 			}
 		}
@@ -2517,11 +2521,51 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 		}
 	}
 
+	// The plain wall piece behind a spot, for the OnWall rule: the room's edge on the spot's side, at the cell under the middle of the prop.
+	// A door edge, a window wall or an edge with no piece gives nothing, and the spot is dropped: a mirror does not hang over an opening.
+	const auto FindMountWall = [&](const FSpot& Candidate) -> ABuildablePiece*
+	{
+		const bool bXSide = IsXSide(Candidate.Wall);
+		const float AlongCentre = bXSide ? Candidate.Box.GetCenter().Y : Candidate.Box.GetCenter().X;
+		const float AlongOrigin = bXSide ? GridOrigin.Y : GridOrigin.X;
+		const int32 AlongCell = FMath::Clamp(FMath::RoundToInt((AlongCentre - AlongOrigin) / (2.f * CellSize)), bXSide ? Rect.MinJ : Rect.MinI, bXSide ? Rect.MaxJ : Rect.MaxI);
+		const FIntVector EdgeKey = SideEdgeKey(Rect, Candidate.Wall, AlongCell, Room.Level);
+		const EEdgeKind* EdgeKind = Edges.Find(EdgeKey);
+
+		if (!EdgeKind || (*EdgeKind != EEdgeKind::ExteriorWall && *EdgeKind != EEdgeKind::Partition))
+		{
+			return nullptr;
+		}
+
+		for (const TWeakObjectPtr<ABuildablePiece>& WeakPiece : Pieces)
+		{
+			ABuildablePiece* WallPiece = WeakPiece.Get();
+
+			if (!WallPiece || WallPiece->GetGridCoord() != EdgeKey || (WallPiece->PieceClass != EPieceClass::ExteriorWall && WallPiece->PieceClass != EPieceClass::InteriorWall))
+			{
+				continue;
+			}
+
+			UClass* WallClass = WallPiece->GetClass();
+			const bool bOpening = WallClass == Archetype->WindowWallClass.Get() || WallClass == Archetype->LargeWindowWallClass.Get() || WallClass == Archetype->WideWindowWallClass.Get();
+			return bOpening ? nullptr : WallPiece;
+		}
+
+		return nullptr;
+	};
+
 	// 3. Place them: one of the free spots the rule allows, drawn from the seed; none free = skipped.
 	for (const FChosenProp& Item : Chosen)
 	{
+		const bool bOnWall = Item.Row->Placement == EFurniturePlacement::OnWall;
+
 		TArray<FSpot> Spots;
 		CollectSpots(Item, Floor, Spots);
+
+		if (bOnWall)
+		{
+			Spots.RemoveAll([&FindMountWall](const FSpot& Candidate) { return FindMountWall(Candidate) == nullptr; });
+		}
 
 		if (Spots.IsEmpty())
 		{
@@ -2530,9 +2574,12 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 
 		const FSpot& Spot = Spots[Stream.RandRange(0, Spots.Num() - 1)];
 
-		// Where the actor goes so the rotated bounds land exactly on the spot: the pivot does not matter, the bottom of the bounds rests on the floor plus 1 cm.
+		// A prop on a wall hangs MountHeight above the floor; any other rests on it, plus 1 cm.
+		const float BottomZ = bOnWall ? FloorZ + Item.Row->MountHeight : FloorZ + 1.f;
+
+		// Where the actor goes so the rotated bounds land exactly on the spot: the pivot does not matter, the bottom of the bounds sits at BottomZ.
 		const FBox Rotated = Item.Local.TransformBy(FTransform(FRotator(0.f, Spot.Yaw, 0.f)));
-		const FVector Location(Spot.Box.Min.X - Rotated.Min.X, Spot.Box.Min.Y - Rotated.Min.Y, FloorZ + 1.f - Rotated.Min.Z);
+		const FVector Location(Spot.Box.Min.X - Rotated.Min.X, Spot.Box.Min.Y - Rotated.Min.Y, BottomZ - Rotated.Min.Z);
 		const FTransform SpawnTransform(FRotator(0.f, Spot.Yaw, 0.f), Location, Item.Scale);
 
 		APhysicsProp* Prop = World->SpawnActorDeferred<APhysicsProp>(Item.Row->PropClass, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
@@ -2550,6 +2597,12 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 		Prop->FinishSpawning(SpawnTransform);
 		Prop->GetMeshComponent()->SetMassOverrideInKg(NAME_None, Item.Row->Mass, true);
 
+		// After the mass: the body keeps it for the day it is released. Mounted on the same segment the spot was kept for.
+		if (bOnWall)
+		{
+			Prop->MountOn(FindMountWall(Spot));
+		}
+
 		Props.Add(Prop);
 		PropLevels.Add(Prop, Room.Level);
 		Floor.Taken.Add(FBox2D(Spot.Box.Min - FVector2D(PropGap, PropGap), Spot.Box.Max + FVector2D(PropGap, PropGap)));
@@ -2560,12 +2613,12 @@ void AHouseGenerator::FurnishRoom(const FRoom& Room, const TArray<const FFurnish
 
 		if (bShowDebug && PBDebug::IsEnabled())
 		{
-			// The box is the footprint; the green arrow is where the front is meant to point, so a mesh that faces another way shows at once (fix: FrontYawOffset in the row).
+			// The box is the footprint (cyan for a prop hung on a wall, white otherwise); the green arrow is where the front is meant to point, so a mesh that faces another way shows at once (fix: FrontYawOffset in the row).
 			const float Height = Rotated.GetSize().Z;
-			const FVector Centre(Spot.Box.GetCenter(), FloorZ + Height * 0.5f);
+			const FVector Centre(Spot.Box.GetCenter(), (bOnWall ? BottomZ : FloorZ) + Height * 0.5f);
 			const FVector Front = FRotator(0.f, Spot.FacingYaw, 0.f).Vector();
 
-			DrawDebugBox(World, Centre, FVector(Spot.Box.GetExtent(), Height * 0.5f), FColor::White, false, UnstableMarkerSeconds, 0, 1.f);
+			DrawDebugBox(World, Centre, FVector(Spot.Box.GetExtent(), Height * 0.5f), bOnWall ? FColor::Cyan : FColor::White, false, UnstableMarkerSeconds, 0, 1.f);
 			DrawDebugDirectionalArrow(World, Centre, Centre + Front * 60.f, 20.f, FColor::Green, false, UnstableMarkerSeconds, 0, 2.f);
 		}
 	}

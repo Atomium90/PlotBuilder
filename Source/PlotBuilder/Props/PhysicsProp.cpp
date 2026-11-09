@@ -1,5 +1,6 @@
 #include "PhysicsProp.h"
 #include "Components/StaticMeshComponent.h"
+#include "Buildables/BuildablePiece.h"
 #include "Interaction/HotbarComponent.h"
 #include "Destruction/DurabilityComponent.h"
 #include "Destruction/DemolitionRules.h"
@@ -83,6 +84,64 @@ void APhysicsProp::HandleImpact(UPrimitiveComponent* HitComponent, AActor* Other
 void APhysicsProp::ApplyDamage_Implementation(const FDamageInfo& DamageInfo)
 {
 	DurabilityComponent->ApplyDamage(DamageInfo);
+}
+
+void APhysicsProp::MountOn(ABuildablePiece* Wall)
+{
+	if (!Wall || bMounted)
+	{
+		return;
+	}
+
+	bMounted = true;
+	MountedOn = Wall;
+
+	// Hangs: the body stays where the generator put it (it keeps its collision and its mass, for when it falls).
+	MeshComponent->SetSimulatePhysics(false);
+
+	if (UDurabilityComponent* WallDurability = Wall->GetDurabilityComponent())
+	{
+		WallDurability->OnDurabilityDamaged.AddDynamic(this, &APhysicsProp::HandleMountDamaged);
+	}
+
+	Wall->OnDestroyed.AddDynamic(this, &APhysicsProp::HandleMountDestroyed);
+	Wall->OnCollapseStarted.AddUObject(this, &APhysicsProp::Release);
+}
+
+void APhysicsProp::Release()
+{
+	if (!bMounted)
+	{
+		return;
+	}
+
+	bMounted = false;
+
+	if (ABuildablePiece* Wall = MountedOn.Get())
+	{
+		if (UDurabilityComponent* WallDurability = Wall->GetDurabilityComponent())
+		{
+			WallDurability->OnDurabilityDamaged.RemoveDynamic(this, &APhysicsProp::HandleMountDamaged);
+		}
+
+		Wall->OnDestroyed.RemoveDynamic(this, &APhysicsProp::HandleMountDestroyed);
+		Wall->OnCollapseStarted.RemoveAll(this);
+	}
+
+	MountedOn.Reset();
+
+	MeshComponent->SetSimulatePhysics(true);
+	MeshComponent->WakeAllRigidBodies();
+}
+
+void APhysicsProp::HandleMountDamaged(const FDamageInfo& DamageInfo)
+{
+	Release();
+}
+
+void APhysicsProp::HandleMountDestroyed(AActor* DestroyedActor)
+{
+	Release();
 }
 
 void APhysicsProp::HandleBroken()

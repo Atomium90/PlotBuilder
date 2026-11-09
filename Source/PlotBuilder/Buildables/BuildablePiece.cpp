@@ -179,6 +179,9 @@ void ABuildablePiece::BeginCollapse()
 
 	State = EBuildablePieceState::Collapsing;
 
+	// Whatever hangs on this piece lets go now, not when the piece finally breaks a few seconds later.
+	OnCollapseStarted.Broadcast();
+
 	// Computed before UnregisterPiece below removes this piece's own sockets from the table - its
 	// neighbours' registration is what matters here, and unregistering this piece never touches them.
 	CollapseBiasDirection = StructuralComponent ? StructuralComponent->ComputeAwayFromNeighbourCentroid(this) : FVector::ZeroVector;
