@@ -1,11 +1,16 @@
 #include "Environment/ProtectedZone.h"
+#include "Buildables/BuildablePiece.h"
 #include "Components/BoxComponent.h"
+#include "Contracts/MissionBinding.h"
 #include "Debug/DebugDisplay.h"
 #include "Destruction/Damageable.h"
 #include "Destruction/DurabilityComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "Environment/Plot.h"
 #include "Kismet/GameplayStatics.h"
+#include "PlotBuilder.h"
 
 AProtectedZone::AProtectedZone()
 {
@@ -23,7 +28,9 @@ void AProtectedZone::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (APlot* Plot = Cast<APlot>(UGameplayStatics::GetActorOfClass(this, APlot::StaticClass())))
+	CachedPlot = Cast<APlot>(UGameplayStatics::GetActorOfClass(this, APlot::StaticClass()));
+
+	if (APlot* Plot = CachedPlot.Get())
 	{
 		Plot->RegisterProtectedZone(this);
 	}
@@ -39,6 +46,9 @@ void AProtectedZone::BeginPlay()
 		Track(Actor);
 	}
 
+	// The overlaps above depend on when the physics scene computed them; the scan below does not, it reads the bounds of what stands in the volume.
+	ScanVolume();
+
 	SetActorTickEnabled(bShowDebug);
 }
 
@@ -47,34 +57,95 @@ void AProtectedZone::OnVolumeBeginOverlap(UPrimitiveComponent* OverlappedCompone
 	Track(OtherActor);
 }
 
-void AProtectedZone::Track(AActor* Actor)
+void AProtectedZone::ScanVolume()
 {
-	if (!Actor || !Actor->Implements<UDamageable>())
+	const UWorld* World = GetWorld();
+
+	if (!World || !Volume)
 	{
 		return;
+	}
+
+	const FBox ZoneBox = Volume->Bounds.GetBox();
+	int32 InVolume = 0;
+	FString Lines;
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+
+		// The house is not what this zone protects, and nothing else is interesting to list but the other actors that share the volume.
+		if (Actor == this || Actor->IsA<ABuildablePiece>() || Actor->IsA<APlot>())
+		{
+			continue;
+		}
+
+		const FBox Box = Actor->GetComponentsBoundingBox(true);
+
+		if (!Box.IsValid || !ZoneBox.Intersect(Box))
+		{
+			continue;
+		}
+
+		++InVolume;
+
+		FString Why;
+		const bool bWatched = Track(Actor, &Why);
+
+		if (InVolume <= 12)
+		{
+			Lines += FString::Printf(TEXT("\n  %s: %s"), *Actor->GetName(), bWatched ? TEXT("now watched") : *Why);
+		}
+	}
+
+	UE_LOG(LogPlotBuilder, Log, TEXT("AProtectedZone '%s': scanned its volume (centre %s, half size %s): %d actor(s) share it, %d thing(s) watched in all.%s"),
+		*GetName(), *Volume->GetComponentLocation().ToCompactString(), *Volume->GetScaledBoxExtent().ToCompactString(), InVolume, Records.Num(), *Lines);
+}
+
+bool AProtectedZone::Track(AActor* Actor, FString* OutWhyNot)
+{
+	const auto Refuse = [OutWhyNot](const TCHAR* Why)
+	{
+		if (OutWhyNot)
+		{
+			*OutWhyNot = Why;
+		}
+
+		return false;
+	};
+
+	if (!Actor || !Actor->Implements<UDamageable>())
+	{
+		return Refuse(TEXT("not watched, it cannot be damaged (no IDamageable)"));
 	}
 
 	UDurabilityComponent* Durability = Actor->FindComponentByClass<UDurabilityComponent>();
 
 	if (!Durability)
 	{
-		return;
+		return Refuse(TEXT("not watched, it has no durability component"));
 	}
 
-	for (const FProtectedRecord& Record : Records)
+	for (const FProtectedRecord& Existing : Records)
 	{
-		if (Record.Actor == Actor)
+		if (Existing.Actor == Actor)
 		{
-			return;
+			return Refuse(TEXT("already watched"));
 		}
 	}
 
 	// The house being demolished may overlap the volume (a piece falling in, a plot next to it): it is the job, not collateral.
-	if (const APlot* Plot = Cast<APlot>(UGameplayStatics::GetActorOfClass(this, APlot::StaticClass())))
+	// Any piece counts as the house, in a set or not: the leaf of a door or the glass of a window is a piece of its own that no set holds.
+	if (Actor->IsA<ABuildablePiece>())
+	{
+		return Refuse(TEXT("not watched, it is a piece of the house"));
+	}
+
+	if (const APlot* Plot = CachedPlot.Get())
 	{
 		if (Plot->GetMissionSets().IsTarget(Actor) || Plot->GetMissionSets().IsMustStay(Actor) || Plot->GetMissionSets().IsSalvage(Actor))
 		{
-			return;
+			return Refuse(TEXT("not watched, it is an item of the mission's house"));
 		}
 	}
 
@@ -84,8 +155,13 @@ void AProtectedZone::Track(AActor* Actor)
 	Record.StartHP = Durability->CurrentHP;
 	Record.HPLost = 0.f;
 	Record.bDestroyed = Durability->GetState() == EDurabilityState::Destroyed;
+	Record.bStartPending = Durability->MaxHP <= 0.f;
 
 	Durability->OnDurabilityDamaged.AddDynamic(this, &AProtectedZone::HandleDamaged);
+
+	UE_LOG(LogPlotBuilder, Log, TEXT("AProtectedZone '%s': now watching '%s' (%s)"), *GetName(), *Record.Name,
+		Record.bStartPending ? TEXT("hit points not set yet, taken at the next look") : *FString::Printf(TEXT("%.0f HP"), Record.StartHP));
+	return true;
 }
 
 void AProtectedZone::HandleDamaged(const FDamageInfo& DamageInfo)
@@ -103,6 +179,14 @@ void AProtectedZone::SyncRecords() const
 
 		if (Durability)
 		{
+			// It set its hit points since the zone started watching it: it starts from full health, whatever it lost in between
+			// (nothing can have been dealt to it before its own BeginPlay).
+			if (Record.bStartPending && Durability->MaxHP > 0.f)
+			{
+				Record.StartHP = Durability->MaxHP;
+				Record.bStartPending = false;
+			}
+
 			Record.HPLost = FMath::Clamp(Record.StartHP - Durability->CurrentHP, 0.f, Record.StartHP);
 			Record.bDestroyed = Durability->GetState() == EDurabilityState::Destroyed;
 		}
@@ -159,13 +243,63 @@ void AProtectedZone::RecordExternalDamage(FName Source, float Amount)
 	}
 
 	ExternalDamage += Amount;
-	DamageByTool.FindOrAdd(Source) += Amount;
+	ExternalBySource.FindOrAdd(Source) += Amount;
+}
+
+void AProtectedZone::NotifyPieceLanded(AActor* Piece, int32 Weight)
+{
+	if (!IsValid(Piece) || Weight <= 0 || CountedPieces.Contains(Piece))
+	{
+		return;
+	}
+
+	const FBox PieceBox = Piece->GetComponentsBoundingBox(true);
+
+	if (!PieceBox.IsValid)
+	{
+		return;
+	}
+
+	const FBox ZoneBox = Volume->Bounds.GetBox();
+	const bool bInside = bCountTouching ? ZoneBox.Intersect(PieceBox) : ZoneBox.IsInside(PieceBox.GetCenter());
+
+	if (!bInside)
+	{
+		// Verbose, like the line in APlot::NotifyPieceLanded: most pieces of a collapse land outside the zone.
+		UE_LOG(LogPlotBuilder, Verbose, TEXT("AProtectedZone '%s': %s broke outside (its box centre %s, the zone's box %s to %s)"),
+			*GetName(), *Piece->GetName(), *PieceBox.GetCenter().ToCompactString(), *ZoneBox.Min.ToCompactString(), *ZoneBox.Max.ToCompactString());
+		return;
+	}
+
+	CountedPieces.Add(Piece);
+
+	FFallenRecord& Record = Fallen.AddDefaulted_GetRef();
+	Record.Name = MissionBinding::ItemName(Piece);
+	Record.Weight = Weight;
+
+	RecordExternalDamage(FName(*Record.Name), static_cast<float>(Weight));
+
+	UE_LOG(LogPlotBuilder, Log, TEXT("AProtectedZone '%s': a %s of the house fell in (weight %d), %.0f fallen in so far"), *GetName(), *Record.Name, Weight, ExternalDamage);
+
+	if (PBDebug::IsEnabled())
+	{
+		// A box where it landed, for a few seconds: the piece and its fragments are gone by then, this is what shows what counted.
+		DrawDebugBox(GetWorld(), PieceBox.GetCenter(), PieceBox.GetExtent(), FColor::Orange, false, 8.f, 0, 3.f);
+
+		if (GEngine)
+		{
+			PBDebug::Message(-1, 4.f, FColor::Orange, FString::Printf(TEXT("Protected zone '%s': a %s fell in (weight %d)"), *GetName(), *Record.Name, Weight));
+		}
+	}
 }
 
 void AProtectedZone::ResetRecords()
 {
 	DamageByTool.Reset();
 	ExternalDamage = 0.f;
+	ExternalBySource.Reset();
+	Fallen.Reset();
+	CountedPieces.Reset();
 
 	// From what each thing has left now, so only new damage counts. A thing already gone has nothing left to lose: dropped.
 	for (int32 Index = Records.Num() - 1; Index >= 0; --Index)
@@ -183,6 +317,7 @@ void AProtectedZone::ResetRecords()
 		Record.StartHP = Durability->CurrentHP;
 		Record.HPLost = 0.f;
 		Record.bDestroyed = Durability->GetState() == EDurabilityState::Destroyed;
+		Record.bStartPending = Durability->MaxHP <= 0.f;
 	}
 }
 
@@ -200,9 +335,15 @@ FString AProtectedZone::Describe() const
 		Text += FString::Printf(TEXT("\n  from %s: %.0f"), *Pair.Key.ToString(), Pair.Value);
 	}
 
+	// What fell in from the house, piece by piece, then any other source of external damage that is not a piece.
+	for (const FFallenRecord& Record : Fallen)
+	{
+		Text += FString::Printf(TEXT("\n  fell in: %s (weight %d)"), *Record.Name, Record.Weight);
+	}
+
 	if (ExternalDamage > 0.f)
 	{
-		Text += FString::Printf(TEXT("\n  external: %.0f"), ExternalDamage);
+		Text += FString::Printf(TEXT("\n  weight fallen in or reported from outside: %.0f"), ExternalDamage);
 	}
 
 	return Text;
@@ -214,7 +355,7 @@ void AProtectedZone::Tick(float DeltaTime)
 
 	if (bShowDebug && PBDebug::IsEnabled())
 	{
-		const FColor Color = GetTotalHPLost() > 0.f ? FColor::Red : FColor::Yellow;
+		const FColor Color = (GetTotalHPLost() > 0.f || ExternalDamage > 0.f) ? FColor::Red : FColor::Yellow;
 		DrawDebugBox(GetWorld(), Volume->GetComponentLocation(), Volume->GetScaledBoxExtent(), Volume->GetComponentQuat(), Color, false, -1.f, 0, 3.f);
 	}
 }

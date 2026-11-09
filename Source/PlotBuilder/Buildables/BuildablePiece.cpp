@@ -5,6 +5,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Interaction/HotbarComponent.h"
 #include "UI/PlayerMessages.h"
+#include "Environment/Plot.h"
 #include "Environment/StructuralSupportComponent.h"
 #include "Destruction/DurabilityComponent.h"
 #include "Destruction/DemolitionRules.h"
@@ -215,6 +216,7 @@ void ABuildablePiece::HandleCollapseHit(UPrimitiveComponent* HitComponent, AActo
 
 	bHasFractured = true;
 	GetWorldTimerManager().ClearTimer(CollapseTimeoutHandle);
+	ReportLanded();
 	Fracture(GetActorLocation(), CollapseBiasDirection);
 	Destroy();
 }
@@ -227,8 +229,18 @@ void ABuildablePiece::HandleCollapseTimeout()
 	}
 
 	bHasFractured = true;
+	ReportLanded();
 	Fracture(GetActorLocation(), CollapseBiasDirection);
 	Destroy();
+}
+
+void ABuildablePiece::ReportLanded()
+{
+	// The plot owns the structural component the piece was registered in (it stays set after the piece leaves the graph).
+	if (APlot* Plot = StructuralComponent ? Cast<APlot>(StructuralComponent->GetOwner()) : nullptr)
+	{
+		Plot->NotifyPieceLanded(this);
+	}
 }
 
 void ABuildablePiece::Fracture(const FVector& ScatterOrigin, const FVector& ScatterBias) const

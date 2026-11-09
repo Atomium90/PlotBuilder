@@ -57,6 +57,28 @@ void APlot::RegisterProtectedZone(AProtectedZone* Zone)
 	}
 }
 
+void APlot::NotifyPieceLanded(AActor* Piece)
+{
+	const int32 Weight = MissionSets.WeightOf(Piece);
+
+	// One line per piece that lands: Verbose, a big collapse breaks hundreds. "Log LogPlotBuilder Verbose" shows them.
+	UE_LOG(LogPlotBuilder, Verbose, TEXT("APlot '%s': %s landed, weight %d in the mission sets (%d items), %d protected zone(s) registered"),
+		*GetName(), Piece ? *Piece->GetName() : TEXT("(null)"), Weight, MissionSets.WeightByActor.Num(), ProtectedZones.Num());
+
+	if (Weight <= 0)
+	{
+		return;
+	}
+
+	for (const TObjectPtr<AProtectedZone>& Zone : ProtectedZones)
+	{
+		if (Zone)
+		{
+			Zone->NotifyPieceLanded(Piece, Weight);
+		}
+	}
+}
+
 void APlot::RegisterClientDropZone(ADropZone* Zone)
 {
 	if (Zone && ClientDropZone && ClientDropZone != Zone)

@@ -17,6 +17,7 @@
 #include "Contracts/MissionResultSubsystem.h"
 #include "Destruction/DurabilityComponent.h"
 #include "Environment/MissionGround.h"
+#include "Environment/ProtectedZone.h"
 #include "Interaction/ShopItemRow.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/PlayerCharacter.h"
@@ -483,6 +484,15 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 Salvage
 	}
 
 	Plot->SetMissionSets(MoveTemp(Sets));
+
+	// The house is built and bound now: the zones look again at what shares their volume, this time knowing which things are the house.
+	for (const TObjectPtr<AProtectedZone>& Zone : Plot->GetProtectedZones())
+	{
+		if (Zone)
+		{
+			Zone->ScanVolume();
+		}
+	}
 }
 
 FContractDefinition AMissionDirector::GetMissionContract()

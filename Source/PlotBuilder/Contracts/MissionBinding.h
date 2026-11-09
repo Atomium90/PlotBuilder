@@ -75,6 +75,16 @@ struct FMissionSets
 	/** Whether Actor is furniture the client asked to get back. */
 	bool IsSalvage(AActor* Actor) const { return SalvageActors.Contains(Actor); }
 
+	/** What Actor weighs in the report (its DT_Shop cost, see FBindingItem::Weight), whichever set it is in. 0 for anything that is not an item of the house. */
+	int32 WeightOf(AActor* Actor) const
+	{
+		const int32* Weight = WeightByActor.Find(Actor);
+		return Weight ? *Weight : 0;
+	}
+
+	/** Filled by MissionBinding::Compute, so a weight is found without scanning the three arrays (a falling piece asks for its own when it breaks). */
+	TMap<TWeakObjectPtr<AActor>, int32> WeightByActor;
+
 	/** Filled by MissionBinding::Compute, so the three queries above do not scan the arrays. */
 	TSet<TWeakObjectPtr<AActor>> TargetActors;
 	TSet<TWeakObjectPtr<AActor>> MustStayActors;

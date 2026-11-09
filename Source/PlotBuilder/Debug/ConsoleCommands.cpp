@@ -539,7 +539,7 @@ namespace
 
 		for (TActorIterator<AProtectedZone> It(World); It; ++It)
 		{
-			PBDebug::Message(Key++, 0.2f, It->GetTotalHPLost() > 0.f ? FColor::Red : FColor::Yellow, It->Describe());
+			PBDebug::Message(Key++, 0.2f, (It->GetTotalHPLost() > 0.f || It->GetExternalDamage() > 0.f) ? FColor::Red : FColor::Yellow, It->Describe());
 		}
 
 		return true;
@@ -559,6 +559,64 @@ static FAutoConsoleCommandWithWorldAndArgs PbShowZonesCommand(
 		{
 			ZonesReadoutHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&TickZonesReadout));
 		}
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbTestZoneFallCommand(
+	TEXT("pb.TestZoneFall"),
+	TEXT("pb.TestZoneFall [n] - moves the nth partition of the level's house (default the 1st; a partition holds nothing up, so the house stays standing) above the centre of the first protected zone and releases it: it falls, breaks, and the zone counts its weight once, boxed in orange. Run it again with n = 2 to move a different one. Read the result in pb.ShowZones or the log. Needs a house with a bound mission (the weights come from the mission director) and a protected zone in the level."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		AHouseGenerator* Generator = nullptr;
+		AProtectedZone* Zone = nullptr;
+
+		if (World)
+		{
+			for (TActorIterator<AHouseGenerator> It(World); It; ++It)
+			{
+				Generator = *It;
+				break;
+			}
+
+			for (TActorIterator<AProtectedZone> It(World); It; ++It)
+			{
+				Zone = *It;
+				break;
+			}
+		}
+
+		if (!Generator || !Zone)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.TestZoneFall: needs an AHouseGenerator with a house and an AProtectedZone in the level"));
+			return;
+		}
+
+		const int32 Wanted = Args.IsEmpty() ? 1 : FMath::Max(1, FCString::Atoi(*Args[0]));
+		int32 Seen = 0;
+
+		for (const TWeakObjectPtr<ABuildablePiece>& WeakPiece : Generator->GetPieces())
+		{
+			ABuildablePiece* Piece = WeakPiece.Get();
+
+			if (!IsValid(Piece) || Piece->State != EBuildablePieceState::Placed || Piece->IsLoadBearing())
+			{
+				continue;
+			}
+
+			if (++Seen < Wanted)
+			{
+				continue;
+			}
+
+			// Teleport the physics body too: moved without it, a body that is about to start simulating keeps its old place and the piece snaps back.
+			const FVector From = Piece->GetActorLocation();
+			const bool bMoved = Piece->SetActorLocation(Zone->GetActorLocation() + FVector(0.f, 0.f, 150.f), false, nullptr, ETeleportType::TeleportPhysics);
+			Piece->BeginCollapse();
+			UE_LOG(LogPlotBuilder, Log, TEXT("pb.TestZoneFall: released %s above '%s' (moved %s, from %s to %s); when it breaks the zone counts it (pb.ShowZones, or the log)"),
+				*Piece->GetName(), *Zone->GetName(), bMoved ? TEXT("yes") : TEXT("NO"), *From.ToCompactString(), *Piece->GetActorLocation().ToCompactString());
+			return;
+		}
+
+		UE_LOG(LogPlotBuilder, Warning, TEXT("pb.TestZoneFall: the house has no partition number %d standing"), Wanted);
 	}));
 
 static FAutoConsoleCommandWithWorldAndArgs PbCollapseAllCommand(

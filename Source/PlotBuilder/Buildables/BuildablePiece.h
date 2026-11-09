@@ -243,6 +243,13 @@ private:
 	/** CollapseLifeSpan timer handler: a Falling piece that never took a significant hit still fractures on timeout, instead of silently vanishing - see BeginCollapse. */
 	void HandleCollapseTimeout();
 
+	/**
+	 *  Tells the plot this piece has just landed (broken after its fall), so a protected zone it landed in can count it. Called
+	 *  right before Fracture, while the piece still has its place: the fragments vanish a few seconds later, the piece is the one thing
+	 *  that carries its identity and weight. The piece does not know the zones, only the plot it was registered in.
+	 */
+	void ReportLanded();
+
 	/** CompromisedJiggleHandle tick: a small, cheap sine offset on MeshComponent's relative location around CompromisedBaseRelativeLocation, read-only visual noise - no physics, stopped by OnCompromisedCancelled/BeginCollapse. */
 	void HandleCompromisedJiggle();
 

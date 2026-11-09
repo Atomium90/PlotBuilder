@@ -41,6 +41,8 @@ FMissionSets MissionBinding::Compute(EContractType Type, int32 PartialFromLevel,
 			continue;
 		}
 
+		Sets.WeightByActor.Add(Actor, Item.Weight);
+
 		// The furniture the client wants back is neither destroyed nor left alone: it has its own set.
 		if (Item.bSalvage)
 		{

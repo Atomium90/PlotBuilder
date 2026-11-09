@@ -88,6 +88,14 @@ public:
 	ADropZone* GetClientDropZone() const { return ClientDropZone; }
 
 	/**
+	 *  A piece of the house that was falling has just broken (it hit something, or its fall ran out): where it lies is where it
+	 *  does its damage. The plot looks up what the piece weighs in the mission sets and tells every protected zone, which
+	 *  counts it if it is in its volume. Does nothing for something that is not an item of the house (the leaf of a door), and
+	 *  outside a mission, where the sets are empty. Called by ABuildablePiece, which does not know the zones.
+	 */
+	void NotifyPieceLanded(AActor* Piece);
+
+	/**
 	 *  Height of the plot's volume above the ground (the pivot), in cm: the house, its roof and everything built on it must fit
 	 *  under it. Nothing is built below the pivot. The BoundsVolume box only gives the footprint (X and Y); its Z is reset on
 	 *  every construction, the VolumeGuide box shows the whole volume.
