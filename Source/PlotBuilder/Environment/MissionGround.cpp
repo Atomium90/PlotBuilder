@@ -293,7 +293,11 @@ void AMissionGround::GatherRegions()
 
 	for (TActorIterator<AProtectedZone> It(World); It; ++It)
 	{
-		Regions.Add(RegionFromActor(*It, ZonePadding));
+		// A zone the mission does not use asks for nothing: the ground there stays as wild as the rest.
+		if (It->IsActive())
+		{
+			Regions.Add(RegionFromActor(*It, ZonePadding));
+		}
 	}
 
 	for (TActorIterator<APlayerStart> It(World); It; ++It)

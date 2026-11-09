@@ -8,6 +8,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
+#include "GameFramework/Pawn.h"
 #include "Environment/Plot.h"
 #include "Kismet/GameplayStatics.h"
 #include "PlotBuilder.h"
@@ -30,12 +31,20 @@ void AProtectedZone::BeginPlay()
 
 	CachedPlot = Cast<APlot>(UGameplayStatics::GetActorOfClass(this, APlot::StaticClass()));
 
+	// Bound whether the zone is on or not: it may be switched on later, and an off zone has no overlap events anyway.
+	Volume->OnComponentBeginOverlap.AddDynamic(this, &AProtectedZone::OnVolumeBeginOverlap);
+
+	// The mission director may have switched this zone off before it started (it runs first): it stays off, out of the plot's list.
+	if (!bActive)
+	{
+		SetActorTickEnabled(false);
+		return;
+	}
+
 	if (APlot* Plot = CachedPlot.Get())
 	{
 		Plot->RegisterProtectedZone(this);
 	}
-
-	Volume->OnComponentBeginOverlap.AddDynamic(this, &AProtectedZone::OnVolumeBeginOverlap);
 
 	// What already stands inside when the level starts: its overlaps began before this delegate was bound.
 	TArray<AActor*> Inside;
@@ -54,7 +63,137 @@ void AProtectedZone::BeginPlay()
 
 void AProtectedZone::OnVolumeBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	Track(OtherActor);
+	if (bActive)
+	{
+		Track(OtherActor);
+	}
+}
+
+void AProtectedZone::SetActive(bool bNewActive)
+{
+	if (bActive == bNewActive)
+	{
+		return;
+	}
+
+	bActive = bNewActive;
+
+	// The profile's own collision is query only (OverlapAllDynamic): back to that when on.
+	Volume->SetCollisionEnabled(bActive ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+	Volume->SetGenerateOverlapEvents(bActive);
+
+	APlot* Plot = CachedPlot.Get();
+
+	if (bActive)
+	{
+		ShowContent();
+		SetActorTickEnabled(bShowDebug);
+
+		// Before BeginPlay it is BeginPlay that registers and scans.
+		if (HasActorBegunPlay())
+		{
+			if (Plot)
+			{
+				Plot->RegisterProtectedZone(this);
+			}
+
+			ScanVolume();
+		}
+	}
+	else
+	{
+		SetActorTickEnabled(false);
+
+		if (Plot)
+		{
+			Plot->UnregisterProtectedZone(this);
+		}
+
+		ClearWatching();
+		HideContent();
+	}
+}
+
+void AProtectedZone::ClearWatching()
+{
+	for (FProtectedRecord& Record : Records)
+	{
+		const AActor* Actor = Record.Actor.Get();
+
+		if (UDurabilityComponent* Durability = IsValid(Actor) ? Actor->FindComponentByClass<UDurabilityComponent>() : nullptr)
+		{
+			Durability->OnDurabilityDamaged.RemoveDynamic(this, &AProtectedZone::HandleDamaged);
+		}
+	}
+
+	Records.Reset();
+	DamageByTool.Reset();
+	ExternalDamage = 0.f;
+	ExternalBySource.Reset();
+	Fallen.Reset();
+	CountedPieces.Reset();
+}
+
+void AProtectedZone::CollectProtectedThings(TArray<AActor*>& OutThings) const
+{
+	const UWorld* World = GetWorld();
+
+	if (!World || !Volume)
+	{
+		return;
+	}
+
+	const FBox ZoneBox = Volume->Bounds.GetBox();
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+
+		// The house, the plot and the player are not the zone's to hide; only what could be damaged stands for a protected thing.
+		if (Actor == this || Actor->IsA<ABuildablePiece>() || Actor->IsA<APlot>() || Actor->IsA<APawn>() || !Actor->Implements<UDamageable>())
+		{
+			continue;
+		}
+
+		const FBox Box = Actor->GetComponentsBoundingBox(true);
+
+		if (Box.IsValid && ZoneBox.Intersect(Box))
+		{
+			OutThings.Add(Actor);
+		}
+	}
+}
+
+void AProtectedZone::HideContent()
+{
+	if (!bHideContentWhenInactive)
+	{
+		return;
+	}
+
+	TArray<AActor*> Things;
+	CollectProtectedThings(Things);
+
+	for (AActor* Thing : Things)
+	{
+		Thing->SetActorHiddenInGame(true);
+		Thing->SetActorEnableCollision(false);
+		HiddenContent.AddUnique(Thing);
+	}
+}
+
+void AProtectedZone::ShowContent()
+{
+	for (const TWeakObjectPtr<AActor>& Hidden : HiddenContent)
+	{
+		if (AActor* Thing = Hidden.Get())
+		{
+			Thing->SetActorHiddenInGame(false);
+			Thing->SetActorEnableCollision(true);
+		}
+	}
+
+	HiddenContent.Reset();
 }
 
 void AProtectedZone::ScanVolume()
@@ -139,6 +278,11 @@ bool AProtectedZone::Track(AActor* Actor, FString* OutWhyNot)
 	if (Actor->IsA<ABuildablePiece>())
 	{
 		return Refuse(TEXT("not watched, it is a piece of the house"));
+	}
+
+	if (Actor->IsA<APawn>())
+	{
+		return Refuse(TEXT("not watched, it is a pawn (the player walking through is not a protected thing)"));
 	}
 
 	if (const APlot* Plot = CachedPlot.Get())
@@ -323,6 +467,11 @@ void AProtectedZone::ResetRecords()
 
 FString AProtectedZone::Describe() const
 {
+	if (!bActive)
+	{
+		return FString::Printf(TEXT("Protected zone '%s': off for this mission"), *GetName());
+	}
+
 	FString Text = FString::Printf(TEXT("Protected zone '%s': %.0f of %.0f HP lost (%.0f%%)"), *GetName(), GetTotalHPLost(), GetTotalStartHP(), GetDamageRatio() * 100.f);
 
 	for (const FProtectedRecord& Record : GetRecords())

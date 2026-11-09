@@ -92,6 +92,24 @@ public:
 	/** One line per tracked thing and the totals, for the log. */
 	FString Describe() const;
 
+	/**
+	 *  Whether this zone is part of the mission. A level holds more zones than a mission uses: the mission director switches
+	 *  off the ones it does not use, and the contract's ProtectedZone count says how many stay on.
+	 */
+	bool IsActive() const { return bActive; }
+
+	/**
+	 *  Turns the zone on or off. Off: it leaves the plot's list (the report ignores it, the ground no longer keeps room
+	 *  for it), stops watching and counting, and with bHideContentWhenInactive hides the protected things it holds and takes
+	 *  their collision away: nothing is protected there, and a shed that nothing protects must not look like it. On again: all of
+	 *  that comes back. Works before the zone has started, since the director runs first.
+	 */
+	void SetActive(bool bNewActive);
+
+	/** Hide the protected things of the zone (the neighbour's shed) while it is off. Off this, they stay as scenery, unprotected. */
+	UPROPERTY(EditAnywhere, Category = "Protected Zone")
+	bool bHideContentWhenInactive = true;
+
 	/** Draws the volume as a debug box every tick: yellow while untouched, red once something inside lost hit points or a piece of the house fell in. */
 	UPROPERTY(EditAnywhere, Category = "Protected Zone|Debug")
 	bool bShowDebug = true;
@@ -126,6 +144,15 @@ private:
 	/** Re-reads every tracked thing's hit points. A thing that is gone keeps what it lost and counts as destroyed. */
 	void SyncRecords() const;
 
+	/** Stops watching everything and forgets what was counted: the zone is off. */
+	void ClearWatching();
+
+	/** The damageable things standing in the volume that the zone protects (not the house, not a pawn). */
+	void CollectProtectedThings(TArray<AActor*>& OutThings) const;
+
+	void HideContent();
+	void ShowContent();
+
 	UPROPERTY(VisibleAnywhere, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UBoxComponent> Volume;
 
@@ -153,4 +180,10 @@ private:
 
 	/** The level's plot, found once at BeginPlay (Track runs for every overlap, and a scan of the world each time was wasteful). */
 	TWeakObjectPtr<APlot> CachedPlot;
+
+	/** See IsActive. On by default; the director may turn it off before the zone has started. */
+	bool bActive = true;
+
+	/** What SetActive(false) hid, so that SetActive(true) shows exactly that again. */
+	TArray<TWeakObjectPtr<AActor>> HiddenContent;
 };

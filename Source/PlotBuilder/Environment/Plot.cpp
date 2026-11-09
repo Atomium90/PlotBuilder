@@ -57,6 +57,11 @@ void APlot::RegisterProtectedZone(AProtectedZone* Zone)
 	}
 }
 
+void APlot::UnregisterProtectedZone(AProtectedZone* Zone)
+{
+	ProtectedZones.Remove(Zone);
+}
+
 void APlot::NotifyPieceLanded(AActor* Piece)
 {
 	const int32 Weight = MissionSets.WeightOf(Piece);

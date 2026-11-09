@@ -8,6 +8,7 @@
 class AHouseGenerator;
 class AMissionGround;
 class APlot;
+class AProtectedZone;
 class UContractPool;
 class UDataTable;
 
@@ -49,6 +50,14 @@ public:
 	/** The pool the contract board draws from. Handed to the contract subsystem when the level starts, so a mission level played on its own can still draw offers (pb.RefreshOffers). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission")
 	TObjectPtr<UContractPool> ContractPool;
+
+	/**
+	 *  The protected zones a mission may use (the default positions of the level). Empty means every protected zone of the
+	 *  level. A contract with a ProtectedZone condition keeps that many of them on, drawn from the mission's seed, and
+	 *  switches the others off; a contract without one switches them all off; with no contract they are all on.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission")
+	TArray<TObjectPtr<AProtectedZone>> ZoneCandidates;
 
 	/** Build the house and bind the contract when the level starts. Off for a level that drives it by hand (Blueprint, console). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission")
@@ -120,6 +129,13 @@ private:
 
 	/** Puts the player's building side to sleep. The pawn may not exist yet when the level starts: retried until it does. */
 	void ApplyMissionInput();
+
+	/**
+	 *  Switches the protected zones of the level on or off for this mission (see ZoneCandidates). Done before the ground is
+	 *  built, since the ground keeps room only for the zones that are on, and from the mission's seed in a stable order, so
+	 *  the same seed keeps the same zones.
+	 */
+	void ApplyZoneSelection(const FContractDefinition* Contract, int32 Seed);
 
 	AHouseGenerator* ResolveGenerator();
 	AMissionGround* ResolveGround();

@@ -81,6 +81,9 @@ public:
 	/** Called by an AProtectedZone when it starts: the plot keeps the list for the evaluator. */
 	void RegisterProtectedZone(AProtectedZone* Zone);
 
+	/** Called by an AProtectedZone that is switched off for the mission: it leaves the list, so the report ignores it. */
+	void UnregisterProtectedZone(AProtectedZone* Zone);
+
 	/** Called by the client ADropZone when it starts. A second one replaces the first (one client zone per mission map). */
 	void RegisterClientDropZone(ADropZone* Zone);
 

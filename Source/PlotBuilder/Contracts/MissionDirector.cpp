@@ -153,6 +153,67 @@ void AMissionDirector::ApplyMissionInput()
 	}
 }
 
+void AMissionDirector::ApplyZoneSelection(const FContractDefinition* Contract, int32 Seed)
+{
+	TArray<AProtectedZone*> Candidates;
+
+	if (ZoneCandidates.IsEmpty())
+	{
+		for (TActorIterator<AProtectedZone> It(GetWorld()); It; ++It)
+		{
+			Candidates.Add(*It);
+		}
+	}
+	else
+	{
+		for (const TObjectPtr<AProtectedZone>& Zone : ZoneCandidates)
+		{
+			if (Zone)
+			{
+				Candidates.Add(Zone);
+			}
+		}
+	}
+
+	if (Candidates.IsEmpty())
+	{
+		return;
+	}
+
+	// A stable order (the names do not move between runs), so that a seed always keeps the same zones.
+	Candidates.Sort([](const AProtectedZone& A, const AProtectedZone& B) { return A.GetName() < B.GetName(); });
+
+	// With a contract: as many as its ProtectedZone condition asks, none without one. Without a contract (travel options, editor values) all of them.
+	const int32 Wanted = Contract ? FMath::Clamp(Contract->CountOf(EConditionType::ProtectedZone), 0, Candidates.Num()) : Candidates.Num();
+
+	// A partial shuffle: the first Wanted of the list are the ones that stay on.
+	FRandomStream Stream(static_cast<int32>(HashCombine(static_cast<uint32>(Seed), 0x20E5u)));
+
+	for (int32 Index = 0; Index < Wanted; ++Index)
+	{
+		const int32 Pick = Stream.RandRange(Index, Candidates.Num() - 1);
+
+		if (Pick != Index)
+		{
+			Candidates.Swap(Index, Pick);
+		}
+	}
+
+	FString On;
+
+	for (int32 Index = 0; Index < Candidates.Num(); ++Index)
+	{
+		Candidates[Index]->SetActive(Index < Wanted);
+
+		if (Index < Wanted)
+		{
+			On += (On.IsEmpty() ? TEXT("") : TEXT(", ")) + Candidates[Index]->GetName();
+		}
+	}
+
+	UE_LOG(LogPlotBuilder, Log, TEXT("AMissionDirector: %d of %d protected zone(s) on for this mission%s%s"), Wanted, Candidates.Num(), Wanted > 0 ? TEXT(": ") : TEXT(""), *On);
+}
+
 bool AMissionDirector::StartMission()
 {
 	AHouseGenerator* House = ResolveGenerator();
@@ -231,6 +292,9 @@ bool AMissionDirector::StartMission()
 
 	// The size and the storeys the contract asked for take the place of the archetype's own bounds for this house.
 	const FGenerationOverrides Overrides = Contract ? FGenerationOverrides::Exactly(Contract->FootprintCells, Contract->Floors) : FGenerationOverrides();
+
+	// Which zones are on comes before the ground: it keeps room only for those.
+	ApplyZoneSelection(Contract, Seed);
 
 	// The ground first: the house and its props need something to stand on while they are placed.
 	if (AMissionGround* Terrain = ResolveGround())
