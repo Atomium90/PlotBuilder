@@ -1557,6 +1557,33 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 	FIntPoint MaxCells = FIntPoint::ZeroValue;
 	GetSizeBounds(MinCells, MaxCells);
 
+	// A contract asked for a size: the plans that can come out at it are the ones drawn from. A plan that cannot (a fixed 4 x 5
+	// plan asked for 5 x 5) would be built at its own size, and the contract would promise an area the house does not have.
+	// If no plan can reach it they all stay, and the closest size is built. Without a request nothing changes.
+	const bool bAskedForSize = ActiveOverrides.MinCells.X > 0 || ActiveOverrides.MinCells.Y > 0 || ActiveOverrides.MaxCells.X > 0 || ActiveOverrides.MaxCells.Y > 0;
+
+	if (bAskedForSize && UsableLayouts.Num() > 1)
+	{
+		TArray<TPair<const UHouseLayout*, FParsedLayout>> Reaching;
+
+		for (const TPair<const UHouseLayout*, FParsedLayout>& Usable : UsableLayouts)
+		{
+			FIntPoint PlanMin = FIntPoint::ZeroValue;
+			FIntPoint PlanMax = FIntPoint::ZeroValue;
+			Usable.Key->GetSizeRange(Usable.Value, FIntPoint(FreeX, FreeY), PlanMin, PlanMax);
+
+			if (MaxCells.X >= PlanMin.X && MinCells.X <= PlanMax.X && MaxCells.Y >= PlanMin.Y && MinCells.Y <= PlanMax.Y)
+			{
+				Reaching.Emplace(Usable.Key, Usable.Value);
+			}
+		}
+
+		if (!Reaching.IsEmpty() && Reaching.Num() < UsableLayouts.Num())
+		{
+			UsableLayouts = MoveTemp(Reaching);
+		}
+	}
+
 	if (!UsableLayouts.IsEmpty())
 	{
 		const int32 Pick = Stream.RandRange(0, UsableLayouts.Num() - 1);

@@ -7,6 +7,22 @@
 
 namespace
 {
+	/** The most an axis of Base cells can grow to: Base plus every copy its stretch allows (none unless the stretch has one entry per row), never above Free. */
+	int32 LayoutAxisReach(int32 Base, int32 Free, const TArray<int32>& Stretch)
+	{
+		int32 Extra = 0;
+
+		if (Stretch.Num() == Base)
+		{
+			for (const int32 Copies : Stretch)
+			{
+				Extra += FMath::Max(0, Copies);
+			}
+		}
+
+		return FMath::Min(Free, Base + Extra);
+	}
+
 	/**
 	 *  Decides how many copies each row (or column) of an axis gets. The size is drawn in MinCells..MaxCells,
 	 *  clamped to [Base, the most Stretch allows] and to Free; the extra cells then go to rows picked at
@@ -30,7 +46,7 @@ namespace
 			}
 		}
 
-		const int32 Reach = FMath::Min(Free, Base + Pool.Num());
+		const int32 Reach = LayoutAxisReach(Base, Free, Stretch);
 
 		if (Reach <= Base)
 		{
@@ -1035,6 +1051,12 @@ bool UHouseLayout::Parse(FParsedLayout& OutLayout, TArray<FString>& OutErrors) c
 	}
 
 	return OutErrors.IsEmpty();
+}
+
+void UHouseLayout::GetSizeRange(const FParsedLayout& Parsed, FIntPoint FreeCells, FIntPoint& OutMin, FIntPoint& OutMax) const
+{
+	OutMin = FIntPoint(Parsed.Rows, Parsed.Columns);
+	OutMax = FIntPoint(FMath::Max(Parsed.Rows, LayoutAxisReach(Parsed.Rows, FreeCells.X, RowStretch)), FMath::Max(Parsed.Columns, LayoutAxisReach(Parsed.Columns, FreeCells.Y, ColumnStretch)));
 }
 
 void UHouseLayout::Resolve(const FParsedLayout& Parsed, FIntPoint MinCells, FIntPoint MaxCells, FIntPoint FreeCells, FRandomStream& Stream, FResolvedLayout& OutLayout) const

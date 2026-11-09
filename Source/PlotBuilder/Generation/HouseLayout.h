@@ -307,6 +307,12 @@ public:
 	bool Parse(FParsedLayout& OutLayout, TArray<FString>& OutErrors) const;
 
 	/**
+	 *  The footprints a parsed plan can come out at (X = rows, Y = columns): OutMin is its own size, OutMax the most its
+	 *  stretch allows, never above FreeCells. A plan with no stretch has OutMin equal to OutMax.
+	 */
+	void GetSizeRange(const FParsedLayout& Parsed, FIntPoint FreeCells, FIntPoint& OutMin, FIntPoint& OutMax) const;
+
+	/**
 	 *  Applies the seed's choices to a parsed plan. Draw order, part of the determinism: mirror X, mirror
 	 *  Y, the size along X, the size along Y, which rows then which columns grow, then the type swaps,
 	 *  group by group. The size is drawn in MinCells..MaxCells (X = rows, Y = columns), kept between the

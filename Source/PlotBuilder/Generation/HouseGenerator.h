@@ -70,7 +70,9 @@ struct FStairRun
  *  What a mission asks of the generator on top of the archetype: a size and a number of storeys that take the place of the
  *  archetype's own bounds for one house. The archetype asset is never changed, so the next house starts from it again.
  *  A zero means "not asked", and the archetype (or, for the storeys, FloorsOverride) decides as before. Same seed and same
- *  overrides give the same house; with no overrides the house is exactly the one the archetype gives.
+ *  overrides give the same house; with no overrides the house is exactly the one the archetype gives. When a size is asked,
+ *  the plans of the archetype that cannot come out at it (a plan has its own size and only so much stretch) are left out of
+ *  the draw if another plan can, so the house has the size the contract promised.
  */
 struct FGenerationOverrides
 {
