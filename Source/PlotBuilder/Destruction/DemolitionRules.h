@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "DemolitionTypes.h"
+#include "Contracts/ContractTypes.h"
 #include "DemolitionRules.generated.h"
 
 class USoundBase;
@@ -208,6 +209,10 @@ public:
 	/** Camera shake played on the player's controller when a crush event fires - same TSubclassOf<UCameraShakeBase> pattern as UDemolitionToolData::HitCameraShakeClass. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Crush")
 	TSubclassOf<UCameraShakeBase> CrushCameraShakeClass;
+
+	/** How the client's report turns into money (GDD §6.5): the coefficients, the caps and the penalty of each safety event. The contract evaluator reads this struct and nothing else. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Contracts")
+	FScoringParams Scoring;
 
 	/**
 	 *  Spawns Count generic AFragmentDebris shards around ScatterOrigin, tinted for Material and
