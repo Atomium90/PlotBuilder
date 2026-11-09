@@ -84,12 +84,15 @@ public:
 	/**
 	 *  Computes the target and must-stay sets of the current house for Type (FromLevel is the first storey a
 	 *  partial demolition removes, 0 = rolled from the seed), stores them on the plot and prints the summary.
+	 *  SalvageCount is how many pieces of furniture the client wants back (the salvage condition, 0 = none): they are drawn
+	 *  from the house's props with a stream of their own (seeded from the house seed, so the same house gives the same
+	 *  ones), the more valuable more likely, and leave both sets.
 	 *  Callable at any time on a built house, so a type can be compared without rebuilding.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Mission")
-	void Rebind(EContractType Type, int32 FromLevel);
+	void Rebind(EContractType Type, int32 FromLevel, int32 SalvageCount = 0);
 
-	/** Draws a box on every piece and prop for as long as it is on: green for what must be destroyed, blue for what must stay. */
+	/** Draws a box on every piece and prop for as long as it is on: green for what must be destroyed, blue for what must stay, magenta for the furniture to carry out. */
 	void SetShowTargets(bool bShow);
 
 	/** The summary printed by the last Rebind, for the debug commands. */

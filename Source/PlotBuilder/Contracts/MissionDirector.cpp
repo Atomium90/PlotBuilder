@@ -248,11 +248,11 @@ bool AMissionDirector::StartMission()
 			*UContractSubsystem::Describe(*Contract), Contract->FootprintCells.X, Contract->FootprintCells.Y, Built.X, Built.Y, Contract->Floors, House->GetFloorCount());
 	}
 
-	Rebind(Type, FromLevel);
+	Rebind(Type, FromLevel, Contract ? Contract->CountOf(EConditionType::SalvageFurniture) : 0);
 	return true;
 }
 
-void AMissionDirector::Rebind(EContractType Type, int32 FromLevel)
+void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 SalvageCount)
 {
 	AHouseGenerator* House = ResolveGenerator();
 	APlot* Plot = ResolvePlot();
@@ -372,6 +372,53 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel)
 		Item.bIsProp = true;
 		Item.Level = House->GetPropLevel(Prop);
 		Item.Weight = WeightOf(Prop->GetClass(), Prop->Value);
+		Item.Value = Prop->Value;
+	}
+
+	// The furniture the client wants back (salvage condition). Its own stream, so the generator's draws and the partial
+	// demolition's are untouched; the props come in emission order, so the same house gives the same pick. A prop is
+	// drawn with a weight of its value (at least 1): the sofa and the piano are likelier than the lamp.
+	if (SalvageCount > 0)
+	{
+		FRandomStream SalvageStream(HashCombine(static_cast<uint32>(House->GetEffectiveSeed()), 0x5A17u));
+
+		TArray<int32> PropIndices;
+
+		for (int32 Index = 0; Index < Items.Num(); ++Index)
+		{
+			if (Items[Index].bIsProp)
+			{
+				PropIndices.Add(Index);
+			}
+		}
+
+		for (int32 Picked = 0; Picked < SalvageCount && !PropIndices.IsEmpty(); ++Picked)
+		{
+			int32 WeightSum = 0;
+
+			for (const int32 Index : PropIndices)
+			{
+				WeightSum += FMath::Max(1, Items[Index].Value);
+			}
+
+			const int32 Roll = SalvageStream.RandRange(0, WeightSum - 1);
+			int32 Passed = 0;
+			int32 At = PropIndices.Num() - 1;
+
+			for (int32 Slot = 0; Slot < PropIndices.Num(); ++Slot)
+			{
+				Passed += FMath::Max(1, Items[PropIndices[Slot]].Value);
+
+				if (Roll < Passed)
+				{
+					At = Slot;
+					break;
+				}
+			}
+
+			Items[PropIndices[At]].bSalvage = true;
+			PropIndices.RemoveAt(At);
+		}
 	}
 
 	FString Note;
@@ -448,4 +495,5 @@ void AMissionDirector::Tick(float DeltaTime)
 
 	DrawSet(Sets.Targets, FColor::Green);
 	DrawSet(Sets.MustStay, FColor(60, 120, 255));
+	DrawSet(Sets.Salvage, FColor::Magenta);
 }

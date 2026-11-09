@@ -72,7 +72,7 @@ void AProtectedZone::Track(AActor* Actor)
 	// The house being demolished may overlap the volume (a piece falling in, a plot next to it): it is the job, not collateral.
 	if (const APlot* Plot = Cast<APlot>(UGameplayStatics::GetActorOfClass(this, APlot::StaticClass())))
 	{
-		if (Plot->GetMissionSets().IsTarget(Actor) || Plot->GetMissionSets().IsMustStay(Actor))
+		if (Plot->GetMissionSets().IsTarget(Actor) || Plot->GetMissionSets().IsMustStay(Actor) || Plot->GetMissionSets().IsSalvage(Actor))
 		{
 			return;
 		}

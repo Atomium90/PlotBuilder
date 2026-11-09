@@ -27,11 +27,22 @@ struct FBindingItem
 
 	/** What the item weighs in the completion and collateral ratios (GDD §6.5): the cost of its DT_Shop row. At least 1. */
 	int32 Weight = 1;
+
+	/** A prop's own value (APhysicsProp::Value): what the client counts for a piece of furniture it asked to get back. 0 for a piece. */
+	int32 Value = 0;
+
+	/**
+	 *  Set by whoever picks the furniture the client wants (the salvage condition): the item must be carried out intact,
+	 *  so it is neither to destroy nor to leave alone. Compute puts it in FMissionSets::Salvage and in neither of the two sets.
+	 */
+	bool bSalvage = false;
 };
 
 /**
  *  What a contract asks of the house: the target set (to destroy) and the must-stay set (to leave alone). Every
- *  item of the house is in exactly one of the two. APlot holds the current one; the evaluator reads it.
+ *  item of the house is in exactly one of the two, except the furniture the client asked to get back (the salvage
+ *  condition): that is in a third set of its own, so destroying it is not a success and not collateral, only a loss
+ *  of furniture value. APlot holds the current one; the evaluator reads it.
  */
 struct FMissionSets
 {
@@ -43,10 +54,14 @@ struct FMissionSets
 	TArray<FBindingItem> Targets;
 	TArray<FBindingItem> MustStay;
 
+	/** The furniture to carry out intact to the client drop zone. Empty without a salvage condition. */
+	TArray<FBindingItem> Salvage;
+
 	int64 TargetWeight = 0;
 	int64 MustStayWeight = 0;
+	int64 SalvageWeight = 0;
 
-	bool IsEmpty() const { return Targets.IsEmpty() && MustStay.IsEmpty(); }
+	bool IsEmpty() const { return Targets.IsEmpty() && MustStay.IsEmpty() && Salvage.IsEmpty(); }
 
 	/** Whether Actor is in the target set (false for anything that is not an item of the house). */
 	bool IsTarget(AActor* Actor) const { return TargetActors.Contains(Actor); }
@@ -54,9 +69,13 @@ struct FMissionSets
 	/** Whether Actor is in the must-stay set. */
 	bool IsMustStay(AActor* Actor) const { return MustStayActors.Contains(Actor); }
 
-	/** Filled by MissionBinding::Compute, so the two queries above do not scan the arrays. */
+	/** Whether Actor is furniture the client asked to get back. */
+	bool IsSalvage(AActor* Actor) const { return SalvageActors.Contains(Actor); }
+
+	/** Filled by MissionBinding::Compute, so the three queries above do not scan the arrays. */
 	TSet<TWeakObjectPtr<AActor>> TargetActors;
 	TSet<TWeakObjectPtr<AActor>> MustStayActors;
+	TSet<TWeakObjectPtr<AActor>> SalvageActors;
 };
 
 /**
@@ -74,10 +93,14 @@ namespace MissionBinding
 	 *     demolition and says so in OutNote.
 	 *   - Renovation: the props and every piece that is not load-bearing (partitions, doors, lamps...).
 	 *     The load-bearing pieces stay.
+	 *  Whatever the type, an item flagged bSalvage goes to FMissionSets::Salvage and to neither side.
 	 *  Items whose actor is gone are skipped. OutNote, if given, receives a line when something was corrected.
 	 */
 	FMissionSets Compute(EContractType Type, int32 PartialFromLevel, int32 StoreyCount, const TArray<FBindingItem>& Items, FString* OutNote = nullptr);
 
-	/** Multi-line text for the log and the screen: the totals, then the count and weight of each side by piece class (props on their own line). */
+	/** A short readable name for an item of the house: its class name without the Blueprint prefixes ("BP_Prop_Sofa_C" gives "Sofa"). */
+	FString ItemName(const AActor* Actor);
+
+	/** Multi-line text for the log and the screen: the totals, then the count and weight of each side by piece class (props on their own line), then the furniture to salvage. */
 	FString Describe(const FMissionSets& Sets);
 }

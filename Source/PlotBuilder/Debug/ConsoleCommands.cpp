@@ -314,7 +314,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbSpawnHouseCommand(
 
 static FAutoConsoleCommandWithWorldAndArgs PbBindContractCommand(
 	TEXT("pb.BindContract"),
-	TEXT("pb.BindContract <total|partial|renovation> [fromLevel] - recomputes the target and must-stay sets of the current house for that contract type and prints them (counts and weights by piece class, props apart). fromLevel is the first storey a partial demolition removes (default: rolled from the seed). Needs the level's AMissionDirector. After pb.GenerateHouse or pb.SpawnHouse, run it again: the sets still describe the house that was cleared."),
+	TEXT("pb.BindContract <total|partial|renovation> [fromLevel] [salvage] - recomputes the target and must-stay sets of the current house for that contract type and prints them (counts and weights by piece class, props apart). fromLevel is the first storey a partial demolition removes (default: rolled from the seed). salvage is how many pieces of furniture the client wants back (default 0): they are drawn from the props and listed apart, in neither set. Needs the level's AMissionDirector. After pb.GenerateHouse or pb.SpawnHouse, run it again: the sets still describe the house that was cleared."),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 	{
 		AMissionDirector* Director = World ? AMissionDirector::Find(World) : nullptr;
@@ -329,11 +329,11 @@ static FAutoConsoleCommandWithWorldAndArgs PbBindContractCommand(
 
 		if (Args.IsEmpty() || !AMissionDirector::ParseType(Args[0], Type))
 		{
-			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.BindContract: usage pb.BindContract <total|partial|renovation> [fromLevel]"));
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.BindContract: usage pb.BindContract <total|partial|renovation> [fromLevel] [salvage]"));
 			return;
 		}
 
-		Director->Rebind(Type, Args.Num() > 1 ? FCString::Atoi(*Args[1]) : 0);
+		Director->Rebind(Type, Args.Num() > 1 ? FCString::Atoi(*Args[1]) : 0, Args.Num() > 2 ? FMath::Max(0, FCString::Atoi(*Args[2])) : 0);
 	}));
 
 static FAutoConsoleCommandWithWorldAndArgs PbShowTargetsCommand(

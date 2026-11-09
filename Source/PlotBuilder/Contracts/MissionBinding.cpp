@@ -41,6 +41,15 @@ FMissionSets MissionBinding::Compute(EContractType Type, int32 PartialFromLevel,
 			continue;
 		}
 
+		// The furniture the client wants back is neither destroyed nor left alone: it has its own set.
+		if (Item.bSalvage)
+		{
+			Sets.Salvage.Add(Item);
+			Sets.SalvageActors.Add(Actor);
+			Sets.SalvageWeight += Item.Weight;
+			continue;
+		}
+
 		bool bTarget = true;
 		switch (Type)
 		{
@@ -71,6 +80,20 @@ FMissionSets MissionBinding::Compute(EContractType Type, int32 PartialFromLevel,
 	return Sets;
 }
 
+FString MissionBinding::ItemName(const AActor* Actor)
+{
+	if (!Actor)
+	{
+		return TEXT("(gone)");
+	}
+
+	FString Name = Actor->GetClass()->GetName();
+	Name.RemoveFromStart(TEXT("BP_Prop_"));
+	Name.RemoveFromStart(TEXT("BP_"));
+	Name.RemoveFromEnd(TEXT("_C"));
+	return Name;
+}
+
 FString MissionBinding::Describe(const FMissionSets& Sets)
 {
 	const UEnum* TypeEnum = StaticEnum<EContractType>();
@@ -81,6 +104,11 @@ FString MissionBinding::Describe(const FMissionSets& Sets)
 	FString Text = FString::Printf(TEXT("Contract %s%s: %d to destroy (weight %lld), %d to keep (weight %lld)"),
 		*TypeEnum->GetNameStringByValue(static_cast<int64>(Sets.Type)), *FromText,
 		Sets.Targets.Num(), Sets.TargetWeight, Sets.MustStay.Num(), Sets.MustStayWeight);
+
+	if (!Sets.Salvage.IsEmpty())
+	{
+		Text += FString::Printf(TEXT(", %d to carry out (weight %lld)"), Sets.Salvage.Num(), Sets.SalvageWeight);
+	}
 
 	// One line per kind of item: piece classes in enum order, then the props (key -1). Count and weight, target side then keep side.
 	struct FTally
@@ -124,6 +152,12 @@ FString MissionBinding::Describe(const FMissionSets& Sets)
 		AddLine(static_cast<int32>(ClassEnum->GetValueByIndex(Index)), ClassEnum->GetNameStringByIndex(Index));
 	}
 	AddLine(PropKey, TEXT("Prop"));
+
+	// The furniture the client wants back, one per line with its storey and value.
+	for (const FBindingItem& Item : Sets.Salvage)
+	{
+		Text += FString::Printf(TEXT("\n  Salvage      %s (storey %d, value %d, weight %d)"), *ItemName(Item.Actor.Get()), Item.Level, Item.Value, Item.Weight);
+	}
 
 	return Text;
 }
