@@ -193,7 +193,7 @@ public:
 	/** The rotation half of GetStructuralCell() - see there. */
 	int32 GetStructuralQuarterTurns() const;
 
-	/** Voluntary removal (Interact on a Placed piece): detaches from the structural graph, then destroys itself outright - unlike BeginCollapse, this piece chose to leave, so it doesn't become debris. */
+	/** Voluntary removal (Interact on a Placed piece, after the bag took it back; see UHotbarComponent::TakeBack): detaches from the structural graph, then destroys itself outright - unlike BeginCollapse, this piece chose to leave, so it doesn't become debris. */
 	UFUNCTION(BlueprintCallable, Category = "Buildable")
 	void Demolish();
 

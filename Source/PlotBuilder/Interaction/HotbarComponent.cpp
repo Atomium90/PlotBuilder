@@ -314,6 +314,54 @@ bool UHotbarComponent::Store(AActor* ActorToStore)
 	return true;
 }
 
+TSubclassOf<AActor> UHotbarComponent::FindSoldClass(TSubclassOf<AActor> ActorClass) const
+{
+	if (!ShopCatalog || !ActorClass || FindCatalogRowFor(ActorClass))
+	{
+		return ActorClass;
+	}
+
+	TArray<FShopItemRow*> Rows;
+	ShopCatalog->GetAllRows<FShopItemRow>(TEXT("UHotbarComponent::FindSoldClass"), Rows);
+
+	for (const FShopItemRow* Row : Rows)
+	{
+		const ABuildablePiece* Sold = (Row && Row->ActorClass) ? Cast<ABuildablePiece>(Row->ActorClass->GetDefaultObject()) : nullptr;
+
+		if (Sold && Sold->MirrorVariantClass.Get() == ActorClass.Get())
+		{
+			return Row->ActorClass;
+		}
+	}
+
+	return ActorClass;
+}
+
+bool UHotbarComponent::TakeBack(const ABuildablePiece* Piece)
+{
+	if (!Piece || !bAllowed)
+	{
+		return false;
+	}
+
+	const TSubclassOf<AActor> ActorClass = FindSoldClass(Piece->GetClass());
+
+	// A grid piece carries its placement scale; a Legacy one was never given one (its actor scale is the scale it was bought at).
+	const FVector Scale = Piece->GetBuildAnchor() == EBuildAnchor::Legacy ? Piece->GetActorScale3D() : Piece->GetPlacedScale();
+
+	const FShopItemRow* Row = FindCatalogRowFor(ActorClass);
+	const int32 StackSize = Row ? Row->StackSize : 99;
+
+	// One unit: it either goes in whole or not at all, so a refusal leaves the grid exactly as it was.
+	if (AddItem(ActorClass, Scale, StackSize) > 0)
+	{
+		return false;
+	}
+
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
 TSubclassOf<AActor> UHotbarComponent::PopLast()
 {
 	for (int32 i = Slots.Num() - 1; i >= 0; --i)

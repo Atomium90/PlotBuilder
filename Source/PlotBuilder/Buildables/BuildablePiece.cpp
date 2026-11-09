@@ -4,6 +4,7 @@
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Interaction/HotbarComponent.h"
+#include "UI/PlayerMessages.h"
 #include "Environment/StructuralSupportComponent.h"
 #include "Destruction/DurabilityComponent.h"
 #include "Destruction/DemolitionRules.h"
@@ -102,6 +103,19 @@ void ABuildablePiece::ApplyPaint(int32 NewIndex, const UPaintPalette* Palette)
 
 void ABuildablePiece::Interact_Implementation(AActor* InteractingActor)
 {
+	// A piece that is the child of another one (the glass of a window wall) is not an item of its own: it never leaves
+	// the Stock state, so it would go into the bag alone. Aiming at it means the piece that carries it. The door leaf
+	// is not concerned, its Blueprint replaces Interact to open and close.
+	if (AActor* Parent = GetParentActor())
+	{
+		if (Parent->Implements<UInteractable>())
+		{
+			IInteractable::Execute_Interact(Parent, InteractingActor);
+		}
+
+		return;
+	}
+
 	if (State == EBuildablePieceState::Stock)
 	{
 		if (UHotbarComponent* Hotbar = InteractingActor ? InteractingActor->FindComponentByClass<UHotbarComponent>() : nullptr)
@@ -115,11 +129,26 @@ void ABuildablePiece::Interact_Implementation(AActor* InteractingActor)
 	if (State == EBuildablePieceState::Placed)
 	{
 		// In a mission the hotbar is off and a house only comes down through the tools: no free demolition by hand.
-		const UHotbarComponent* Hotbar = InteractingActor ? InteractingActor->FindComponentByClass<UHotbarComponent>() : nullptr;
+		UHotbarComponent* Hotbar = InteractingActor ? InteractingActor->FindComponentByClass<UHotbarComponent>() : nullptr;
 
 		if (Hotbar && !Hotbar->IsAllowed())
 		{
 			return;
+		}
+
+		// The piece goes back in the bag (to correct a mistake without losing it). The bag is checked before the piece
+		// leaves the graph, so a full bag changes nothing.
+		if (Hotbar)
+		{
+			if (!Hotbar->TakeBack(this))
+			{
+				if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
+				{
+					Messages->Notify(NSLOCTEXT("Buildable", "BagFull", "The bag is full, the piece stays where it is."), EMessageTone::Warning);
+				}
+
+				return;
+			}
 		}
 
 		Demolish();

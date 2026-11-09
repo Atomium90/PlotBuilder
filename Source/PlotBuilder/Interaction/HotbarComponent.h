@@ -7,6 +7,7 @@
 #include "HotbarComponent.generated.h"
 
 struct FShopItemRow;
+class ABuildablePiece;
 
 /** One inventory slot: class to respawn, the scale its stack was picked up/bought at, how many, and the max for that stack. Empty when ActorClass is null or Count is 0. */
 USTRUCT(BlueprintType)
@@ -138,7 +139,7 @@ public:
 	/**
 	 *  Whether the inventory side of the game works: picking a prop up (E), buying, placing a prop from the hotbar.
 	 *  A mission turns it off (APlayerCharacter::SetBuildingAllowed): the tool belt is the only way to take a house
-	 *  apart there. Pieces check it too, before a Placed one can be demolished by hand (ABuildablePiece::Interact).
+	 *  apart there. Pieces check it too, before a Placed one can be taken back by hand (ABuildablePiece::Interact).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	void SetAllowed(bool bNewAllowed);
@@ -153,6 +154,16 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	bool Store(AActor* ActorToStore);
+
+	/**
+	 *  Puts one unit of a Placed piece back in the bag, without touching the actor (the piece unregisters itself from the
+	 *  graph and destroys itself afterwards, see ABuildablePiece::Interact): the bag is checked first, so a full bag
+	 *  leaves the piece standing and the graph untouched. The unit goes in at the scale the piece was placed with, not
+	 *  its biased actor scale (a bought piece has scale 1, and a biased one would neither stack with it nor survive being
+	 *  placed again without being biased twice), and a mirror variant goes back as the piece Build Mode swaps it in for.
+	 *  Fails when the bag is full or the inventory is off (a mission).
+	 */
+	bool TakeBack(const ABuildablePiece* Piece);
 
 	/** Removes and returns one unit's class from the selected slot, decrementing its Count (clearing it at 0). Returns nullptr if the selection is empty. */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
@@ -287,6 +298,9 @@ private:
 
 	/** ShopCatalog row whose ActorClass matches, or nullptr. Used by Store() - PurchaseRow already has its row directly. */
 	const FShopItemRow* FindCatalogRowFor(TSubclassOf<AActor> ActorClass) const;
+
+	/** The class the shop sells for ActorClass: itself when it has a row, the piece that names it as MirrorVariantClass when it is a mirror, otherwise itself. */
+	TSubclassOf<AActor> FindSoldClass(TSubclassOf<AActor> ActorClass) const;
 
 	void SetSelectedIndex(int32 NewIndex);
 
