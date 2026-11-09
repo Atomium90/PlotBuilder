@@ -9,6 +9,7 @@
 #include "Contracts/ContractPool.h"
 #include "Contracts/ContractSubsystem.h"
 #include "Contracts/MissionDirector.h"
+#include "Contracts/MissionResultSubsystem.h"
 #include "Destruction/CrushDetectionComponent.h"
 #include "Destruction/DamageLogSubsystem.h"
 #include "Destruction/Damageable.h"
@@ -425,6 +426,34 @@ static FAutoConsoleCommandWithWorldAndArgs PbAcceptOfferCommand(
 		if (AMissionDirector* Director = AMissionDirector::Find(World))
 		{
 			Director->StartMission();
+		}
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbEndMissionCommand(
+	TEXT("pb.EndMission"),
+	TEXT("pb.EndMission - ends the mission as it stands and prints the client's report: what was destroyed, what must have stayed, the furniture delivered to the client zone, what the protected zones took, the crush and explosion events, then each term of the formula with its effect on the money, down to the payout. The report is worked out against the active contract, or against one made from the house that stands. It changes nothing (no payment, no travel): run it again at any time. Needs the level's AMissionDirector."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		AMissionDirector* Director = World ? AMissionDirector::Find(World) : nullptr;
+		UMissionResultSubsystem* Results = World ? UMissionResultSubsystem::Get(World) : nullptr;
+
+		if (!Director || !Results)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.EndMission: needs the level's AMissionDirector"));
+			return;
+		}
+
+		const FContractDefinition Contract = Director->GetMissionContract();
+
+		FString Report;
+		Results->Evaluate(Contract, Report);
+
+		const FString Text = FString::Printf(TEXT("Mission report for: %s\n%s"), *UContractSubsystem::Describe(Contract), *Report);
+		UE_LOG(LogPlotBuilder, Log, TEXT("%s"), *Text);
+
+		if (GEngine)
+		{
+			PBDebug::Message(UContractSubsystem::MessageKey + 10, 60.f, FColor::Cyan, Text);
 		}
 	}));
 

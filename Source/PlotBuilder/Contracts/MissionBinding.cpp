@@ -156,7 +156,7 @@ FString MissionBinding::Describe(const FMissionSets& Sets)
 	// The furniture the client wants back, one per line with its storey and value.
 	for (const FBindingItem& Item : Sets.Salvage)
 	{
-		Text += FString::Printf(TEXT("\n  Salvage      %s (storey %d, value %d, weight %d)"), *ItemName(Item.Actor.Get()), Item.Level, Item.Value, Item.Weight);
+		Text += FString::Printf(TEXT("\n  Salvage      %s (storey %d, value %d, weight %d)"), Item.Label.IsNone() ? *ItemName(Item.Actor.Get()) : *Item.Label.ToString(), Item.Level, Item.Value, Item.Weight);
 	}
 
 	return Text;

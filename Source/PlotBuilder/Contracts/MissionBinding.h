@@ -31,6 +31,9 @@ struct FBindingItem
 	/** A prop's own value (APhysicsProp::Value): what the client counts for a piece of furniture it asked to get back. 0 for a piece. */
 	int32 Value = 0;
 
+	/** A name to show for the item, set for the salvage furniture only: the report names it even after it was destroyed and the actor is gone. */
+	FName Label;
+
 	/**
 	 *  Set by whoever picks the furniture the client wants (the salvage condition): the item must be carried out intact,
 	 *  so it is neither to destroy nor to leave alone. Compute puts it in FMissionSets::Salvage and in neither of the two sets.

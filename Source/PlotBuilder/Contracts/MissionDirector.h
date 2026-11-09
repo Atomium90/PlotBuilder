@@ -98,6 +98,13 @@ public:
 	/** The summary printed by the last Rebind, for the debug commands. */
 	const FString& GetSummary() const { return Summary; }
 
+	/**
+	 *  The contract this mission is played under: the active one, or, when the level was started from travel options or the
+	 *  editor defaults, one made from the house that stands (its type, the footprint and storeys it was really built with,
+	 *  and the GDD base payout for that area). The report is worked out against it.
+	 */
+	FContractDefinition GetMissionContract();
+
 	/** The director of this world, or nullptr (a world without a mission). */
 	static AMissionDirector* Find(const UObject* WorldContext);
 

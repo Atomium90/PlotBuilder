@@ -2,6 +2,7 @@
 #include "Debug/DebugDisplay.h"
 #include "DemolitionRules.h"
 #include "Buildables/BuildablePiece.h"
+#include "Contracts/MissionResultSubsystem.h"
 #include "Components/PrimitiveComponent.h"
 #include "Camera/CameraShakeBase.h"
 #include "Engine/Engine.h"
@@ -124,5 +125,11 @@ void UCrushDetectionComponent::EndStun()
 
 void UCrushDetectionComponent::RegisterSafetyPenalty(FName Source) const
 {
-	UE_LOG(LogPlotBuilder, Log, TEXT("UCrushDetectionComponent::RegisterSafetyPenalty: safety penalty stub (%s)"), *Source.ToString());
+	// The mission counts it; the evaluator turns the count into a penalty at the end (GDD §6.5).
+	if (UMissionResultSubsystem* Results = UMissionResultSubsystem::Get(this))
+	{
+		Results->RecordSafetyEvent(Source);
+	}
+
+	UE_LOG(LogPlotBuilder, Log, TEXT("UCrushDetectionComponent::RegisterSafetyPenalty: safety event counted (%s)"), *Source.ToString());
 }

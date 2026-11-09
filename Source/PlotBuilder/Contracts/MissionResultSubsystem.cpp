@@ -1,0 +1,211 @@
+#include "Contracts/MissionResultSubsystem.h"
+#include "Buildables/BuildablePiece.h"
+#include "Contracts/ContractEvaluator.h"
+#include "Contracts/MissionBinding.h"
+#include "Destruction/CrushDetectionComponent.h"
+#include "Destruction/DemolitionRules.h"
+#include "Destruction/DurabilityComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "Environment/DropZone.h"
+#include "Environment/Plot.h"
+#include "Environment/ProtectedZone.h"
+#include "Kismet/GameplayStatics.h"
+#include "PlotBuilder.h"
+#include "Props/PhysicsProp.h"
+
+const FName UMissionResultSubsystem::CrushSource(TEXT("Crush"));
+const FName UMissionResultSubsystem::ExplosionSource(TEXT("Explosion"));
+
+namespace
+{
+	/**
+	 *  Whether an item of the house counts as destroyed at the end: its actor is gone (broken, fractured, demolished), or it is a
+	 *  piece that has already lost its support and is falling (it is only a matter of seconds), or its hit points are at zero.
+	 */
+	bool MissionResultIsGone(const FBindingItem& Item)
+	{
+		const AActor* Actor = Item.Actor.Get();
+
+		if (!IsValid(Actor))
+		{
+			return true;
+		}
+
+		if (const ABuildablePiece* Piece = Cast<ABuildablePiece>(Actor))
+		{
+			if (Piece->State == EBuildablePieceState::Collapsing)
+			{
+				return true;
+			}
+		}
+
+		const UDurabilityComponent* Durability = Actor->FindComponentByClass<UDurabilityComponent>();
+		return Durability && Durability->GetState() == EDurabilityState::Destroyed;
+	}
+
+	int64 MissionResultDestroyedWeight(const TArray<FBindingItem>& Items)
+	{
+		int64 Total = 0;
+
+		for (const FBindingItem& Item : Items)
+		{
+			Total += MissionResultIsGone(Item) ? Item.Weight : 0;
+		}
+
+		return Total;
+	}
+}
+
+UMissionResultSubsystem* UMissionResultSubsystem::Get(const UObject* WorldContext)
+{
+	const UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::ReturnNull) : nullptr;
+	return World ? World->GetSubsystem<UMissionResultSubsystem>() : nullptr;
+}
+
+void UMissionResultSubsystem::ResetCounters()
+{
+	CrushEvents = 0;
+	ExplosionEvents = 0;
+}
+
+void UMissionResultSubsystem::RecordSafetyEvent(FName Source)
+{
+	if (Source == CrushSource)
+	{
+		++CrushEvents;
+	}
+	else if (Source == ExplosionSource)
+	{
+		++ExplosionEvents;
+	}
+	else
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("UMissionResultSubsystem: unknown safety event '%s', not counted."), *Source.ToString());
+	}
+}
+
+void UMissionResultSubsystem::SetRules(const UDemolitionRules* NewRules)
+{
+	CachedRules = NewRules;
+}
+
+const UDemolitionRules* UMissionResultSubsystem::FindRules() const
+{
+	if (const UDemolitionRules* Given = CachedRules.Get())
+	{
+		return Given;
+	}
+
+	if (const APawn* Pawn = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		if (const UCrushDetectionComponent* Crush = Pawn->FindComponentByClass<UCrushDetectionComponent>())
+		{
+			return Crush->Rules;
+		}
+	}
+
+	return nullptr;
+}
+
+FMissionSnapshot UMissionResultSubsystem::BuildSnapshot() const
+{
+	FMissionSnapshot Snapshot;
+
+	const UWorld* World = GetWorld();
+	const APlot* Plot = World ? Cast<APlot>(UGameplayStatics::GetActorOfClass(World, APlot::StaticClass())) : nullptr;
+
+	if (!Plot)
+	{
+		return Snapshot;
+	}
+
+	const FMissionSets& Sets = Plot->GetMissionSets();
+
+	Snapshot.TargetWeight = Sets.TargetWeight;
+	Snapshot.TargetDestroyedWeight = MissionResultDestroyedWeight(Sets.Targets);
+	Snapshot.MustStayWeight = Sets.MustStayWeight;
+	Snapshot.MustStayDestroyedWeight = MissionResultDestroyedWeight(Sets.MustStay);
+	Snapshot.HouseWeight = Sets.TargetWeight + Sets.MustStayWeight + Sets.SalvageWeight;
+
+	// The furniture the client asked for: delivered only if it stands inside the client drop zone at this very moment.
+	TMap<const AActor*, float> Delivered;
+
+	if (const ADropZone* DropZone = Plot->GetClientDropZone())
+	{
+		for (const FDropItem& Drop : DropZone->GetItems())
+		{
+			if (const APhysicsProp* Prop = Drop.Prop.Get())
+			{
+				Delivered.Add(Prop, Drop.HPRatio);
+			}
+		}
+	}
+
+	for (const FBindingItem& Item : Sets.Salvage)
+	{
+		FSalvageResult& Result = Snapshot.Salvage.AddDefaulted_GetRef();
+		Result.Name = Item.Label.IsNone() ? MissionBinding::ItemName(Item.Actor.Get()) : Item.Label.ToString();
+		Result.Value = Item.Value;
+
+		const float* InZone = MissionResultIsGone(Item) ? nullptr : Delivered.Find(Item.Actor.Get());
+		Result.bDelivered = InZone != nullptr;
+		Result.HPRatio = InZone ? *InZone : 0.f;
+	}
+
+	for (const TObjectPtr<AProtectedZone>& Zone : Plot->GetProtectedZones())
+	{
+		if (!Zone)
+		{
+			continue;
+		}
+
+		FZoneResult& Result = Snapshot.Zones.AddDefaulted_GetRef();
+		Result.Name = Zone->GetName();
+		Result.ToolDamageRatio = Zone->GetDamageRatio();
+
+		// What the zone counts from the house itself (the weight of the pieces that fell in) comes in through RecordExternalDamage.
+		Result.FallenWeight = static_cast<int64>(Zone->GetExternalDamage());
+	}
+
+	Snapshot.CrushEvents = CrushEvents;
+	Snapshot.ExplosionEvents = ExplosionEvents;
+
+	return Snapshot;
+}
+
+FString UMissionResultSubsystem::DescribeSnapshot(const FMissionSnapshot& Snapshot)
+{
+	FString Text = FString::Printf(TEXT("Snapshot: to destroy %lld of %lld | to keep, destroyed %lld of %lld | house weight %lld | crush %d, explosion %d"),
+		Snapshot.TargetDestroyedWeight, Snapshot.TargetWeight, Snapshot.MustStayDestroyedWeight, Snapshot.MustStayWeight,
+		Snapshot.HouseWeight, Snapshot.CrushEvents, Snapshot.ExplosionEvents);
+
+	for (const FSalvageResult& Item : Snapshot.Salvage)
+	{
+		Text += FString::Printf(TEXT("\n  Salvage %s: value %d, %s%s"), *Item.Name, Item.Value, Item.bDelivered ? TEXT("delivered") : TEXT("not delivered"),
+			Item.bDelivered ? *FString::Printf(TEXT(" at %.0f%% HP"), Item.HPRatio * 100.f) : TEXT(""));
+	}
+
+	for (const FZoneResult& Zone : Snapshot.Zones)
+	{
+		Text += FString::Printf(TEXT("\n  Zone %s: tools took %.0f%%, weight fallen in %lld"), *Zone.Name, Zone.ToolDamageRatio * 100.f, Zone.FallenWeight);
+	}
+
+	return Text;
+}
+
+FDebriefResult UMissionResultSubsystem::Evaluate(const FContractDefinition& Contract, FString& OutText) const
+{
+	const FMissionSnapshot Snapshot = BuildSnapshot();
+	const UDemolitionRules* Rules = FindRules();
+
+	if (!Rules)
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("UMissionResultSubsystem: no rules asset known (no piece gave one, and the player's crush component has none), the scoring runs on the default values."));
+	}
+
+	const FDebriefResult Result = UContractEvaluator::Evaluate(Contract, Snapshot, Rules ? Rules->Scoring : FScoringParams());
+
+	OutText = DescribeSnapshot(Snapshot) + TEXT("\n") + Result.ToString();
+	return Result;
+}

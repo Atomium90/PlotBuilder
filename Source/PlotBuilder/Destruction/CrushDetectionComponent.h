@@ -57,10 +57,10 @@ public:
 	void SetShowGauge(bool bShow) { bShowGauge = bShow; }
 
 	/**
-	 *  Shared "this counts as a safety penalty" log hook (GDD §6.5 - crush and an explosion on the
-	 *  player are the same penalty family). Today this is only a log stub, same style as
-	 *  AExplosiveCharge's pre-existing one - the single place a future UContractSubsystem
-	 *  (Sprint 3) hooks into instead of two independent stubs. Does not by itself stun or shake the
+	 *  Shared "this counts as a safety penalty" hook (GDD §6.5 - crush and an explosion on the
+	 *  player are the same penalty family). It tells UMissionResultSubsystem, which keeps the count
+	 *  the contract evaluator turns into a penalty at the end of the mission; both the crush event and
+	 *  AExplosiveCharge's on-player case come through here. Does not by itself stun or shake the
 	 *  camera - only the crush event (see TickComponent) does that.
 	 */
 	void RegisterSafetyPenalty(FName Source) const;

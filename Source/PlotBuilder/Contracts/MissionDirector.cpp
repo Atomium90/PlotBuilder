@@ -10,8 +10,12 @@
 #include "GameFramework/GameModeBase.h"
 #include "Generation/HouseArchetype.h"
 #include "Generation/HouseGenerator.h"
+#include "Contracts/ContractEvaluator.h"
+#include "Contracts/ContractPool.h"
 #include "Contracts/ContractSubsystem.h"
 #include "Contracts/MissionBinding.h"
+#include "Contracts/MissionResultSubsystem.h"
+#include "Destruction/DurabilityComponent.h"
 #include "Environment/MissionGround.h"
 #include "Interaction/ShopItemRow.h"
 #include "Kismet/GameplayStatics.h"
@@ -156,6 +160,12 @@ bool AMissionDirector::StartMission()
 	{
 		UE_LOG(LogPlotBuilder, Warning, TEXT("AMissionDirector: no AHouseGenerator in the level, nothing to build."));
 		return false;
+	}
+
+	// A new house is a new mission: what happened to the player in the last one does not count in this one.
+	if (UMissionResultSubsystem* Results = UMissionResultSubsystem::Get(this))
+	{
+		Results->ResetCounters();
 	}
 
 	FString Options;
@@ -375,6 +385,22 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 Salvage
 		Item.Value = Prop->Value;
 	}
 
+	// The scoring lives on the rules asset the pieces carry. Remember it now, while a piece stands: the report is made at the end, when the house may be gone.
+	if (UMissionResultSubsystem* Results = UMissionResultSubsystem::Get(this))
+	{
+		for (const TWeakObjectPtr<ABuildablePiece>& WeakPiece : House->GetPieces())
+		{
+			const ABuildablePiece* Piece = WeakPiece.Get();
+			const UDurabilityComponent* Durability = IsValid(Piece) ? Piece->GetDurabilityComponent() : nullptr;
+
+			if (Durability && Durability->Rules)
+			{
+				Results->SetRules(Durability->Rules);
+				break;
+			}
+		}
+	}
+
 	// The furniture the client wants back (salvage condition). Its own stream, so the generator's draws and the partial
 	// demolition's are untouched; the props come in emission order, so the same house gives the same pick. A prop is
 	// drawn with a weight of its value (at least 1): the sofa and the piano are likelier than the lamp.
@@ -416,7 +442,9 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 Salvage
 				}
 			}
 
-			Items[PropIndices[At]].bSalvage = true;
+			FBindingItem& Chosen = Items[PropIndices[At]];
+			Chosen.bSalvage = true;
+			Chosen.Label = FName(*MissionBinding::ItemName(Chosen.Actor.Get()));
 			PropIndices.RemoveAt(At);
 		}
 	}
@@ -455,6 +483,44 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 Salvage
 	}
 
 	Plot->SetMissionSets(MoveTemp(Sets));
+}
+
+FContractDefinition AMissionDirector::GetMissionContract()
+{
+	if (const UContractSubsystem* Contracts = UContractSubsystem::Get(this))
+	{
+		if (Contracts->HasActiveContract())
+		{
+			return Contracts->GetActiveContract();
+		}
+	}
+
+	// No contract was taken: one is made from the house that stands, so the report still has a base payout to work from.
+	FContractDefinition Contract;
+	Contract.ClientId = FName(TEXT("Debug"));
+
+	if (const APlot* Plot = ResolvePlot())
+	{
+		Contract.Type = Plot->GetMissionSets().Type;
+	}
+
+	if (const AHouseGenerator* House = ResolveGenerator())
+	{
+		Contract.Seed = House->GetEffectiveSeed();
+		Contract.FootprintCells = House->GetFootprintCells();
+		Contract.Floors = House->GetFloorCount();
+
+		if (House->Archetype)
+		{
+			Contract.ArchetypeId = FName(*House->Archetype->GetName());
+		}
+	}
+
+	Contract.AreaM2 = static_cast<float>(Contract.FootprintCells.X * Contract.FootprintCells.Y * Contract.Floors) * UContractPool::SquareMetresPerCell;
+	Contract.EstimatedMinutes = UContractEvaluator::EstimateMinutes(Contract.Type, Contract.AreaM2);
+	Contract.BasePayout = UContractEvaluator::EstimateBasePayout(Contract.Type, Contract.AreaM2);
+
+	return Contract;
 }
 
 void AMissionDirector::SetShowTargets(bool bShow)
