@@ -1,4 +1,5 @@
 #include "Contracts/ContractEvaluator.h"
+#include "Destruction/PointCurve.h"
 
 float UContractEvaluator::TypeFactor(EContractType Type)
 {
@@ -26,32 +27,14 @@ int32 UContractEvaluator::EstimateBasePayout(EContractType Type, float AreaM2)
 float UContractEvaluator::FurnitureValueMultiplier(const FScoringParams& Params, float HPRatio)
 {
 	const float HP = FMath::Clamp(HPRatio, 0.f, 1.f);
-	const TArray<FVector2D>& Points = Params.FurnitureValuePoints;
 
 	// No curve: the value goes down in a straight line with the hit points.
-	if (Points.Num() < 2)
+	if (Params.FurnitureValuePoints.Num() < 2)
 	{
 		return HP;
 	}
 
-	if (HP <= Points[0].X)
-	{
-		return static_cast<float>(Points[0].Y);
-	}
-
-	for (int32 Index = 1; Index < Points.Num(); ++Index)
-	{
-		if (HP <= Points[Index].X)
-		{
-			const FVector2D& From = Points[Index - 1];
-			const FVector2D& To = Points[Index];
-			const double Span = To.X - From.X;
-
-			return Span > KINDA_SMALL_NUMBER ? static_cast<float>(FMath::Lerp(From.Y, To.Y, (HP - From.X) / Span)) : static_cast<float>(To.Y);
-		}
-	}
-
-	return static_cast<float>(Points.Last().Y);
+	return PointCurve::Evaluate(Params.FurnitureValuePoints, HP);
 }
 
 float UContractEvaluator::ComputeZoneDamage(const FMissionSnapshot& Snapshot, const FScoringParams& Params)

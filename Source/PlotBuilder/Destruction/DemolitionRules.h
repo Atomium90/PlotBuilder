@@ -7,7 +7,6 @@
 #include "DemolitionRules.generated.h"
 
 class USoundBase;
-class UCurveFloat;
 class AFragmentDebris;
 class UStaticMesh;
 class UGeometryCollection;
@@ -108,14 +107,20 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Feedback")
 	TMap<EDemolitionMaterial, TObjectPtr<USoundBase>> ImpactSounds;
 
+	/** The GDD §7.6 c(h): (HP ratio, fraction transmitted) = (0, 0.3), (0.35, 0.6), (0.75, 1.0). The default of StabilityTransmission, and what stands in for it when it holds fewer than two points. */
+	static TArray<FVector2D> DefaultStabilityTransmission()
+	{
+		return {FVector2D(0.0, 0.3), FVector2D(0.35, 0.6), FVector2D(0.75, 1.0)};
+	}
+
 	/**
-	 *  Fraction of a piece's own stability it still transmits to whatever rests on it, keyed by its
-	 *  remaining-HP ratio - GDD §7.6's c(h): 1.0 at h >= 0.75, ~0.6 at h = 0.35, ~0.3 at h = 0.
-	 *  Optional - ComputeStabilityCoupling falls back to a hardcoded approximation of the same curve
-	 *  when this is unset, so an unassigned curve is a valid default, not a data error.
+	 *  Fraction of a piece's own stability it still transmits to whatever rests on it, by its remaining-HP ratio -
+	 *  GDD §7.6's c(h). Points (HP ratio, fraction) sorted by HP ratio: a straight line between two neighbours, flat
+	 *  beyond the ends (see PointCurve). The default is 1.0 from 0.75 up, 0.6 at 0.35 and 0.3 at 0. Fewer than two
+	 *  points is not a curve: ComputeStabilityCoupling uses the default, so a data mistake does not change how houses fall.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction")
-	TObjectPtr<UCurveFloat> StabilityTransmission;
+	TArray<FVector2D> StabilityTransmission = DefaultStabilityTransmission();
 
 	/** Minimum random delay (seconds) before a Compromised piece fails on its own - GDD §7.6, D29. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Destruction|Collapse")
@@ -245,7 +250,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Destruction")
 	USoundBase* GetImpactSound(EDemolitionMaterial Material) const;
 
-	/** StabilityTransmission->GetFloatValue(HPRatio) if assigned, otherwise the GDD §7.6 fallback curve (piecewise linear through (0, 0.3), (0.35, 0.6), (0.75, 1.0), flat at 1.0 beyond). */
+	/** c(h): StabilityTransmission at HPRatio (the GDD §7.6 default when it holds fewer than two points). */
 	UFUNCTION(BlueprintPure, Category = "Destruction")
 	float ComputeStabilityCoupling(float HPRatio) const;
 };
