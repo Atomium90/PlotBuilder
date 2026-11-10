@@ -48,6 +48,15 @@ public:
 	/** Adds the tool to the owned ones and saves. Does nothing if it is already owned. */
 	void GrantTool(FName ToolId);
 
+	/** Explosive charges in stock. */
+	int32 GetCharges() const;
+
+	/** Adds (or, negative, removes) charges, never below 0, and saves. */
+	void AddCharges(int32 Delta);
+
+	/** Takes one charge. False, nothing taken, when there is none. */
+	bool TryConsumeCharge();
+
 	bool IsParcelOwned() const;
 
 	void SetParcelOwned(bool bOwned);
@@ -63,6 +72,9 @@ public:
 
 	/** Back to a new game (UProgressSave::ResetToDefaults), saved. */
 	void Reset();
+
+	/** Takes the tools back to the hands and the sledgehammer and empties the charge stock (UProgressSave::ResetTools), saved. Money, parcel and home stay. */
+	void ResetTools();
 
 	/** One line with everything the save holds, for the log and the on-screen readout. */
 	FString Describe() const;

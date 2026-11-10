@@ -114,11 +114,15 @@ public:
 	int32 Money = DefaultMoney;
 
 	/**
-	 *  Ids of the tools the player owns. Nothing reads this yet: the tool belt still spawns every tool. The tool
-	 *  purchase at the PC (Nov 11) makes it the source of truth, so the ids below are placeholders until then.
+	 *  Ids of the tools the player owns (the row names of DT_ToolShop). The tool belt reads this on the maps that
+	 *  enforce ownership (UToolbeltComponent::SetOwnershipEnforced); the PC's Tools tab adds to it.
 	 */
 	UPROPERTY(SaveGame)
 	TSet<FName> OwnedTools;
+
+	/** Explosive charges in stock. Unlike the tools they are used up: every throw or placement takes one. */
+	UPROPERTY(SaveGame)
+	int32 Charges = 0;
 
 	UPROPERTY(SaveGame)
 	bool bParcelOwned = false;
@@ -127,6 +131,9 @@ public:
 	UPROPERTY(SaveGame)
 	FHomeSnapshot Home;
 
-	/** A new game: DefaultMoney, the hands and the sledgehammer, no parcel, no home. */
+	/** A new game: DefaultMoney, the hands and the sledgehammer, no charges, no parcel, no home. */
 	void ResetToDefaults();
+
+	/** Only the tools: the hands and the sledgehammer, no charges. Money, parcel and home stay. */
+	void ResetTools();
 };

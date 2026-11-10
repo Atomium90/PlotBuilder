@@ -36,9 +36,7 @@
 // Everything these commands show goes through the master switch (Debug/DebugDisplay.h): pb.Debug 0 hides it all, for a
 // demo, and pb.Debug 1 brings it back. A command's own text answer is hidden too, the log still has it.
 //
-// pb.GiveTool is deliberately not here: UToolbeltComponent has no ownership/gating concept yet
-// (every melee tool is already always spawned), so there is nothing for it to wrap until tool
-// purchase is real (Sprint 3).
+// Tools are bought at the PC and kept in the Progress save: pb.GiveAllTools and pb.Charges stand in for the purchase.
 
 namespace
 {
@@ -107,7 +105,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbShowProgressCommand(
 
 static FAutoConsoleCommandWithWorldAndArgs PbResetProgressCommand(
 	TEXT("pb.ResetProgress"),
-	TEXT("pb.ResetProgress - back to a new game: 500 money, the hands and the sledgehammer, no parcel, no home. Writes the Progress slot and updates the player's hotbar. Run it before a demo."),
+	TEXT("pb.ResetProgress - back to a new game: 500 money, the hands and the sledgehammer, no charges, no parcel, no home. Writes the Progress slot and updates the player's hotbar. Run it before a demo."),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
 	{
 		UProgressSubsystem* Progress = UProgressSubsystem::Get(World);
@@ -129,6 +127,61 @@ static FAutoConsoleCommandWithWorldAndArgs PbResetProgressCommand(
 			}
 		}
 
+		Progress->ShowOnScreen(10.f);
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbGiveAllToolsCommand(
+	TEXT("pb.GiveAllTools"),
+	TEXT("pb.GiveAllTools - adds the crowbar and the jackhammer to the owned tools (saved). For a demo or a test of a map where the tools are something to buy."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		UProgressSubsystem* Progress = UProgressSubsystem::Get(World);
+
+		if (!Progress)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.GiveAllTools: no progress subsystem (no game instance)"));
+			return;
+		}
+
+		for (const TCHAR* ToolId : { TEXT("Hands"), TEXT("Sledgehammer"), TEXT("Crowbar"), TEXT("Jackhammer") })
+		{
+			Progress->GrantTool(FName(ToolId));
+		}
+
+		Progress->ShowOnScreen(10.f);
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbResetToolsCommand(
+	TEXT("pb.ResetTools"),
+	TEXT("pb.ResetTools - takes the tools back to the hands and the sledgehammer and empties the charge stock (saved). Money, parcel and home stay, unlike pb.ResetProgress. To test the purchases again."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		UProgressSubsystem* Progress = UProgressSubsystem::Get(World);
+
+		if (!Progress)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.ResetTools: no progress subsystem (no game instance)"));
+			return;
+		}
+
+		Progress->ResetTools();
+		Progress->ShowOnScreen(10.f);
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbChargesCommand(
+	TEXT("pb.Charges"),
+	TEXT("pb.Charges <n> - sets the stock of explosive charges (saved). Where the tools are something to buy, each charge thrown or placed takes one."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		UProgressSubsystem* Progress = UProgressSubsystem::Get(World);
+
+		if (!Progress || Args.Num() == 0)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.Charges: needs a number and a progress subsystem"));
+			return;
+		}
+
+		Progress->AddCharges(FMath::Max(FCString::Atoi(*Args[0]), 0) - Progress->GetCharges());
 		Progress->ShowOnScreen(10.f);
 	}));
 

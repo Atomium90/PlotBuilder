@@ -137,6 +137,12 @@ public:
 	bool IsInfiniteMoney() const { return bInfiniteMoney; }
 
 	/**
+	 *  Pays Amount out of Money and broadcasts OnMoneyChanged (which writes it back to the progress). False, nothing paid, when
+	 *  Money is short. With bInfiniteMoney it always succeeds and takes nothing, as PurchaseRow does. Used by the PC's purchases.
+	 */
+	bool TrySpend(int32 Amount);
+
+	/**
 	 *  Whether the inventory side of the game works: picking a prop up (E), buying, placing a prop from the hotbar.
 	 *  A mission turns it off (APlayerCharacter::SetBuildingAllowed): the tool belt is the only way to take a house
 	 *  apart there. Pieces check it too, before a Placed one can be taken back by hand (ABuildablePiece::Interact).

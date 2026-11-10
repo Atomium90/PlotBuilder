@@ -30,6 +30,23 @@ void UHotbarComponent::BeginPlay()
 	}
 }
 
+bool UHotbarComponent::TrySpend(const int32 Amount)
+{
+	if (Amount <= 0 || bInfiniteMoney)
+	{
+		return true;
+	}
+
+	if (Money < Amount)
+	{
+		return false;
+	}
+
+	Money -= Amount;
+	OnMoneyChanged.Broadcast();
+	return true;
+}
+
 void UHotbarComponent::HandleMoneyChanged()
 {
 	if (UProgressSubsystem* Progress = UProgressSubsystem::Get(this))

@@ -78,6 +78,35 @@ void UProgressSubsystem::GrantTool(FName ToolId)
 	Persist();
 }
 
+int32 UProgressSubsystem::GetCharges() const
+{
+	return Progress->Charges;
+}
+
+void UProgressSubsystem::AddCharges(int32 Delta)
+{
+	const int32 NewStock = FMath::Max(Progress->Charges + Delta, 0);
+
+	if (NewStock == Progress->Charges)
+	{
+		return;
+	}
+
+	Progress->Charges = NewStock;
+	Persist();
+}
+
+bool UProgressSubsystem::TryConsumeCharge()
+{
+	if (Progress->Charges <= 0)
+	{
+		return false;
+	}
+
+	AddCharges(-1);
+	return true;
+}
+
 bool UProgressSubsystem::IsParcelOwned() const
 {
 	return Progress->bParcelOwned;
@@ -117,6 +146,12 @@ void UProgressSubsystem::Reset()
 	Persist();
 }
 
+void UProgressSubsystem::ResetTools()
+{
+	Progress->ResetTools();
+	Persist();
+}
+
 FString UProgressSubsystem::Describe() const
 {
 	TArray<FString> Tools;
@@ -133,8 +168,8 @@ FString UProgressSubsystem::Describe() const
 		? FString::Printf(TEXT("%d pieces, %d props, %d slots"), Home.Pieces.Num(), Home.Props.Num(), Home.Slots.Num())
 		: FString(TEXT("none"));
 
-	return FString::Printf(TEXT("Progress: money %d | tools %s | parcel %s | home %s | slot %s"),
-		Progress->Money, *FString::Join(Tools, TEXT(", ")), Progress->bParcelOwned ? TEXT("owned") : TEXT("not owned"), *HomeText, *SlotName);
+	return FString::Printf(TEXT("Progress: money %d | tools %s | charges %d | parcel %s | home %s | slot %s"),
+		Progress->Money, *FString::Join(Tools, TEXT(", ")), Progress->Charges, Progress->bParcelOwned ? TEXT("owned") : TEXT("not owned"), *HomeText, *SlotName);
 }
 
 void UProgressSubsystem::ShowOnScreen(float Seconds) const
