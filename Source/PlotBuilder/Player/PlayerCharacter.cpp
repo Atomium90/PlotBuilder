@@ -419,6 +419,14 @@ void APlayerCharacter::SetDestructionAllowed(bool bAllowed)
 	}
 }
 
+void APlayerCharacter::SetToolOwnershipEnforced(bool bEnforced)
+{
+	if (ToolbeltComponent)
+	{
+		ToolbeltComponent->SetOwnershipEnforced(bEnforced);
+	}
+}
+
 void APlayerCharacter::DebugShowStability(bool bShow)
 {
 	APlot* Plot = Cast<APlot>(UGameplayStatics::GetActorOfClass(GetWorld(), APlot::StaticClass()));

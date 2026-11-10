@@ -269,6 +269,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player")
 	void SetDestructionAllowed(bool bAllowed);
 
+	/**
+	 *  Makes the tools something to buy: a melee tool is usable only once the player owns it, and a charge takes one from the stock
+	 *  (see UToolbeltComponent::SetOwnershipEnforced). Off by default so a test map keeps every tool. Independent of the other switches.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Player")
+	void SetToolOwnershipEnforced(bool bEnforced);
+
 	/** Debug console command (open the console with ~, type "ListShop" + Enter): prints every ShopCatalog row's index, display name and cost, so Buy's index is known without any UI. */
 	UFUNCTION(Exec, Category = "Debug")
 	void ListShop() const;

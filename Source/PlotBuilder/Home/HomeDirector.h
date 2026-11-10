@@ -48,6 +48,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Home")
 	bool bDisableDestruction = true;
 
+	/** The tools are something to buy here too (APlayerCharacter::SetToolOwnershipEnforced): the belt shows the same tools as in the hub. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Home")
+	bool bEnforceToolOwnership = true;
+
 	/** Writes the pieces, props and inventory that are in the level to the progress save. Does nothing without a plot. */
 	UFUNCTION(BlueprintCallable, Category = "Home")
 	void SaveSnapshot();

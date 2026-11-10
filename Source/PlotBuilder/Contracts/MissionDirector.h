@@ -67,6 +67,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission")
 	bool bDisableBuilding = true;
 
+	/** Only the tools the player bought can be used, and a charge takes one from the stock (APlayerCharacter::SetToolOwnershipEnforced). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission")
+	bool bEnforceToolOwnership = true;
+
 	/** Seed when neither pb.SetSeed nor a Seed option gives one. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission|Defaults")
 	int32 DefaultSeed = 1;

@@ -29,6 +29,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hub")
 	bool bLockToolbelt = true;
 
+	/** The tools are something to buy here: the belt shows the ones the player owns and a padlock for the rest (APlayerCharacter::SetToolOwnershipEnforced). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hub")
+	bool bEnforceToolOwnership = true;
+
 	/** The pool the contract board draws its offers from (DA_ContractPool). The hub hands it to the contract subsystem and has the board renewed if a mission ended since the last draw. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hub")
 	TObjectPtr<UContractPool> ContractPool;

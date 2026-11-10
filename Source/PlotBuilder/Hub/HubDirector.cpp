@@ -77,6 +77,11 @@ void AHubDirector::ApplyHubInput()
 			}
 		}
 
+		if (bEnforceToolOwnership)
+		{
+			Character->SetToolOwnershipEnforced(true);
+		}
+
 		GetWorldTimerManager().ClearTimer(InputTimer);
 		return;
 	}

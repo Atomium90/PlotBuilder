@@ -106,6 +106,20 @@ public:
 
 	bool IsPaintingAllowed() const { return bPaintingAllowed; }
 
+	/**
+	 *  Whether the tools have to be bought. When on, a melee tool is usable only if UProgressSubsystem says the player owns it, and every
+	 *  charge thrown or placed takes one from the stock. Off by default, so a test map (Lvl_DemoTest) keeps every tool and unlimited
+	 *  charges; the hub, mission and home directors turn it on. Independent of the lock, of destruction and of painting.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
+	void SetOwnershipEnforced(bool bNewEnforced);
+
+	bool IsOwnershipEnforced() const { return bOwnershipEnforced; }
+
+	/** The charges in stock, or INDEX_NONE when charges are unlimited (ownership not enforced). */
+	UFUNCTION(BlueprintPure, Category = "Toolbelt")
+	int32 GetChargeStock() const;
+
 	bool IsBrushEquipped() const { return EquippedIndex == BrushSlotIndex; }
 
 	/** Whether Index can be equipped right now: in range, and either the Hands or a slot that neither the lock nor its own switch forbids. */
@@ -153,6 +167,7 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
@@ -180,9 +195,24 @@ private:
 	void HandleChargeDestroyed(AActor* DestroyedActor);
 
 	int32 EquippedIndex = HandsSlotIndex;
+	/** The id of the tool a slot holds in the save (the row names of DT_ToolShop), or none for a slot that is never sold: the hands, the charges (a stock, not a tool) and the brush. */
+	static FName ToolIdForSlot(int32 Index);
+
+	/** Takes one charge from the stock when ownership is enforced, and tells the player when there is none. False means do not spawn. */
+	bool TakeCharge();
+
+	/** Gives back a charge TakeCharge took, when the spawn that followed failed. */
+	void GiveBackCharge();
+
+	/** The progress changed (a purchase): redraw the belt, and fall back to the hands if the equipped tool is no longer usable. */
+	void HandleProgressChanged();
+
+	FDelegateHandle ProgressChangedHandle;
+
 	bool bLocked = false;
 	bool bDestructionAllowed = true;
 	bool bPaintingAllowed = true;
+	bool bOwnershipEnforced = false;
 
 	UPROPERTY()
 	TObjectPtr<AExplosiveCharge> ActiveCharge;

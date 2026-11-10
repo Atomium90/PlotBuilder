@@ -120,7 +120,7 @@ void AMissionDirector::BeginPlay()
 		}
 	}
 
-	if (bDisableBuilding)
+	if (bDisableBuilding || bEnforceToolOwnership)
 	{
 		ApplyMissionInput();
 	}
@@ -135,7 +135,16 @@ void AMissionDirector::ApplyMissionInput()
 {
 	if (APlayerCharacter* Character = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0)))
 	{
-		Character->SetBuildingAllowed(false);
+		if (bDisableBuilding)
+		{
+			Character->SetBuildingAllowed(false);
+		}
+
+		if (bEnforceToolOwnership)
+		{
+			Character->SetToolOwnershipEnforced(true);
+		}
+
 		GetWorldTimerManager().ClearTimer(InputTimer);
 		return;
 	}

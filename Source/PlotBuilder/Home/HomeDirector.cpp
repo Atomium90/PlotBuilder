@@ -201,6 +201,7 @@ void AHomeDirector::ApplyToPlayer()
 	GetWorldTimerManager().ClearTimer(PlayerTimer);
 
 	Character->SetDestructionAllowed(!bDisableDestruction);
+	Character->SetToolOwnershipEnforced(bEnforceToolOwnership);
 
 	if (bRestoreOnBeginPlay)
 	{

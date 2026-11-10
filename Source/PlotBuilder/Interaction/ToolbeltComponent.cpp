@@ -7,6 +7,8 @@
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "PlotBuilder.h"
+#include "Progress/ProgressSubsystem.h"
+#include "UI/PlayerMessages.h"
 
 UToolbeltComponent::UToolbeltComponent()
 {
@@ -25,6 +27,27 @@ void UToolbeltComponent::BeginPlay()
 	}
 
 	SpawnMeleeTools();
+
+	// A purchase at the PC changes what the belt may show: listen to the progress, and let go in EndPlay.
+	if (UProgressSubsystem* Progress = UProgressSubsystem::Get(this))
+	{
+		ProgressChangedHandle = Progress->OnProgressChanged.AddUObject(this, &UToolbeltComponent::HandleProgressChanged);
+	}
+}
+
+void UToolbeltComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (ProgressChangedHandle.IsValid())
+	{
+		if (UProgressSubsystem* Progress = UProgressSubsystem::Get(this))
+		{
+			Progress->OnProgressChanged.Remove(ProgressChangedHandle);
+		}
+
+		ProgressChangedHandle.Reset();
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void UToolbeltComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -66,6 +89,12 @@ bool UToolbeltComponent::IsSlotAvailable(int32 Index) const
 	if (Index == HandsSlotIndex)
 	{
 		return true;
+	}
+
+	// A tool the player has not bought is not on the belt at all (the belt draws it as a padlock).
+	if (!IsSlotOwned(Index))
+	{
+		return false;
 	}
 
 	if (bLocked)
@@ -184,7 +213,11 @@ FText UToolbeltComponent::GetSlotHint(int32 Index) const
 	case HandsSlotIndex:
 		return NSLOCTEXT("Toolbelt", "HandsHint", "Left click: grab  |  Right click: throw");
 	case ChargeSlotIndex:
-		return NSLOCTEXT("Toolbelt", "ChargeHint", "Left click: place  |  Right click: throw, then detonate");
+	{
+		const FText Hint = NSLOCTEXT("Toolbelt", "ChargeHint", "Left click: place  |  Right click: throw, then detonate");
+		const int32 Stock = GetChargeStock();
+		return Stock == INDEX_NONE ? Hint : FText::Format(NSLOCTEXT("Toolbelt", "ChargeHintStock", "{0}  |  {1} in stock"), Hint, Stock);
+	}
 	case FirstMeleeSlotIndex:
 	case FirstMeleeSlotIndex + 1:
 		return NSLOCTEXT("Toolbelt", "MeleeHint", "Left click: swing");
@@ -197,9 +230,114 @@ FText UToolbeltComponent::GetSlotHint(int32 Index) const
 	}
 }
 
+FName UToolbeltComponent::ToolIdForSlot(const int32 Index)
+{
+	switch (Index)
+	{
+	case FirstMeleeSlotIndex:
+		return FName("Sledgehammer");
+	case FirstMeleeSlotIndex + 1:
+		return FName("Crowbar");
+	case FirstMeleeSlotIndex + 2:
+		return FName("Jackhammer");
+	default:
+		return NAME_None;
+	}
+}
+
 bool UToolbeltComponent::IsSlotOwned(int32 Index) const
 {
-	return Index >= 0 && Index < NumSlots;
+	if (Index < 0 || Index >= NumSlots)
+	{
+		return false;
+	}
+
+	if (!bOwnershipEnforced)
+	{
+		return true;
+	}
+
+	const FName ToolId = ToolIdForSlot(Index);
+
+	if (ToolId.IsNone())
+	{
+		return true;
+	}
+
+	const UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
+	return Progress && Progress->OwnsTool(ToolId);
+}
+
+void UToolbeltComponent::SetOwnershipEnforced(const bool bNewEnforced)
+{
+	if (bOwnershipEnforced == bNewEnforced)
+	{
+		return;
+	}
+
+	bOwnershipEnforced = bNewEnforced;
+
+	// Same as the other switches: a tool in hand that is no longer owned goes back to the hands.
+	if (!IsSlotAvailable(EquippedIndex))
+	{
+		EquipSlotInternal(HandsSlotIndex);
+	}
+
+	OnBeltChanged.Broadcast();
+}
+
+int32 UToolbeltComponent::GetChargeStock() const
+{
+	if (!bOwnershipEnforced)
+	{
+		return INDEX_NONE;
+	}
+
+	const UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
+	return Progress ? Progress->GetCharges() : 0;
+}
+
+bool UToolbeltComponent::TakeCharge()
+{
+	if (!bOwnershipEnforced)
+	{
+		return true;
+	}
+
+	UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
+
+	if (Progress && Progress->TryConsumeCharge())
+	{
+		return true;
+	}
+
+	if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
+	{
+		Messages->Notify(NSLOCTEXT("Toolbelt", "NoCharge", "No charge left. Buy more at the PC."), EMessageTone::Warning);
+	}
+
+	return false;
+}
+
+void UToolbeltComponent::GiveBackCharge()
+{
+	if (bOwnershipEnforced)
+	{
+		if (UProgressSubsystem* Progress = UProgressSubsystem::Get(this))
+		{
+			Progress->AddCharges(1);
+		}
+	}
+}
+
+void UToolbeltComponent::HandleProgressChanged()
+{
+	if (!IsSlotAvailable(EquippedIndex))
+	{
+		EquipSlotInternal(HandsSlotIndex);
+	}
+
+	OnBeltChanged.Broadcast();
 }
 
 int32 UToolbeltComponent::CountMissingTools() const
@@ -344,6 +482,11 @@ void UToolbeltComponent::SpawnAndThrowCharge()
 		return;
 	}
 
+	if (!TakeCharge())
+	{
+		return;
+	}
+
 	FVector ViewLocation;
 	FRotator ViewRotation;
 	OwnerController->GetPlayerViewPoint(ViewLocation, ViewRotation);
@@ -352,7 +495,10 @@ void UToolbeltComponent::SpawnAndThrowCharge()
 	if (AExplosiveCharge* Charge = SpawnCharge(ViewLocation + ViewForward * ChargeSpawnDistance, ViewRotation, ESpawnActorCollisionHandlingMethod::Undefined))
 	{
 		Charge->Throw(ViewForward * ChargeThrowSpeed);
+		return;
 	}
+
+	GiveBackCharge();
 }
 
 void UToolbeltComponent::PlaceCharge()
@@ -392,11 +538,20 @@ void UToolbeltComponent::PlaceCharge()
 		return;
 	}
 
+	// A charge is taken only once there is a surface to put it on, so a miss costs nothing.
+	if (!TakeCharge())
+	{
+		return;
+	}
+
 	// AlwaysSpawn: the spawn point is right on the wall, where the default adjustment would push the charge away. PlaceOn puts it exactly.
 	if (AExplosiveCharge* Charge = SpawnCharge(Hit.ImpactPoint, FRotator::ZeroRotator, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 	{
 		Charge->PlaceOn(Hit);
+		return;
 	}
+
+	GiveBackCharge();
 }
 
 void UToolbeltComponent::HandleChargeDestroyed(AActor* DestroyedActor)
