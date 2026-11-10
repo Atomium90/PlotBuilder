@@ -503,6 +503,53 @@ static FAutoConsoleCommandWithWorldAndArgs PbShowNotebookCommand(
 		}
 	}));
 
+static FAutoConsoleCommandWithWorldAndArgs PbSettleCommand(
+	TEXT("pb.Settle"),
+	TEXT("pb.Settle - ends the mission as the truck does, without travelling: works the report out, pays it into the player's money if a contract was taken (once: a second run does nothing until the mission starts again), closes the contract and keeps the report for the hub's debrief (pb.ShowDebrief). Needs the level's AMissionDirector."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		UMissionResultSubsystem* Results = World ? UMissionResultSubsystem::Get(World) : nullptr;
+
+		if (!Results)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.Settle: needs the level's AMissionDirector"));
+			return;
+		}
+
+		FDebriefResult Report;
+
+		if (!Results->Settle(Report))
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.Settle: this mission is already settled (or has no director), nothing was paid."));
+			return;
+		}
+
+		const UProgressSubsystem* Progress = UProgressSubsystem::Get(World);
+		UE_LOG(LogPlotBuilder, Log, TEXT("pb.Settle: payout %d, money now %d."), Report.Payout, Progress ? Progress->GetMoney() : 0);
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbShowDebriefCommand(
+	TEXT("pb.ShowDebrief"),
+	TEXT("pb.ShowDebrief - prints the report of the last mission that ended (pb.Settle, or the truck), and whether the hub has shown it yet."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		const UContractSubsystem* Contracts = World ? UContractSubsystem::Get(World) : nullptr;
+
+		if (!Contracts || !Contracts->HasLastResult())
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.ShowDebrief: no mission has ended yet this session."));
+			return;
+		}
+
+		const FString Text = FString::Printf(TEXT("Last report (%s)\n%s"), Contracts->HasUnseenResult() ? TEXT("not shown yet") : TEXT("already shown"), *Contracts->GetLastResult().ToString());
+		UE_LOG(LogPlotBuilder, Log, TEXT("%s"), *Text);
+
+		if (GEngine)
+		{
+			PBDebug::Message(UContractSubsystem::MessageKey + 12, 30.f, FColor::Cyan, Text);
+		}
+	}));
+
 static FAutoConsoleCommandWithWorldAndArgs PbForbidToolCommand(
 	TEXT("pb.ForbidTool"),
 	TEXT("pb.ForbidTool <Sledgehammer|Crowbar|Jackhammer|Charge|none> - forbids a tool for the mission as if the contract had: the first damage dealt with it warns on screen and costs a share of what was earned in the report (pb.EndMission). 'none' lifts it. Starting a mission again (pb.SetSeed, pb.AcceptOffer) sets it from the contract. Without an argument, prints the current one."),

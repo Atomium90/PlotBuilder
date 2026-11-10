@@ -6,14 +6,25 @@
 
 class UWorld;
 
+/** What using a travel point does besides opening its level. */
+UENUM(BlueprintType)
+enum class ETravelRole : uint8
+{
+	/** Opens Destination and nothing else: the home's access point, a debug door. */
+	Plain,
+	/** The truck in the hub: refuses to leave until the player has taken a contract at the PC. */
+	StartMission,
+	/** The truck on the mission site: ends the mission (report, payment, debrief for the hub), then travels. Asks first if the job is not finished. */
+	EndMission
+};
+
 /**
  *  A door to another level: using it opens Destination. One class serves the truck (hub to mission, with a
  *  random seed), the home's access point (hub to Lvl_Home, only once the parcel is owned) and the way back
- *  (mission to hub); what changes is data on the placed actor.
+ *  (mission to hub); what changes is data on the placed actor, chiefly TravelRole.
  *
- *  The mission level reads its options from the travel URL (AMissionDirector), so the truck only has to put
- *  them in Options. The contract subsystem will replace this on Nov 10 by carrying the chosen contract and its
- *  seed itself; the return trigger is replaced on Nov 11 by the end-of-mission interaction.
+ *  The mission level reads the contract the player took from UContractSubsystem (AMissionDirector); the travel options
+ *  below are only the fallback for a trip with no contract.
  */
 UCLASS()
 class ATravelPoint : public AHubInteractable
@@ -27,6 +38,14 @@ public:
 	/** The level to open. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Travel")
 	TSoftObjectPtr<UWorld> Destination;
+
+	/** What using it does besides travelling. See ETravelRole. (Not named Role: AActor already has a replication Role.) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Travel")
+	ETravelRole TravelRole = ETravelRole::Plain;
+
+	/** StartMission only: let the truck leave with no contract taken (a debug trip: the mission then falls back to the travel options and the level's values). Off for the game. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Travel", meta = (EditCondition = "TravelRole == ETravelRole::StartMission"))
+	bool bAllowWithoutContract = false;
 
 	/** Travel options, without the first "?", separated by "?" (for example "Archetype=twostorey?Type=partial"). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Travel")
@@ -51,4 +70,16 @@ private:
 
 	/** On-screen key of the "no destination" debug line (a refused trip goes to the player through UPlayerMessages). */
 	static constexpr int32 NoDestinationMessageKey = 7621;
+
+	/** Seconds the player has, after the unfinished-job warning, to press E again and leave anyway. */
+	static constexpr double LeaveConfirmSeconds = 5.0;
+
+	/**
+	 *  The end-of-mission part of Use: false if the player must not leave yet (the job is not finished and they have not
+	 *  confirmed), true once the mission is settled (or if this world has no mission to settle).
+	 */
+	bool TryEndMission();
+
+	/** World time of the last unfinished-job warning: a second press of E within LeaveConfirmSeconds of it confirms. */
+	double LeaveWarnedAt = -1000.0;
 };

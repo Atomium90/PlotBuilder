@@ -1,6 +1,7 @@
 #include "Contracts/MissionResultSubsystem.h"
 #include "Buildables/BuildablePiece.h"
 #include "Contracts/ContractEvaluator.h"
+#include "Contracts/ContractSubsystem.h"
 #include "Contracts/MissionBinding.h"
 #include "Contracts/MissionDirector.h"
 #include "Destruction/CrushDetectionComponent.h"
@@ -14,6 +15,7 @@
 #include "Interaction/PhysicsManipulationComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "PlotBuilder.h"
+#include "Progress/ProgressSubsystem.h"
 #include "Props/PhysicsProp.h"
 #include "UI/PlayerMessages.h"
 
@@ -72,6 +74,7 @@ void UMissionResultSubsystem::ResetCounters()
 	ExplosionEvents = 0;
 	bForbiddenToolUsed = false;
 	NotebookStamp = -1.0;
+	bSettled = false;
 }
 
 void UMissionResultSubsystem::SetForbiddenTool(FName ToolId)
@@ -273,6 +276,45 @@ const FNotebookData& UMissionResultSubsystem::GetLiveNotebook(bool bForceRefresh
 	CachedNotebook = MissionNotebook::Build(Director->GetMissionContract(), BuildSnapshot(), Rules ? Rules->Scoring : FScoringParams());
 
 	return CachedNotebook;
+}
+
+bool UMissionResultSubsystem::Settle(FDebriefResult& OutResult)
+{
+	if (bSettled)
+	{
+		return false;
+	}
+
+	AMissionDirector* Director = AMissionDirector::Find(this);
+
+	if (!Director)
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("UMissionResultSubsystem::Settle: needs the level's AMissionDirector, nothing was paid."));
+		return false;
+	}
+
+	FString Text;
+	OutResult = Evaluate(Director->GetMissionContract(), Text);
+	bSettled = true;
+
+	int32 Due = 0;
+
+	if (UContractSubsystem* Contracts = UContractSubsystem::Get(this))
+	{
+		Due = Contracts->CompleteActiveContract(OutResult);
+	}
+
+	if (Due > 0)
+	{
+		if (UProgressSubsystem* Progress = UProgressSubsystem::Get(this))
+		{
+			Progress->AddMoney(Due);
+		}
+	}
+
+	UE_LOG(LogPlotBuilder, Log, TEXT("UMissionResultSubsystem::Settle: payout %d, %d paid.\n%s"), OutResult.Payout, Due, *Text);
+
+	return true;
 }
 
 FDebriefResult UMissionResultSubsystem::Evaluate(const FContractDefinition& Contract, FString& OutText) const

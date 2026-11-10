@@ -103,10 +103,14 @@ void UContractSubsystem::ClearActiveContract()
 	OnActiveContractChanged.Broadcast();
 }
 
-void UContractSubsystem::CompleteActiveContract(const FDebriefResult& Result)
+int32 UContractSubsystem::CompleteActiveContract(const FDebriefResult& Result)
 {
+	// Money is due only for a contract the player took, and only once: the contract is closed right here.
+	const int32 Due = bHasActive ? FMath::Max(0, Result.Payout) : 0;
+
 	LastResult = Result;
 	bHasLastResult = true;
+	bResultUnseen = true;
 
 	// The player is back at the hub with a new board to read.
 	bOffersStale = true;
@@ -114,6 +118,20 @@ void UContractSubsystem::CompleteActiveContract(const FDebriefResult& Result)
 	Active = FContractDefinition();
 	bHasActive = false;
 	OnActiveContractChanged.Broadcast();
+
+	return Due;
+}
+
+bool UContractSubsystem::ConsumeUnseenResult(FDebriefResult& OutResult)
+{
+	if (!bResultUnseen)
+	{
+		return false;
+	}
+
+	bResultUnseen = false;
+	OutResult = LastResult;
+	return true;
 }
 
 FString UContractSubsystem::Describe(const FContractDefinition& Contract)

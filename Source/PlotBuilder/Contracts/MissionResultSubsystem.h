@@ -80,6 +80,17 @@ public:
 	static FString DescribeSnapshot(const FMissionSnapshot& Snapshot);
 
 	/**
+	 *  Ends the mission for good: works the report out against the mission's contract, closes the active contract on
+	 *  UContractSubsystem (which keeps the report for the hub's debrief and says how much is due), and adds that money to the
+	 *  player's. Done once per mission: a second call changes nothing and returns false, so pressing E twice pays once. OutResult
+	 *  gets the report when it returns true. Nothing is paid for a mission started without a contract (see CompleteActiveContract).
+	 *  The caller travels afterwards.
+	 */
+	bool Settle(FDebriefResult& OutResult);
+
+	bool IsSettled() const { return bSettled; }
+
+	/**
 	 *  The notebook for the mission's contract as the level stands. The level is not scanned more than twice a second whoever asks
 	 *  (the notebook, the progress ring and the leave-the-site card all read this): a call in between returns the last one.
 	 *  ForceRefresh reads the level now. Outside a mission it is empty and complete.
@@ -93,6 +104,9 @@ private:
 
 	FNotebookData CachedNotebook;
 	double NotebookStamp = -1.0;
+
+	/** See Settle. Cleared when the mission starts again in the same world (pb.SetSeed, pb.AcceptOffer). */
+	bool bSettled = false;
 
 	/** The rules asset the scoring lives on: the one the director gave, else the one on the player's crush component (optional there, so it may be empty). */
 	const UDemolitionRules* FindRules() const;

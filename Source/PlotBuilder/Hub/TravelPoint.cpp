@@ -1,4 +1,7 @@
 #include "TravelPoint.h"
+#include "Contracts/ContractSubsystem.h"
+#include "Contracts/MissionDirector.h"
+#include "Contracts/MissionResultSubsystem.h"
 #include "Debug/DebugDisplay.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
@@ -33,6 +36,59 @@ FString ATravelPoint::BuildOptions() const
 	return Result;
 }
 
+bool ATravelPoint::TryEndMission()
+{
+	UMissionResultSubsystem* Results = UMissionResultSubsystem::Get(this);
+
+	if (!Results || !AMissionDirector::Find(this))
+	{
+		// A mission truck in a level that has no mission: nothing to settle, it is a plain door.
+		UE_LOG(LogPlotBuilder, Warning, TEXT("ATravelPoint %s: TravelRole is EndMission but this level has no AMissionDirector, travelling without a report."), *GetName());
+		return true;
+	}
+
+	// A finished job leaves without a question. An unfinished one is warned about, and a second press of E soon after confirms.
+	const FNotebookData& Notebook = Results->GetLiveNotebook(true);
+
+	if (!Notebook.bJobComplete && !Results->IsSettled())
+	{
+		const double Now = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.0;
+
+		if (Now - LeaveWarnedAt > LeaveConfirmSeconds)
+		{
+			LeaveWarnedAt = Now;
+
+			const int32 Percent = FMath::FloorToInt(Notebook.Completion * 100.f);
+			FText Reason;
+
+			if (Notebook.Completion < 1.f && Notebook.PendingFurniture > 0)
+			{
+				Reason = FText::Format(NSLOCTEXT("Hub", "LeaveUnfinishedBoth", "{0} % demolished, {1} to deliver"), Percent, Notebook.PendingFurniture);
+			}
+			else if (Notebook.Completion < 1.f)
+			{
+				Reason = FText::Format(NSLOCTEXT("Hub", "LeaveUnfinishedHouse", "{0} % demolished"), Percent);
+			}
+			else
+			{
+				Reason = FText::Format(NSLOCTEXT("Hub", "LeaveUnfinishedFurniture", "{0} to deliver"), Notebook.PendingFurniture);
+			}
+
+			if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
+			{
+				Messages->Notify(FText::Format(NSLOCTEXT("Hub", "LeaveUnfinished", "Job not finished: {0}. Press E again within {1} seconds to leave."), Reason, FMath::RoundToInt(LeaveConfirmSeconds)), EMessageTone::Warning, static_cast<float>(LeaveConfirmSeconds));
+			}
+
+			return false;
+		}
+	}
+
+	FDebriefResult Report;
+	Results->Settle(Report);
+
+	return true;
+}
+
 void ATravelPoint::Use(AActor* User)
 {
 	if (Destination.IsNull())
@@ -58,6 +114,26 @@ void ATravelPoint::Use(AActor* User)
 
 			return;
 		}
+	}
+
+	if (TravelRole == ETravelRole::StartMission && !bAllowWithoutContract)
+	{
+		const UContractSubsystem* Contracts = UContractSubsystem::Get(this);
+
+		if (!Contracts || !Contracts->HasActiveContract())
+		{
+			if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
+			{
+				Messages->Notify(NSLOCTEXT("Hub", "ContractRequired", "Pick a contract at the PC first."), EMessageTone::Warning);
+			}
+
+			return;
+		}
+	}
+
+	if (TravelRole == ETravelRole::EndMission && !TryEndMission())
+	{
+		return;
 	}
 
 	const FString TravelOptions = BuildOptions();

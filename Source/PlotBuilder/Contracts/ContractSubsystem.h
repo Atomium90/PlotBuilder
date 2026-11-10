@@ -72,13 +72,24 @@ public:
 	/** Forgets the active contract: the next mission falls back to its travel options and editor values. */
 	void ClearActiveContract();
 
-	/** A mission has ended with that report: it is kept for the hub, the active contract is closed and the board is renewed on return. */
-	void CompleteActiveContract(const FDebriefResult& Result);
+	/**
+	 *  A mission has ended with that report: it is kept for the hub (and marked as not shown yet), the active contract is
+	 *  closed and the board is renewed on return. Returns the money now due to the player: the payout if there was an active
+	 *  contract, 0 if there was none (a mission started from travel options has no client to pay) or if the contract was
+	 *  already completed. The caller adds it to the player's money, so a contract can never be paid twice.
+	 */
+	int32 CompleteActiveContract(const FDebriefResult& Result);
 
 	bool HasLastResult() const { return bHasLastResult; }
 
 	/** The report of the last mission that ended. Only meaningful when HasLastResult. */
 	const FDebriefResult& GetLastResult() const { return LastResult; }
+
+	/** The last report has not been shown to the player yet (the hub shows it once, on arrival). */
+	bool HasUnseenResult() const { return bResultUnseen; }
+
+	/** Hands out the last report if it has not been shown yet and marks it as shown. False, OutResult untouched, when it was already. GetLastResult still returns it. */
+	bool ConsumeUnseenResult(FDebriefResult& OutResult);
 
 	/** One line for a contract: client, type, archetype, requested size, area, time, pay, conditions, seed. */
 	static FString Describe(const FContractDefinition& Contract);
@@ -111,6 +122,7 @@ private:
 
 	bool bHasActive = false;
 	bool bHasLastResult = false;
+	bool bResultUnseen = false;
 
 	int32 PlayerTier = 0;
 
