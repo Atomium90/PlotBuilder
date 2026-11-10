@@ -93,6 +93,8 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 
 	Result.FurnitureLoss = ValueAsked > 0.f ? FMath::Clamp(1.f - ValueKept / ValueAsked, 0.f, 1.f) : 0.f;
 	Result.Safety = FMath::Min(Params.SafetyCap, Snapshot.CrushEvents * Params.CrushPenalty + Snapshot.ExplosionEvents * Params.ExplosionPenalty);
+	Result.CrushEvents = Snapshot.CrushEvents;
+	Result.ExplosionEvents = Snapshot.ExplosionEvents;
 
 	// Once for the whole mission, whatever the number of uses.
 	Result.ForbiddenTool = Snapshot.bForbiddenToolUsed ? Params.ForbiddenToolPenalty : 0.f;

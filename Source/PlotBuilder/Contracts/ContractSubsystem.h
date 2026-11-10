@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Contracts/ContractTypes.h"
+#include "Contracts/MissionNotebook.h"
 #include "ContractSubsystem.generated.h"
 
 class UContractPool;
@@ -82,12 +83,18 @@ public:
 	 *  contract, 0 if there was none (a mission started from travel options has no client to pay) or if the contract was
 	 *  already completed. The caller adds it to the player's money, so a contract can never be paid twice.
 	 */
-	int32 CompleteActiveContract(const FDebriefResult& Result);
+	int32 CompleteActiveContract(const FDebriefResult& Result, const FNotebookData& FinalNotebook = FNotebookData());
 
 	bool HasLastResult() const { return bHasLastResult; }
 
 	/** The report of the last mission that ended. Only meaningful when HasLastResult. */
 	const FDebriefResult& GetLastResult() const { return LastResult; }
+
+	/** The money that report really put into the player's account (the payout, or 0 for a mission with no contract). */
+	int32 GetLastPaid() const { return LastPaid; }
+
+	/** The notebook of that mission as it stood when it ended (the contract, and the fate of each piece, zone and tool): what the debrief lists next to the report. Empty if the mission gave none. */
+	const FNotebookData& GetLastNotebook() const { return LastNotebook; }
 
 	/** The last report has not been shown to the player yet (the hub shows it once, on arrival). */
 	bool HasUnseenResult() const { return bResultUnseen; }
@@ -124,9 +131,13 @@ private:
 	UPROPERTY()
 	FDebriefResult LastResult;
 
+	UPROPERTY()
+	FNotebookData LastNotebook;
+
 	bool bHasActive = false;
 	bool bHasLastResult = false;
 	bool bResultUnseen = false;
+	int32 LastPaid = 0;
 
 	int32 PlayerTier = 0;
 

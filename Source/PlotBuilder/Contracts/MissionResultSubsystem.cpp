@@ -301,7 +301,8 @@ bool UMissionResultSubsystem::Settle(FDebriefResult& OutResult)
 
 	if (UContractSubsystem* Contracts = UContractSubsystem::Get(this))
 	{
-		Due = Contracts->CompleteActiveContract(OutResult);
+		// The debrief lists the fate of each piece next to the report: the notebook as it stands at this very moment goes with it.
+		Due = Contracts->CompleteActiveContract(OutResult, GetLiveNotebook(true));
 	}
 
 	if (Due > 0)

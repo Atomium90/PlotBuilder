@@ -73,6 +73,8 @@ FNotebookData MissionNotebook::Build(const FContractDefinition& Contract, const 
 		TArray<FNotebookLine> Ranked[4];
 		int32 Delivered = 0;
 		int32 Lost = 0;
+		int32 ValueKept = 0;
+		int32 ValueAsked = 0;
 		FString LastPending;
 
 		for (const FSalvageResult& Item : Snapshot.Salvage)
@@ -80,6 +82,12 @@ FNotebookData MissionNotebook::Build(const FContractDefinition& Contract, const 
 			FNotebookLine Line;
 			Line.Name = Item.Name;
 			int32 Rank = 1;
+
+			// What the client counts for the piece: its value through the health curve if it was delivered, nothing otherwise.
+			const int32 Kept = Item.bDelivered ? FMath::RoundToInt(static_cast<float>(Item.Value) * UContractEvaluator::FurnitureValueMultiplier(Params, Item.HPRatio)) : 0;
+			Line.Figure = FString::Printf(TEXT("%d / %d"), Kept, Item.Value);
+			ValueKept += Kept;
+			ValueAsked += Item.Value;
 
 			if (Item.bDelivered)
 			{
@@ -122,6 +130,7 @@ FNotebookData MissionNotebook::Build(const FContractDefinition& Contract, const 
 		}
 
 		const int32 Total = Snapshot.Salvage.Num();
+		Section.Figure = FString::Printf(TEXT("%d kept of %d"), ValueKept, ValueAsked);
 		Section.Count = FString::Printf(TEXT("%d / %d"), Delivered, Total);
 		Section.Summary = FString::Printf(TEXT("%d of %d delivered"), Delivered, Total);
 

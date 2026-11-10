@@ -324,6 +324,13 @@ struct FDebriefResult
 	UPROPERTY(BlueprintReadOnly, Category = "Debrief")
 	float ForbiddenTool = 0.f;
 
+	/** The safety events behind Safety, so the debrief can name them (a collapse that caught the player, an explosion in their face). */
+	UPROPERTY(BlueprintReadOnly, Category = "Debrief")
+	int32 CrushEvents = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Debrief")
+	int32 ExplosionEvents = 0;
+
 	/** The share of the earned money taken away, after the cap. */
 	UPROPERTY(BlueprintReadOnly, Category = "Debrief")
 	float Penalty = 0.f;

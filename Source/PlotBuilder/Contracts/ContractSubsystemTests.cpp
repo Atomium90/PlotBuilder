@@ -68,6 +68,7 @@ bool FPBSubsystemPaidOnceTest::RunTest(const FString& Parameters)
 	const FDebriefResult Report = PBSubsystemTests::MakeReport(274);
 
 	TestEqual(TEXT("first completion: the payout is due"), Contracts->CompleteActiveContract(Report), 274);
+	TestEqual(TEXT("and remembered as paid, for the debrief"), Contracts->GetLastPaid(), 274);
 	TestFalse(TEXT("contract is closed"), Contracts->HasActiveContract());
 	TestEqual(TEXT("second completion: nothing is due"), Contracts->CompleteActiveContract(Report), 0);
 
@@ -82,6 +83,7 @@ bool FPBSubsystemNoContractTest::RunTest(const FString& Parameters)
 
 	TestFalse(TEXT("no contract taken"), Contracts->HasActiveContract());
 	TestEqual(TEXT("nothing is due"), Contracts->CompleteActiveContract(PBSubsystemTests::MakeReport(500)), 0);
+	TestEqual(TEXT("nothing was paid"), Contracts->GetLastPaid(), 0);
 	TestTrue(TEXT("the report is kept"), Contracts->HasLastResult());
 	TestEqual(TEXT("the report is the one given"), Contracts->GetLastResult().Payout, 500);
 	TestTrue(TEXT("and not shown yet"), Contracts->HasUnseenResult());
@@ -113,6 +115,29 @@ bool FPBSubsystemShownOnceTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("a new mission, a new report to show"), Contracts->ConsumeUnseenResult(Shown));
 	TestEqual(TEXT("the new one"), Shown.Payout, 90);
+
+	return true;
+}
+
+// The notebook as the mission ended goes with the report, for the debrief to list next to it.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBSubsystemNotebookKeptTest, "PlotBuilder.Contracts.Subsystem.NotebookKeptWithReport", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBSubsystemNotebookKeptTest::RunTest(const FString& Parameters)
+{
+	UContractSubsystem* Contracts = PBSubsystemTests::MakeSubsystemWithBoard();
+	Contracts->AcceptOffer(0);
+
+	FNotebookData Notebook;
+	Notebook.Completion = 0.8f;
+	Notebook.Sections.AddDefaulted();
+
+	Contracts->CompleteActiveContract(PBSubsystemTests::MakeReport(274), Notebook);
+
+	TestNearlyEqual(TEXT("completion kept"), Contracts->GetLastNotebook().Completion, 0.8f, 0.001f);
+	TestEqual(TEXT("sections kept"), Contracts->GetLastNotebook().Sections.Num(), 1);
+
+	// Completing without a notebook (a debug trip) leaves an empty one, not the previous mission's.
+	Contracts->CompleteActiveContract(PBSubsystemTests::MakeReport(10));
+	TestEqual(TEXT("replaced by an empty one"), Contracts->GetLastNotebook().Sections.Num(), 0);
 
 	return true;
 }

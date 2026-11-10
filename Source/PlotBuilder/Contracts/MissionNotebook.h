@@ -51,6 +51,10 @@ struct FNotebookLine
 	/** Share of the thing that is damaged, 0 to 1, when a bar is worth drawing; -1 for no bar. */
 	UPROPERTY(BlueprintReadOnly, Category = "Notebook")
 	float Damage = -1.f;
+
+	/** A piece of furniture: the value the client counts for it over the value it asked for ("300 / 400"), after the health curve. Empty for the other lines. The debrief shows it. */
+	UPROPERTY(BlueprintReadOnly, Category = "Notebook")
+	FString Figure;
 };
 
 /** A group of lines under one title. */
@@ -75,6 +79,10 @@ struct FNotebookSection
 
 	UPROPERTY(BlueprintReadOnly, Category = "Notebook")
 	FString Summary;
+
+	/** The furniture section only: what the client keeps over what it asked for ("550 kept of 730"). Empty for the other sections. */
+	UPROPERTY(BlueprintReadOnly, Category = "Notebook")
+	FString Figure;
 
 	/** Ok when nothing is wrong or left to do, Warning otherwise. */
 	UPROPERTY(BlueprintReadOnly, Category = "Notebook")

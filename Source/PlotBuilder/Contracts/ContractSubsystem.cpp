@@ -108,12 +108,14 @@ void UContractSubsystem::ClearActiveContract()
 	OnActiveContractChanged.Broadcast();
 }
 
-int32 UContractSubsystem::CompleteActiveContract(const FDebriefResult& Result)
+int32 UContractSubsystem::CompleteActiveContract(const FDebriefResult& Result, const FNotebookData& FinalNotebook)
 {
 	// Money is due only for a contract the player took, and only once: the contract is closed right here.
 	const int32 Due = bHasActive ? FMath::Max(0, Result.Payout) : 0;
 
 	LastResult = Result;
+	LastNotebook = FinalNotebook;
+	LastPaid = Due;
 	bHasLastResult = true;
 	bResultUnseen = true;
 

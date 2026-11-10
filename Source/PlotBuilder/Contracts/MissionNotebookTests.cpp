@@ -69,6 +69,11 @@ bool FPBNotebookFurnitureTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("second: to do, on the plot"), Section->Lines[1].State, FString(TEXT("Still on the plot")));
 	TestEqual(TEXT("third: to do, outside"), Section->Lines[2].State, FString(TEXT("Left outside the plot")));
 	TestEqual(TEXT("fourth: delivered"), Section->Lines[3].State, FString(TEXT("Delivered, 90 %")));
+
+	// A piece worth 100 at 90 % health is worth 75 to the client (the default curve: 0.5 at 0.8, 1.0 at 1.0). The four others are worth nothing.
+	TestEqual(TEXT("figure of the delivered piece"), Section->Lines[3].Figure, FString(TEXT("75 / 100")));
+	TestEqual(TEXT("figure of a carried piece"), Section->Lines[0].Figure, FString(TEXT("0 / 100")));
+	TestEqual(TEXT("figure of the section"), Section->Figure, FString(TEXT("75 kept of 500")));
 	TestTrue(TEXT("last: lost"), Section->Lines[4].Status == ENotebookState::Lost);
 	TestEqual(TEXT("count"), Section->Count, FString(TEXT("1 / 5")));
 	TestEqual(TEXT("summary"), Section->Summary, FString(TEXT("1 of 5 delivered, 3 still to deliver, 1 destroyed")));
