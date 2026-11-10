@@ -1,5 +1,7 @@
 #include "PCTerminalWidget.h"
 #include "MissionBoardWidget.h"
+#include "ParcelTabWidget.h"
+#include "ToolsTabWidget.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
@@ -13,6 +15,17 @@ void UPCTerminalWidget::NativeOnInitialized()
 	ContractsTab->OnClicked.AddUniqueDynamic(this, &UPCTerminalWidget::HandleContractsTab);
 	ToolsTab->OnClicked.AddUniqueDynamic(this, &UPCTerminalWidget::HandleToolsTab);
 	ParcelTab->OnClicked.AddUniqueDynamic(this, &UPCTerminalWidget::HandleParcelTab);
+
+	// A purchase changes the money: the balance in the tab bar follows.
+	if (ToolsPage)
+	{
+		ToolsPage->OnPurchased.AddUObject(this, &UPCTerminalWidget::RefreshBalance);
+	}
+
+	if (ParcelPage)
+	{
+		ParcelPage->OnPurchased.AddUObject(this, &UPCTerminalWidget::RefreshBalance);
+	}
 }
 
 void UPCTerminalWidget::OnScreenOpened()
@@ -40,6 +53,16 @@ void UPCTerminalWidget::SelectTab(const int32 Index)
 	Mark(ContractsMark, 0);
 	Mark(ToolsMark, 1);
 	Mark(ParcelMark, 2);
+
+	// A tab shows the state of the game as it is when it is picked.
+	if (Index == 1 && ToolsPage)
+	{
+		ToolsPage->Refresh();
+	}
+	else if (Index == 2 && ParcelPage)
+	{
+		ParcelPage->Refresh();
+	}
 }
 
 void UPCTerminalWidget::RefreshBalance()

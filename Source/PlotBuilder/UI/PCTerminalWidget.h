@@ -6,14 +6,16 @@
 
 class UButton;
 class UMissionBoardWidget;
+class UParcelTabWidget;
 class UTextBlock;
+class UToolsTabWidget;
 class UWidget;
 class UWidgetSwitcher;
 
 /**
- *  The PC of the office: one window with three tabs, Contracts, Tools and Parcel, and the balance on the right of the tab bar. The
- *  shell and the Contracts tab are real; the Tools tab and the Parcel tab are laid out by the Blueprint and filled in later, when the
- *  purchases exist (they sit in the same switcher, so nothing here changes when they arrive).
+ *  The PC of the office: one window with three tabs, Contracts, Tools and Parcel, and the balance on the right of the tab bar. Each tab
+ *  is a widget of its own in the same switcher (the board, UToolsTabWidget, UParcelTabWidget); this window opens them, and redraws the
+ *  balance when one of them made a purchase.
  *
  *  The HUD opens it (ATerminal::Use). It always opens on the Contracts tab with a fresh board. The widget Blueprint only lays it out
  *  (the named widgets below are required).
@@ -57,6 +59,14 @@ protected:
 	/** The Contracts tab, the first content of the switcher. */
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UMissionBoardWidget> MissionBoard;
+
+	/** The Tools tab. Optional so a window laid out before the tab existed still works (its page is then a placeholder). */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UToolsTabWidget> ToolsPage;
+
+	/** The Parcel tab. Optional for the same reason. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UParcelTabWidget> ParcelPage;
 
 	/** The player's money (the infinity sign when it is infinite). */
 	UPROPERTY(meta = (BindWidget))
