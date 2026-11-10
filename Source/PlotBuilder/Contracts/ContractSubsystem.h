@@ -6,6 +6,7 @@
 #include "ContractSubsystem.generated.h"
 
 class UContractPool;
+struct FClientRow;
 
 /**
  *  The contract board for the whole session (GDD §6.4): the three offers, the contract the player took, and the report of
@@ -40,6 +41,9 @@ public:
 	void SetPool(UContractPool* NewPool);
 
 	UContractPool* GetPool() const { return Pool; }
+
+	/** The row of a client id in the pool's client table (name, role, portrait, tint), or nullptr: the screens then show the id itself. */
+	const FClientRow* FindClient(FName ClientId) const;
 
 	/**
 	 *  The tier the board is drawn for: a kind of contract whose Tier is above it is not offered. 0 by default, which is every

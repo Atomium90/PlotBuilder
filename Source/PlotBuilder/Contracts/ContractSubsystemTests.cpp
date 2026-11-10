@@ -4,8 +4,10 @@
 
 #include "Misc/AutomationTest.h"
 #include "UObject/Package.h"
+#include "Contracts/ClientRow.h"
 #include "Contracts/ContractPool.h"
 #include "Contracts/ContractSubsystem.h"
+#include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 
 /**
@@ -111,6 +113,42 @@ bool FPBSubsystemShownOnceTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("a new mission, a new report to show"), Contracts->ConsumeUnseenResult(Shown));
 	TestEqual(TEXT("the new one"), Shown.Payout, 90);
+
+	return true;
+}
+
+// A client id finds its row in the pool's table; an unknown id, or a pool with no table, finds nothing and the screens fall back to the id.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBSubsystemClientLookupTest, "PlotBuilder.Contracts.Subsystem.ClientLookup", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBSubsystemClientLookupTest::RunTest(const FString& Parameters)
+{
+	UContractPool* Pool = NewObject<UContractPool>(GetTransientPackage());
+	TestNull(TEXT("no table, no row"), Pool->FindClient(FName(TEXT("Brandt"))));
+
+	FClientRow Row;
+	Row.DisplayName = FText::FromString(TEXT("Brandt & Sons"));
+	Row.Role = FText::FromString(TEXT("Developer"));
+
+	UDataTable* Table = NewObject<UDataTable>(GetTransientPackage());
+	Table->RowStruct = FClientRow::StaticStruct();
+	Table->AddRow(FName(TEXT("Brandt")), Row);
+	Pool->ClientTable = Table;
+
+	const FClientRow* Found = Pool->FindClient(FName(TEXT("Brandt")));
+
+	if (TestNotNull(TEXT("the row is found"), Found))
+	{
+		TestEqual(TEXT("name"), Found->DisplayName.ToString(), FString(TEXT("Brandt & Sons")));
+		TestEqual(TEXT("role"), Found->Role.ToString(), FString(TEXT("Developer")));
+		TestTrue(TEXT("no portrait by default"), Found->Portrait.IsNull());
+	}
+
+	TestNull(TEXT("unknown id"), Pool->FindClient(FName(TEXT("Nobody"))));
+
+	UContractSubsystem* Contracts = PBSubsystemTests::MakeBareSubsystem();
+	TestNull(TEXT("subsystem without a pool"), Contracts->FindClient(FName(TEXT("Brandt"))));
+
+	Contracts->SetPool(Pool);
+	TestNotNull(TEXT("subsystem with the pool"), Contracts->FindClient(FName(TEXT("Brandt"))));
 
 	return true;
 }

@@ -6,7 +6,9 @@
 #include "Generation/FurnishingRuleRow.h"
 #include "ContractPool.generated.h"
 
+class UDataTable;
 class UHouseArchetype;
+struct FClientRow;
 
 /**
  *  One kind of job the board can offer: what to build, how big, which types and conditions can come with it. Adding a
@@ -113,6 +115,13 @@ public:
 	/** Who asks: a client id is drawn from this list (a placeholder in Block 1). Empty uses "Client". */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pool")
 	TArray<FName> Clients;
+
+	/** The people behind those ids (DT_Clients, rows of FClientRow, the row name is the client id). Optional: an id with no row is shown as its own name. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pool", meta = (RequiredAssetDataTags = "RowStructure=/Script/PlotBuilder.ClientRow"))
+	TObjectPtr<UDataTable> ClientTable;
+
+	/** The row of that client id, or nullptr (no table, or no such row). */
+	const FClientRow* FindClient(FName ClientId) const;
 
 	/** Floor area of one room cell: a cell is 200 cm, so 4 m2. */
 	static constexpr float SquareMetresPerCell = 4.f;

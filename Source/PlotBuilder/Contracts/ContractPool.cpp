@@ -1,6 +1,13 @@
 #include "Contracts/ContractPool.h"
+#include "Contracts/ClientRow.h"
 #include "Contracts/ContractEvaluator.h"
+#include "Engine/DataTable.h"
 #include "Generation/HouseArchetype.h"
+
+const FClientRow* UContractPool::FindClient(FName ClientId) const
+{
+	return ClientTable ? ClientTable->FindRow<FClientRow>(ClientId, TEXT("UContractPool::FindClient"), false) : nullptr;
+}
 
 FContractDefinition UContractPool::DrawContract(const FContractTemplate& Template, FRandomStream& Stream) const
 {

@@ -33,6 +33,11 @@ void UContractSubsystem::SetPool(UContractPool* NewPool)
 	bOffersStale = true;
 }
 
+const FClientRow* UContractSubsystem::FindClient(FName ClientId) const
+{
+	return Pool ? Pool->FindClient(ClientId) : nullptr;
+}
+
 void UContractSubsystem::SetPlayerTier(int32 NewTier)
 {
 	NewTier = FMath::Max(0, NewTier);
