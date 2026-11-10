@@ -80,6 +80,11 @@ private:
 	 */
 	bool TryEndMission();
 
+	/** The player answered Leave on the card: the trip goes on, this time without asking. */
+	void ConfirmLeave();
+
 	/** World time of the last unfinished-job warning: a second press of E within LeaveConfirmSeconds of it confirms. */
 	double LeaveWarnedAt = -1000.0;
+
+	bool bLeaveConfirmed = false;
 };

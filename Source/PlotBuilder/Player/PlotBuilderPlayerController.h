@@ -6,6 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "PlotBuilderPlayerController.generated.h"
 
+class UInputAction;
 class UInputMappingContext;
 class UUserWidget;
 
@@ -34,6 +35,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input|Input Mappings")
 	TArray<UInputMappingContext*> MobileExcludedMappingContexts;
 
+	/** Opens and closes the mission notebook (N). Bound here, in C++, so the controller Blueprint needs no new node. */
+	UPROPERTY(EditAnywhere, Category = "Input|Actions")
+	TObjectPtr<UInputAction> ToggleNotebookAction;
+
 	/** Mobile controls widget to spawn */
 	UPROPERTY(EditAnywhere, Category="Input|Touch Controls")
 	TSubclassOf<UUserWidget> MobileControlsWidgetClass;
@@ -54,4 +59,7 @@ protected:
 
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
+
+	/** The notebook key was pressed. */
+	void OnToggleNotebook();
 };

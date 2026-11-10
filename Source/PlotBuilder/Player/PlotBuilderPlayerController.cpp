@@ -2,9 +2,12 @@
 
 
 #include "PlotBuilderPlayerController.h"
+#include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
+#include "InputAction.h"
 #include "InputMappingContext.h"
+#include "UI/GameHUDWidget.h"
 #include "PlotBuilderCameraManager.h"
 #include "Blueprint/UserWidget.h"
 #include "PlotBuilder.h"
@@ -70,8 +73,26 @@ void APlotBuilderPlayerController::SetupInputComponent()
 				}
 			}
 		}
+
+		// Started, not Triggered: one press opens or closes the notebook once, a held key does nothing more.
+		if (ToggleNotebookAction)
+		{
+			if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
+			{
+				EnhancedInput->BindAction(ToggleNotebookAction, ETriggerEvent::Started, this, &APlotBuilderPlayerController::OnToggleNotebook);
+			}
+		}
 	}
-	
+
+}
+
+void APlotBuilderPlayerController::OnToggleNotebook()
+{
+	// The HUD opens it only in a mission, and closes it from its own key handling while it is open.
+	if (UGameHUDWidget* Hud = UGameHUDWidget::Find(this))
+	{
+		Hud->ToggleMenu(UGameHUDWidget::NotebookMenuName);
+	}
 }
 
 bool APlotBuilderPlayerController::ShouldUseTouchControls() const

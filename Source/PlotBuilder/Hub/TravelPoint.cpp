@@ -7,6 +7,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "PlotBuilder.h"
 #include "Progress/ProgressSubsystem.h"
+#include "UI/GameHUDWidget.h"
 #include "UI/PlayerMessages.h"
 
 ATravelPoint::ATravelPoint()
@@ -47,11 +48,19 @@ bool ATravelPoint::TryEndMission()
 		return true;
 	}
 
-	// A finished job leaves without a question. An unfinished one is warned about, and a second press of E soon after confirms.
+	// A finished job leaves without a question. An unfinished one asks: with the card when the HUD has one, else with a warning line and a second press of E.
 	const FNotebookData& Notebook = Results->GetLiveNotebook(true);
 
-	if (!Notebook.bJobComplete && !Results->IsSettled())
+	if (!Notebook.bJobComplete && !Results->IsSettled() && !bLeaveConfirmed)
 	{
+		if (UGameHUDWidget* Hud = UGameHUDWidget::Find(this))
+		{
+			if (Hud->AskLeave(Notebook, FSimpleDelegate::CreateUObject(this, &ATravelPoint::ConfirmLeave)))
+			{
+				return false;
+			}
+		}
+
 		const double Now = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.0;
 
 		if (Now - LeaveWarnedAt > LeaveConfirmSeconds)
@@ -87,6 +96,12 @@ bool ATravelPoint::TryEndMission()
 	Results->Settle(Report);
 
 	return true;
+}
+
+void ATravelPoint::ConfirmLeave()
+{
+	bLeaveConfirmed = true;
+	Use(nullptr);
 }
 
 void ATravelPoint::Use(AActor* User)
