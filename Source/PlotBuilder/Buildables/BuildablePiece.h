@@ -73,8 +73,7 @@ public:
 	EBuildablePieceState State = EBuildablePieceState::Stock;
 
 	/**
-	 *  Structural attachment points, declared per-Blueprint (never authored on the mesh - see
-	 *  claude/Kit greybox specs des pieces et plan de remplacement.md). Read by
+	 *  Structural attachment points, declared per-Blueprint (never authored on the mesh). Read by
 	 *  UStructuralSupportComponent to find this piece's neighbors.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
@@ -86,8 +85,7 @@ public:
 
 	/**
 	 *  Edge pieces only: true if this piece's mesh is pivoted on one face rather than centered on the
-	 *  edge (BP_Wall/BP_WallDoor/BP_WallWindow - the mesh extends towards -X local from the pivot, see
-	 *  claude/Kit greybox specs des pieces et plan de remplacement.md). Lets TryResolveGridPlacement
+	 *  edge (BP_Wall/BP_WallDoor/BP_WallWindow - the mesh extends towards -X local from the pivot). Lets TryResolveGridPlacement
 	 *  auto-pick which of the two possible yaws (base or base+180) faces the mesh towards the floor
 	 *  side rather than out over empty space. Interior partitions (BP_InteriorWall/
 	 *  BP_InteriorWallDoor) stay centered on the edge and leave this false - no inside/outside to pick.
@@ -115,8 +113,7 @@ public:
 	/**
 	 *  Whether this piece passes its own stability on to whatever rests on it (a load-bearing wall
 	 *  holding up a floor/roof) or not (a partition - receives stability from what it stands on,
-	 *  same as any other piece, but transmits none upward). Same mesh either way - see "Murs
-	 *  porteurs et cloisons" in claude/Kit greybox specs des pieces et plan de remplacement.md.
+	 *  same as any other piece, but transmits none upward). Same mesh either way.
 	 *  Structural pieces other than walls (floor, post, roof...) have no reason to ever flip this.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "Structural")

@@ -39,7 +39,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Plot")
 	bool IsLocationInside(const FVector& WorldLocation) const;
 
-	/** World point a grid-anchored piece's (0,0) cell resolves to - the plot's own pivot, which authoring convention places at the center of a cell (see claude/Kit greybox specs des pieces et plan de remplacement.md). */
+	/** World point a grid-anchored piece's (0,0) cell resolves to - the plot's own pivot, which authoring convention places at the center of a cell */
 	UFUNCTION(BlueprintPure, Category = "Plot")
 	FVector GetGridOrigin() const { return GetActorLocation(); }
 

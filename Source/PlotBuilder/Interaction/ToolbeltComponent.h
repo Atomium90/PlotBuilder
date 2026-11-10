@@ -55,11 +55,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Toolbelt")
 	float ChargePlaceReach = 250.f;
 
-	/** One ADemolitionTool class per melee slot (index 0 -> slot 2 Sledgehammer, 1 -> slot 3 Crowbar, 2 -> slot 4 Jackhammer). A slot left unset (e.g. Jackhammer before Thursday) stays a no-op. */
+	/** One ADemolitionTool class per melee slot (index 0 -> slot 2 Sledgehammer, 1 -> slot 3 Crowbar, 2 -> slot 4 Jackhammer). A slot left unset stays a no-op. */
 	UPROPERTY(EditDefaultsOnly, Category = "Toolbelt")
 	TArray<TSubclassOf<ADemolitionTool>> MeleeToolClasses;
 
-	/** On-screen readout of the equipped slot - there's no real HUD indicator yet (Thursday's task), this is the stand-in. */
+	/** On-screen readout of the equipped slot, for debugging (the belt widgets show it to the player). */
 	UPROPERTY(EditAnywhere, Category = "Toolbelt|Debug")
 	bool bShowDebug = true;
 
@@ -156,7 +156,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void PrimaryUse();
 
-	/** Secondary use (RMB) on the currently equipped tool. Slot 0 (Hands): Throw (no-op if nothing held). Slots 1-4: no-op until an actual tool exists (Tuesday onward). */
+	/** Secondary use (RMB) on the currently equipped tool. Slot 0 (Hands): Throw (no-op if nothing held). Slot 1 (charge): throw one, or detonate the one that is out. The melee tools and the brush have no secondary use. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")
 	void SecondaryUse();
 

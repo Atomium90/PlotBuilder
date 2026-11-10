@@ -10,7 +10,7 @@ class UMaterialInterface;
 /**
  *  Generic greybox fragment spawned by ABuildablePiece::Fracture - fracture-on-destroy v1 (GDD §7.8):
  *  one procedural shard shape per destroyed piece for any mesh without an authored per-mesh
- *  Geometry Collection override (UDemolitionRules::MeshFractureOverrides - Sprint 2 day 2). Not
+ *  Geometry Collection override (UDemolitionRules::MeshFractureOverrides). Not
  *  interactable, unlike APhysicsProp - purely a short-lived physics prop that fades and destroys
  *  itself. Tagged "Fragment" at spawn, and self-registers with UDebrisSubsystem (global fragment
  *  cap, oldest-first eviction) in Launch - the subsystem unregisters it automatically via the

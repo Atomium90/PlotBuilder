@@ -112,7 +112,7 @@ private:
 	/** World time of the last contact that dealt damage, for the minimum interval. */
 	float LastImpactTime = -1000.f;
 
-	/** DurabilityComponent->OnDurabilityDestroyed handler: spawns generic fragments and removes this prop - furniture's "simple break on destruction" (GDD, Sprint 2 Monday), no per-mesh fracture. */
+	/** DurabilityComponent->OnDurabilityDestroyed handler: spawns generic fragments and removes this prop - furniture's "simple break on destruction", no per-mesh fracture. */
 	UFUNCTION()
 	void HandleBroken();
 

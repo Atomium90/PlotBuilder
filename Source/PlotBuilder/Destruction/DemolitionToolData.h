@@ -55,7 +55,7 @@ public:
 	/**
 	 *  Looping sound started on press and stopped (with a short fade) on release - only meaningful
 	 *  for a continuous tool (bContinuous). Unset for the sledgehammer/crowbar; the jackhammer's
-	 *  drill-loop placeholder (backlog, Oct 29) is the first user. ADemolitionTool owns the start/
+	 *  drill-loop placeholder is the first user. ADemolitionTool owns the start/
 	 *  stop lifecycle generically off bContinuous, same as the rest of this data asset - no
 	 *  jackhammer-only C++ needed.
 	 */

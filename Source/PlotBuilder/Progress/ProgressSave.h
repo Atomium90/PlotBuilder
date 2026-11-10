@@ -107,7 +107,7 @@ class UProgressSave : public USaveGame
 
 public:
 
-	/** Money a new game starts with (Sprint 3 plan: the sledgehammer and 500). */
+	/** Money a new game starts with (and the sledgehammer). */
 	static constexpr int32 DefaultMoney = 500;
 
 	UPROPERTY(SaveGame)

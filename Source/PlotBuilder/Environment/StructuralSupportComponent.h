@@ -35,8 +35,7 @@ struct FRegisteredSocket
  *  test can't, it takes a loss that's much higher on horizontal links than vertical ones.
  *
  *  Neighbors are found by a grid cell lookup from each piece's declared Sockets (data on the BP,
- *  never authored on the mesh) rather than a physics overlap - see claude/Kit greybox specs des
- *  pieces et plan de remplacement.md for the socket table this mirrors. Cheap enough for a few
+ *  never authored on the mesh) rather than a physics overlap. Cheap enough for a few
  *  hundred pieces with a plain fixed point relaxation, no priority queue needed.
  *
  *  RegisterPiece/UnregisterPiece no longer recompute inline - they just mark the graph dirty, and
@@ -66,7 +65,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Structural|Debug")
 	bool bShowDebug = false;
 
-	/** Material swapped onto every registered piece's mesh (slot 0) while the heatmap is on - reads Stability from Custom Primitive Data index 0, see claude/Plan_Sprint_1.md's Friday notes. Swapping back to bShow = false reverts to each mesh's own default material (SetMaterial(0, nullptr)), not a cached one, so this never needs to remember what was there before. */
+	/** Material swapped onto every registered piece's mesh (slot 0) while the heatmap is on - reads Stability from Custom Primitive Data index 0. Swapping back to bShow = false reverts to each mesh's own default material (SetMaterial(0, nullptr)), not a cached one, so this never needs to remember what was there before. */
 	UPROPERTY(EditAnywhere, Category = "Structural|Debug")
 	TObjectPtr<UMaterialInterface> DebugHeatmapMaterial;
 

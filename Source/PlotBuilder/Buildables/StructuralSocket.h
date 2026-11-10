@@ -4,10 +4,8 @@
 #include "StructuralSocket.generated.h"
 
 /**
- *  What a structural socket represents, and how it pairs up for the support graph (see the
- *  "Sockets" table in claude/Kit greybox specs des pieces et plan de remplacement.md, which this
- *  mirrors). Roof_* pairings aren't detailed in that doc's loss-class table - classified in
- *  UStructuralSupportComponent as horizontal: roof-to-roof contact alone never counts as support,
+ *  What a structural socket represents, and how it pairs up for the support graph. Roof_* pairings
+ *  are classified in UStructuralSupportComponent as horizontal: roof-to-roof contact alone never counts as support,
  *  it still needs to trace down to a wall. Anchor isn't paired with anything - a piece that has
  *  one is its own support (foundation, or anything resting directly on the Plot's ground).
  */

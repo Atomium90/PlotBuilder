@@ -21,8 +21,7 @@ class ABuildablePiece;
  *    pieces snapping onto a bounds-centered pivot, approximate otherwise.
  *  - Cell / Edge / Vertex (the greybox kit): the ghost snaps to an integer grid cell instead
  *    (TryResolveGridPlacement), via a ray/plane intersection at the current BuildLevel rather than a
- *    trace against existing geometry - no bounds math, no flush-against-neighbour snap. See
- *    claude/Kit greybox specs des pieces et plan de remplacement.md for the grid convention.
+ *    trace against existing geometry - no bounds math, no flush-against-neighbour snap.
  *
  *  Either way, one obstruction test per tick decides whether the current transform is blocked (red)
  *  or free (green) to confirm - IsCandidateBlocked for Legacy, IsGridCandidateBlocked for the grid
@@ -155,8 +154,7 @@ private:
 	 *  BuildLevel (+ the piece's own VerticalOffset), then snaps the hit point to the nearest valid
 	 *  grid position for Anchor: both coordinates even for Cell, both odd for Vertex, and for Edge
 	 *  the nearer of the two odd/even candidates (which also picks the base yaw, 0 or 90). No trace
-	 *  against existing geometry, no bounds math - see claude/Kit greybox specs des pieces et plan de
-	 *  remplacement.md for the grid convention this mirrors.
+	 *  against existing geometry, no bounds math.
 	 */
 	bool TryResolveGridPlacement(const FVector& ViewLocation, const FRotator& ViewRotation, EBuildAnchor Anchor, FVector& OutLocation, FRotator& OutRotation, FIntVector& OutGridCoord, int32& OutQuarterTurns) const;
 

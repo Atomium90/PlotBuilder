@@ -33,7 +33,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hub")
 	FText Prompt;
 
-	/** Fired when the player uses it, before the subclass acts. A Blueprint can hook it (the mission board will, on Nov 10). */
+	/** Fired when the player uses it, before the subclass acts. A Blueprint can hook it. */
 	UPROPERTY(BlueprintAssignable, Category = "Hub")
 	FOnHubInteracted OnInteracted;
 
