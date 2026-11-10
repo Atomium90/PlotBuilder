@@ -42,8 +42,18 @@ private:
 	static constexpr int32 MaxInputAttempts = 50;
 	static constexpr float InputRetryInterval = 0.1f;
 
+	/** The debrief waits for the HUD and the pawn, which are built after the level starts: tried every 0.2 s for 10 s. */
+	static constexpr int32 MaxDebriefAttempts = 50;
+	static constexpr float DebriefRetryInterval = 0.2f;
+
 	void ApplyHubInput();
+
+	/** Shows the report of the mission the player just came back from, once. Does nothing when there is none. */
+	void ShowPendingDebrief();
 
 	FTimerHandle InputTimer;
 	int32 InputAttempts = 0;
+
+	FTimerHandle DebriefTimer;
+	int32 DebriefAttempts = 0;
 };

@@ -6,6 +6,7 @@
 #include "Player/PlayerCharacter.h"
 #include "PlotBuilder.h"
 #include "TimerManager.h"
+#include "UI/GameHUDWidget.h"
 
 AHubDirector::AHubDirector()
 {
@@ -24,6 +25,39 @@ void AHubDirector::BeginPlay()
 	}
 
 	ApplyHubInput();
+	ShowPendingDebrief();
+}
+
+void AHubDirector::ShowPendingDebrief()
+{
+	const UContractSubsystem* Contracts = UContractSubsystem::Get(this);
+
+	if (!Contracts || !Contracts->HasUnseenResult())
+	{
+		GetWorldTimerManager().ClearTimer(DebriefTimer);
+		return;
+	}
+
+	// The report is shown with the account as it is now, so the pawn (which carries the money) must be there as well as the HUD.
+	UGameHUDWidget* Hud = UGameplayStatics::GetPlayerPawn(this, 0) ? UGameHUDWidget::Find(this) : nullptr;
+
+	if (Hud && Hud->ShowDebrief())
+	{
+		GetWorldTimerManager().ClearTimer(DebriefTimer);
+		return;
+	}
+
+	if (++DebriefAttempts > MaxDebriefAttempts)
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHubDirector: no HUD with a debrief screen after %d tries, the report stays unseen (pb.ShowDebrief shows it)."), MaxDebriefAttempts);
+		GetWorldTimerManager().ClearTimer(DebriefTimer);
+		return;
+	}
+
+	if (!GetWorldTimerManager().IsTimerActive(DebriefTimer))
+	{
+		GetWorldTimerManager().SetTimer(DebriefTimer, this, &AHubDirector::ShowPendingDebrief, DebriefRetryInterval, true);
+	}
 }
 
 void AHubDirector::ApplyHubInput()

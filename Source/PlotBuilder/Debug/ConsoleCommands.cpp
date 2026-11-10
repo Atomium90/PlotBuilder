@@ -22,6 +22,7 @@
 #include "ProfilingDebugging/MiscTrace.h"
 #include "Progress/ProgressSubsystem.h"
 #include "Props/PhysicsProp.h"
+#include "UI/GameHUDWidget.h"
 #include "Player/PlayerCharacter.h"
 #include "Interaction/HotbarComponent.h"
 #include "Destruction/DemolitionTool.h"
@@ -530,7 +531,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbSettleCommand(
 
 static FAutoConsoleCommandWithWorldAndArgs PbShowDebriefCommand(
 	TEXT("pb.ShowDebrief"),
-	TEXT("pb.ShowDebrief - prints the report of the last mission that ended (pb.Settle, or the truck), and whether the hub has shown it yet."),
+	TEXT("pb.ShowDebrief - prints the report of the last mission that ended (pb.Settle, or the truck), and whether the hub has shown it yet; where the HUD has a debrief screen, opens it on that report (without marking it as shown)."),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
 	{
 		const UContractSubsystem* Contracts = World ? UContractSubsystem::Get(World) : nullptr;
@@ -547,6 +548,12 @@ static FAutoConsoleCommandWithWorldAndArgs PbShowDebriefCommand(
 		if (GEngine)
 		{
 			PBDebug::Message(UContractSubsystem::MessageKey + 12, 30.f, FColor::Cyan, Text);
+		}
+
+		// The screen, when the HUD has one: the same report, drawn.
+		if (UGameHUDWidget* Hud = UGameHUDWidget::Find(World))
+		{
+			Hud->ShowDebrief(false);
 		}
 	}));
 

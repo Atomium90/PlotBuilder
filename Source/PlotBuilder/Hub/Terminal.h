@@ -5,9 +5,9 @@
 #include "Terminal.generated.h"
 
 /**
- *  The PC on the desk of the mezzanine office: where the player will pick a contract, buy tools and buy the
- *  parcel. For now using it only prints a line; the mission board (WBP_MissionBoard, Nov 10) hooks
- *  OnInteracted from the base class, so this class does not change when the screens arrive.
+ *  The PC on the desk of the mezzanine office: where the player picks a contract, and later buys tools and the
+ *  parcel. Using it asks the HUD to open the terminal window (UPCTerminalWidget); the tabs live there, so this class
+ *  does not change when the Tools and Parcel tabs are filled in. OnInteracted from the base class stays free for a Blueprint.
  */
 UCLASS()
 class ATerminal : public AHubInteractable
