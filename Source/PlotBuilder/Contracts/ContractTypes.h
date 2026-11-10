@@ -198,6 +198,10 @@ struct FSalvageResult
 	/** Not handed over and still standing on the plot (in or around the house) at the end, as opposed to carried out of the plot but not to the client zone. Again only a word in the report. */
 	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
 	bool bOnSite = false;
+
+	/** In the player's hands at this very moment. Only the notebook reads it: the report ignores it. */
+	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
+	bool bCarried = false;
 };
 
 /** What happened to one protected zone. */
@@ -208,6 +212,10 @@ struct FZoneResult
 
 	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
 	FString Name;
+
+	/** What the player reads ("Neighbour's shed"): the zone's DisplayName. Empty falls back to "Protected zone". */
+	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
+	FString Label;
 
 	/** Share of the hit points of the things inside that the tools and the charges took, 0 to 1. */
 	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")

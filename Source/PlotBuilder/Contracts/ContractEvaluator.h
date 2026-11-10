@@ -44,6 +44,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Contracts")
 	static float ComputeZoneDamage(const FMissionSnapshot& Snapshot, const FScoringParams& Params);
 
+	/** Damage to one zone, 0 to 1: the term ComputeZoneDamage sums. The notebook shows it zone by zone. */
+	UFUNCTION(BlueprintPure, Category = "Contracts")
+	static float ComputeSingleZoneDamage(const FMissionSnapshot& Snapshot, const FZoneResult& Zone, const FScoringParams& Params);
+
+	/** Share of the target set that is destroyed, 0 to 1 (1 if there is nothing to destroy). The report and the notebook both read it. */
+	UFUNCTION(BlueprintPure, Category = "Contracts")
+	static float ComputeCompletion(const FMissionSnapshot& Snapshot);
+
 	/** Minutes it takes to carry one piece of furniture out to the client: find it, grab it, walk it to the drop zone. */
 	static constexpr float MinutesPerSalvageItem = 0.5f;
 

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "Contracts/ContractTypes.h"
+#include "Contracts/MissionNotebook.h"
 #include "MissionResultSubsystem.generated.h"
 
 class UDemolitionRules;
@@ -78,7 +79,20 @@ public:
 	/** The snapshot as one readable block, so a report can be checked by hand. */
 	static FString DescribeSnapshot(const FMissionSnapshot& Snapshot);
 
+	/**
+	 *  The notebook for the mission's contract as the level stands. The level is not scanned more than twice a second whoever asks
+	 *  (the notebook, the progress ring and the leave-the-site card all read this): a call in between returns the last one.
+	 *  ForceRefresh reads the level now. Outside a mission it is empty and complete.
+	 */
+	const FNotebookData& GetLiveNotebook(bool bForceRefresh = false);
+
 private:
+
+	/** Seconds the cached notebook is kept before the level is read again. */
+	static constexpr double NotebookRefreshSeconds = 0.5;
+
+	FNotebookData CachedNotebook;
+	double NotebookStamp = -1.0;
 
 	/** The rules asset the scoring lives on: the one the director gave, else the one on the player's crush component (optional there, so it may be empty). */
 	const UDemolitionRules* FindRules() const;

@@ -2,6 +2,7 @@
 #include "Buildables/BuildablePiece.h"
 #include "Contracts/ContractEvaluator.h"
 #include "Contracts/MissionBinding.h"
+#include "Contracts/MissionDirector.h"
 #include "Destruction/CrushDetectionComponent.h"
 #include "Destruction/DemolitionRules.h"
 #include "Destruction/DurabilityComponent.h"
@@ -10,6 +11,7 @@
 #include "Environment/DropZone.h"
 #include "Environment/Plot.h"
 #include "Environment/ProtectedZone.h"
+#include "Interaction/PhysicsManipulationComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "PlotBuilder.h"
 #include "Props/PhysicsProp.h"
@@ -69,6 +71,7 @@ void UMissionResultSubsystem::ResetCounters()
 	CrushEvents = 0;
 	ExplosionEvents = 0;
 	bForbiddenToolUsed = false;
+	NotebookStamp = -1.0;
 }
 
 void UMissionResultSubsystem::SetForbiddenTool(FName ToolId)
@@ -167,6 +170,17 @@ FMissionSnapshot UMissionResultSubsystem::BuildSnapshot() const
 		}
 	}
 
+	// What the player holds right now, for the notebook ("In your hands").
+	const AActor* Held = nullptr;
+
+	if (const APawn* Pawn = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		if (const UPhysicsManipulationComponent* Hands = Pawn->FindComponentByClass<UPhysicsManipulationComponent>())
+		{
+			Held = Hands->GetHeldActor();
+		}
+	}
+
 	for (const FBindingItem& Item : Sets.Salvage)
 	{
 		FSalvageResult& Result = Snapshot.Salvage.AddDefaulted_GetRef();
@@ -178,6 +192,7 @@ FMissionSnapshot UMissionResultSubsystem::BuildSnapshot() const
 		Result.bDestroyed = bGone;
 		Result.bDelivered = InZone != nullptr;
 		Result.HPRatio = InZone ? *InZone : 0.f;
+		Result.bCarried = !bGone && Held && Held == Item.Actor.Get();
 
 		// Alive and not handed over: still on the plot (in the house or around it), or carried off it. Only a word in the report.
 		Result.bOnSite = !bGone && !InZone && Plot->IsLocationInside(Item.Actor->GetActorLocation());
@@ -192,6 +207,7 @@ FMissionSnapshot UMissionResultSubsystem::BuildSnapshot() const
 
 		FZoneResult& Result = Snapshot.Zones.AddDefaulted_GetRef();
 		Result.Name = Zone->GetName();
+		Result.Label = Zone->DisplayName.ToString();
 		Result.ToolDamageRatio = Zone->GetDamageRatio();
 
 		// What the zone counts from the house itself (the weight of the pieces that fell in) comes in through RecordExternalDamage.
@@ -231,6 +247,32 @@ FString UMissionResultSubsystem::DescribeSnapshot(const FMissionSnapshot& Snapsh
 	}
 
 	return Text;
+}
+
+const FNotebookData& UMissionResultSubsystem::GetLiveNotebook(bool bForceRefresh)
+{
+	const UWorld* World = GetWorld();
+	const double Now = World ? World->GetRealTimeSeconds() : 0.0;
+
+	if (!bForceRefresh && NotebookStamp >= 0.0 && Now - NotebookStamp < NotebookRefreshSeconds)
+	{
+		return CachedNotebook;
+	}
+
+	NotebookStamp = Now;
+
+	AMissionDirector* Director = AMissionDirector::Find(this);
+
+	if (!Director)
+	{
+		CachedNotebook = FNotebookData();
+		return CachedNotebook;
+	}
+
+	const UDemolitionRules* Rules = FindRules();
+	CachedNotebook = MissionNotebook::Build(Director->GetMissionContract(), BuildSnapshot(), Rules ? Rules->Scoring : FScoringParams());
+
+	return CachedNotebook;
 }
 
 FDebriefResult UMissionResultSubsystem::Evaluate(const FContractDefinition& Contract, FString& OutText) const

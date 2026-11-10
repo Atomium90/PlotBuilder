@@ -115,6 +115,11 @@ void UPhysicsManipulationComponent::Throw()
 	}
 }
 
+AActor* UPhysicsManipulationComponent::GetHeldActor() const
+{
+	return IsValid(HeldComponent) ? HeldComponent->GetOwner() : nullptr;
+}
+
 void UPhysicsManipulationComponent::LaunchHeld()
 {
 	FVector ViewForward;

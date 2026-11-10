@@ -481,6 +481,28 @@ static FAutoConsoleCommandWithWorldAndArgs PbEndMissionCommand(
 		}
 	}));
 
+static FAutoConsoleCommandWithWorldAndArgs PbShowNotebookCommand(
+	TEXT("pb.ShowNotebook"),
+	TEXT("pb.ShowNotebook - prints the mission notebook as it stands: the house demolished, then the furniture to recover (in hands first), the protected zones, the room to keep and the forbidden tool, each with its state. It is the data the notebook, the progress ring and the leave-the-site card read. Needs the level's AMissionDirector."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		UMissionResultSubsystem* Results = World ? UMissionResultSubsystem::Get(World) : nullptr;
+
+		if (!Results || !AMissionDirector::Find(World))
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.ShowNotebook: needs the level's AMissionDirector"));
+			return;
+		}
+
+		const FString Text = Results->GetLiveNotebook(true).ToString();
+		UE_LOG(LogPlotBuilder, Log, TEXT("%s"), *Text);
+
+		if (GEngine)
+		{
+			PBDebug::Message(UContractSubsystem::MessageKey + 11, 30.f, FColor::Cyan, Text);
+		}
+	}));
+
 static FAutoConsoleCommandWithWorldAndArgs PbForbidToolCommand(
 	TEXT("pb.ForbidTool"),
 	TEXT("pb.ForbidTool <Sledgehammer|Crowbar|Jackhammer|Charge|none> - forbids a tool for the mission as if the contract had: the first damage dealt with it warns on screen and costs a share of what was earned in the report (pb.EndMission). 'none' lifts it. Starting a mission again (pb.SetSeed, pb.AcceptOffer) sets it from the contract. Without an argument, prints the current one."),

@@ -37,19 +37,29 @@ float UContractEvaluator::FurnitureValueMultiplier(const FScoringParams& Params,
 	return PointCurve::Evaluate(Params.FurnitureValuePoints, HP);
 }
 
-float UContractEvaluator::ComputeZoneDamage(const FMissionSnapshot& Snapshot, const FScoringParams& Params)
+float UContractEvaluator::ComputeSingleZoneDamage(const FMissionSnapshot& Snapshot, const FZoneResult& Zone, const FScoringParams& Params)
 {
 	const int64 House = Snapshot.HouseWeight > 0 ? Snapshot.HouseWeight : Snapshot.TargetWeight + Snapshot.MustStayWeight;
+	const float Fallen = House > 0 ? static_cast<float>(Zone.FallenWeight) / static_cast<float>(House) * Params.ZoneFallFactor : 0.f;
 
+	return FMath::Clamp(Zone.ToolDamageRatio + Fallen, 0.f, 1.f);
+}
+
+float UContractEvaluator::ComputeZoneDamage(const FMissionSnapshot& Snapshot, const FScoringParams& Params)
+{
 	float Total = 0.f;
 
 	for (const FZoneResult& Zone : Snapshot.Zones)
 	{
-		const float Fallen = House > 0 ? static_cast<float>(Zone.FallenWeight) / static_cast<float>(House) * Params.ZoneFallFactor : 0.f;
-		Total += FMath::Clamp(Zone.ToolDamageRatio + Fallen, 0.f, 1.f);
+		Total += ComputeSingleZoneDamage(Snapshot, Zone, Params);
 	}
 
 	return FMath::Min(Total, 1.f);
+}
+
+float UContractEvaluator::ComputeCompletion(const FMissionSnapshot& Snapshot)
+{
+	return Snapshot.TargetWeight > 0 ? FMath::Clamp(static_cast<float>(Snapshot.TargetDestroyedWeight) / static_cast<float>(Snapshot.TargetWeight), 0.f, 1.f) : 1.f;
 }
 
 FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract, const FMissionSnapshot& Snapshot, const FScoringParams& Params)
@@ -57,7 +67,7 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 	FDebriefResult Result;
 	Result.BasePayout = Contract.BasePayout;
 
-	Result.Completion = Snapshot.TargetWeight > 0 ? FMath::Clamp(static_cast<float>(Snapshot.TargetDestroyedWeight) / static_cast<float>(Snapshot.TargetWeight), 0.f, 1.f) : 1.f;
+	Result.Completion = ComputeCompletion(Snapshot);
 	Result.Collateral = Snapshot.MustStayWeight > 0 ? FMath::Clamp(static_cast<float>(Snapshot.MustStayDestroyedWeight) / static_cast<float>(Snapshot.MustStayWeight), 0.f, 1.f) : 0.f;
 	Result.ZoneDamage = ComputeZoneDamage(Snapshot, Params);
 

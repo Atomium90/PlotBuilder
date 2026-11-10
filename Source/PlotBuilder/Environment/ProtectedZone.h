@@ -106,6 +106,10 @@ public:
 	 */
 	void SetActive(bool bNewActive);
 
+	/** What the player reads in the notebook and in the report ("Neighbour's shed"). Set it on each placed zone. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Protected Zone")
+	FText DisplayName = NSLOCTEXT("Mission", "ProtectedZoneDefault", "Protected zone");
+
 	/** Hide the protected things of the zone (the neighbour's shed) while it is off. Off this, they stay as scenery, unprotected. */
 	UPROPERTY(EditAnywhere, Category = "Protected Zone")
 	bool bHideContentWhenInactive = true;

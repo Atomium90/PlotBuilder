@@ -66,6 +66,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Physics Manipulation")
 	void Throw();
 
+	/** The actor in the player's hands, or nullptr. The notebook reads it to tell a carried piece of furniture from one still in the house. */
+	AActor* GetHeldActor() const;
+
 private:
 
 	UPROPERTY()
