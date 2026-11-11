@@ -13,7 +13,7 @@
 #include "Components/TextBlock.h"
 #include "Contracts/ClientRow.h"
 #include "Contracts/ContractSubsystem.h"
-#include "Contracts/MissionDirector.h"
+#include "Flow/GameFlowSubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "Interaction/HotbarComponent.h"
 #include "PlotBuilder.h"
@@ -241,9 +241,14 @@ void UGameHUDWidget::ToggleMenu(FName Menu)
 	}
 
 	// The notebook is the mission's: outside a mission there is nothing to write in it.
-	if (Menu == NotebookMenuName && !AMissionDirector::Find(this))
+	if (Menu == NotebookMenuName)
 	{
-		return;
+		const UGameFlowSubsystem* Flow = UGameFlowSubsystem::Get(this);
+
+		if (!Flow || Flow->GetState() != EGameFlowState::OnSite)
+		{
+			return;
+		}
 	}
 
 	// The shop and the bag belong to building: a map that has switched it off (the hub, a mission) has neither.

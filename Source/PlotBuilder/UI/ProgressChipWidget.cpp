@@ -1,8 +1,8 @@
 #include "ProgressChipWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Components/TextBlock.h"
-#include "Contracts/MissionDirector.h"
 #include "Contracts/MissionResultSubsystem.h"
+#include "Flow/GameFlowSubsystem.h"
 
 void UProgressRingWidget::SetRatio(const float NewRatio)
 {
@@ -54,7 +54,8 @@ void UProgressChipWidget::NativeTick(const FGeometry& MyGeometry, const float In
 
 	// The chip only means something in a mission; elsewhere it takes no room.
 	UMissionResultSubsystem* Results = UMissionResultSubsystem::Get(this);
-	const bool bInMission = Results && AMissionDirector::Find(this);
+	const UGameFlowSubsystem* Flow = UGameFlowSubsystem::Get(this);
+	const bool bInMission = Results && Flow && Flow->GetState() == EGameFlowState::OnSite;
 
 	SetVisibility(bInMission ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 
