@@ -1,6 +1,46 @@
 #include "Contracts/ContractEvaluator.h"
 #include "Destruction/PointCurve.h"
 
+namespace
+{
+	/** What the tools cost to keep over the mission, and in words: "Jackhammer, 38 s (50 + 2 per second)". Only the tools that have a fee and worked count. */
+	int32 EvaluatorUpkeepWanted(const FMissionSnapshot& Snapshot, FString& OutDetail, bool& bOutAnyTool)
+	{
+		int32 Wanted = 0;
+		bOutAnyTool = false;
+
+		for (const FToolUsage& Usage : Snapshot.ToolUsage)
+		{
+			if (Usage.Upkeep.IsFree() || Usage.ActiveSeconds <= 0.f)
+			{
+				continue;
+			}
+
+			bOutAnyTool = true;
+			Wanted += Usage.Upkeep.Cost(Usage.ActiveSeconds);
+
+			FString Rate;
+
+			if (Usage.Upkeep.PerJob > 0 && Usage.Upkeep.PerSecond > 0.f)
+			{
+				Rate = FString::Printf(TEXT("%d + %s per second"), Usage.Upkeep.PerJob, *FString::SanitizeFloat(Usage.Upkeep.PerSecond, 0));
+			}
+			else if (Usage.Upkeep.PerSecond > 0.f)
+			{
+				Rate = FString::Printf(TEXT("%s per second"), *FString::SanitizeFloat(Usage.Upkeep.PerSecond, 0));
+			}
+			else
+			{
+				Rate = FString::Printf(TEXT("%d per job"), Usage.Upkeep.PerJob);
+			}
+
+			OutDetail += FString::Printf(TEXT("%s%s, %.0f s (%s)"), OutDetail.IsEmpty() ? TEXT("") : TEXT("; "), *Usage.ToolId.ToString(), Usage.ActiveSeconds, *Rate);
+		}
+
+		return Wanted;
+	}
+}
+
 float UContractEvaluator::TypeFactor(EContractType Type)
 {
 	switch (Type)
@@ -122,7 +162,15 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 	// The cap can only give money back, never take more than the terms did.
 	const int32 PenaltyMoney = Result.bPenaltyCapped ? FMath::Min(TermsMoney, FMath::RoundToInt(Earned * Cap)) : TermsMoney;
 
-	Result.Payout = FMath::Max(0, Result.Earned - PenaltyMoney);
+	// The upkeep of the tools comes off what is left once the penalty has been taken, and never goes below zero: the job is always paid.
+	const int32 AfterPenalty = FMath::Max(0, Result.Earned - PenaltyMoney);
+
+	FString UpkeepDetail;
+	bool bAnyUpkeepTool = false;
+	const int32 UpkeepWanted = EvaluatorUpkeepWanted(Snapshot, UpkeepDetail, bAnyUpkeepTool);
+
+	Result.Upkeep = FMath::Min(UpkeepWanted, AfterPenalty);
+	Result.Payout = AfterPenalty - Result.Upkeep;
 
 	const auto AddLine = [&Result](const TCHAR* Label, const FString& Detail, float Value, int32 Money)
 	{
@@ -172,6 +220,17 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 		AddLine(TEXT("Penalty cap"),
 			FString::Printf(TEXT("the terms add up to %.0f%%, the cap is %.0f%%"), Uncapped * 100.f, Cap * 100.f),
 			Result.Penalty, TermsMoney - PenaltyMoney);
+	}
+
+	// Only a mission where a tool with a fee worked has the line.
+	if (bAnyUpkeepTool)
+	{
+		if (UpkeepWanted > Result.Upkeep)
+		{
+			UpkeepDetail += FString::Printf(TEXT(", %d of %d taken (never below zero)"), Result.Upkeep, UpkeepWanted);
+		}
+
+		AddLine(TEXT("Upkeep"), UpkeepDetail, Result.Earned > 0 ? static_cast<float>(Result.Upkeep) / static_cast<float>(Result.Earned) : 0.f, -Result.Upkeep);
 	}
 
 	// The share of the base payout that is actually paid.

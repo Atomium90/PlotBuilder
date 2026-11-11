@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Destruction/DemolitionTypes.h"
 #include "ContractTypes.generated.h"
 
 /** The three kinds of contract (GDD §6.2). They differ only in what must be destroyed and what must stay: see MissionBinding::Compute. */
@@ -226,6 +227,24 @@ struct FZoneResult
 	int64 FallenWeight = 0;
 };
 
+/** How long one tool worked during the mission, with the fee it carries (copied from its data when it worked). */
+USTRUCT(BlueprintType)
+struct FToolUsage
+{
+	GENERATED_BODY()
+
+	/** As in FDamageInfo::ToolId ("Jackhammer"). */
+	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
+	FName ToolId;
+
+	/** Seconds the tool spent working: for a tool that hits at a rate, the number of hits that landed over that rate. */
+	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
+	float ActiveSeconds = 0.f;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
+	FToolUpkeep Upkeep;
+};
+
 /**
  *  What the evaluator needs to know about a finished mission, as plain numbers: no actor, no level. Whoever ends the
  *  mission fills it from the world; the tests fill it by hand.
@@ -274,6 +293,10 @@ struct FMissionSnapshot
 
 	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
 	bool bForbiddenToolUsed = false;
+
+	/** The tools that worked, one entry each. A tool that costs nothing may be listed or left out: it changes nothing. */
+	UPROPERTY(BlueprintReadWrite, Category = "Mission Result")
+	TArray<FToolUsage> ToolUsage;
 };
 
 /** One line of the report: a term of the formula, what it measured, and what it did to the money. */
@@ -346,7 +369,11 @@ struct FDebriefResult
 	UPROPERTY(BlueprintReadOnly, Category = "Debrief")
 	int32 Earned = 0;
 
-	/** What is paid: Earned minus the penalty, always. */
+	/** What the tools cost to keep and the report really took, taken from what is left after the penalty (never below 0). */
+	UPROPERTY(BlueprintReadOnly, Category = "Debrief")
+	int32 Upkeep = 0;
+
+	/** What is paid: Earned minus the penalty minus the upkeep, never below 0. */
 	UPROPERTY(BlueprintReadOnly, Category = "Debrief")
 	int32 Payout = 0;
 

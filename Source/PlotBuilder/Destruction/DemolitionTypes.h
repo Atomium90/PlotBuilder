@@ -82,3 +82,40 @@ struct FDamageInfo
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	TObjectPtr<AActor> Instigator = nullptr;
 };
+
+/**
+ *  What a tool costs to keep, in money (GDD §11). It is data on UDemolitionToolData: a tool that costs nothing leaves both
+ *  at 0. The mission report charges it (UContractEvaluator): a flat fee for each mission where the tool worked, plus a rate
+ *  for each second it was working. Two parts because a flat fee alone ignores how hard the tool was used, and a rate alone
+ *  turns a long drilling session into most of the payout.
+ */
+USTRUCT(BlueprintType)
+struct FToolUpkeep
+{
+	GENERATED_BODY()
+
+	/** Charged once for a mission in which the tool did any work. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Upkeep", meta = (ClampMin = "0"))
+	int32 PerJob = 0;
+
+	/** Charged for each second of active use (a continuous tool counts the time it is hitting something). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Upkeep", meta = (ClampMin = "0"))
+	float PerSecond = 0.f;
+
+	/** The tool costs nothing to keep. */
+	bool IsFree() const
+	{
+		return PerJob <= 0 && PerSecond <= 0.f;
+	}
+
+	/** The fee for a mission in which the tool worked ActiveSeconds in all, in whole money. Nothing if it did not work at all. */
+	int32 Cost(float ActiveSeconds) const
+	{
+		if (IsFree() || ActiveSeconds <= 0.f)
+		{
+			return 0;
+		}
+
+		return FMath::Max(0, PerJob) + FMath::RoundToInt(FMath::Max(0.f, PerSecond) * ActiveSeconds);
+	}
+};

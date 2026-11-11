@@ -20,9 +20,10 @@
  *  Safety        = min(SafetyCap, crush events x CrushPenalty + explosion events x ExplosionPenalty)
  *  Forbidden     = ForbiddenToolPenalty if the tool the contract forbade was used at all, 0 otherwise (once for the mission)
  *  Penalty       = min(PenaltyCap, kCollateral x Collateral + kZone x ZoneDamage + kFurniture x FurnitureLoss + Safety + Forbidden)
- *  Payout        = BasePayout x Completion x (1 - Penalty), in whole money
+ *  Upkeep        = for each tool that worked and has a fee: PerJob + PerSecond x seconds of active use, summed; taken from what is left after the penalty
+ *  Payout        = BasePayout x Completion x (1 - Penalty) - Upkeep, in whole money, never below 0
  *
- *  Money is rounded term by term (Earned, then each penalty term, then the cap), so the lines of the report always add
+ *  Money is rounded term by term (Earned, then each penalty term, then the cap, then the upkeep), so the lines of the report always add
  *  up to the payout to the unit.
  */
 UCLASS()

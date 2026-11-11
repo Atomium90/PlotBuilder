@@ -297,6 +297,119 @@ bool FPBEvaluatorForbiddenToolTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+namespace PBContractTests
+{
+	FToolUsage MakeUsage(const TCHAR* ToolId, float ActiveSeconds, int32 PerJob, float PerSecond)
+	{
+		FToolUsage Usage;
+		Usage.ToolId = FName(ToolId);
+		Usage.ActiveSeconds = ActiveSeconds;
+		Usage.Upkeep.PerJob = PerJob;
+		Usage.Upkeep.PerSecond = PerSecond;
+		return Usage;
+	}
+}
+
+// The fee of a tool: nothing if it did not work, else the flat part plus the rate times the seconds, rounded to whole money.
+// 50 + 2 x 38 = 126. 2.5 x 3 = 7.5 rounds to 8. A tool with both parts at 0 costs nothing however long it works.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBToolUpkeepCostTest, "PlotBuilder.Contracts.Evaluator.UpkeepCost", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBToolUpkeepCostTest::RunTest(const FString& Parameters)
+{
+	FToolUpkeep Jackhammer;
+	Jackhammer.PerJob = 50;
+	Jackhammer.PerSecond = 2.f;
+
+	TestEqual(TEXT("38 s"), Jackhammer.Cost(38.f), 126);
+	TestEqual(TEXT("did not work"), Jackhammer.Cost(0.f), 0);
+	TestFalse(TEXT("has a fee"), Jackhammer.IsFree());
+
+	FToolUpkeep Rate;
+	Rate.PerSecond = 2.5f;
+
+	TestEqual(TEXT("rounded to whole money"), Rate.Cost(3.f), 8);
+
+	TestTrue(TEXT("default is free"), FToolUpkeep().IsFree());
+	TestEqual(TEXT("free however long"), FToolUpkeep().Cost(600.f), 0);
+
+	return true;
+}
+
+// 1000 base, everything done, the jackhammer drilled 38 s (50 + 2 x 38 = 126): payout 874, one line "Upkeep" of -126 and the lines
+// still add up. The same job without any tool usage has no such line, and a tool that costs nothing leaves no line either.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorUpkeepTest, "PlotBuilder.Contracts.Evaluator.Upkeep", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBEvaluatorUpkeepTest::RunTest(const FString& Parameters)
+{
+	FMissionSnapshot Snapshot = PBContractTests::MakeCleanSnapshot();
+	Snapshot.ToolUsage.Add(PBContractTests::MakeUsage(TEXT("Jackhammer"), 38.f, 50, 2.f));
+
+	const FDebriefResult Result = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, FScoringParams());
+
+	TestEqual(TEXT("upkeep taken"), Result.Upkeep, 126);
+	TestEqual(TEXT("earned"), Result.Earned, 1000);
+	TestEqual(TEXT("payout"), Result.Payout, 874);
+	TestEqual(TEXT("six terms and the upkeep"), Result.Lines.Num(), 7);
+	TestEqual(TEXT("the line"), Result.Lines[5].Label, FString(TEXT("Upkeep")));
+	TestEqual(TEXT("the line takes money"), Result.Lines[5].Money, -126);
+	TestTrue(TEXT("the line names the tool and the seconds"), Result.Lines[5].Detail.Contains(TEXT("Jackhammer, 38 s (50 + 2 per second)")));
+	TestEqual(TEXT("lines add up"), PBContractTests::SumOfLinesBeforePayout(Result), Result.Payout);
+
+	// Two tools add: a 20 flat fee for the sledgehammer (5 s) and the jackhammer's 126. The penalty is taken first: a 0.10 crush
+	// is 100 off the 1000, and the upkeep comes off the 900 that is left: 900 - 146 = 754.
+	Snapshot.CrushEvents = 1;
+	Snapshot.ToolUsage.Add(PBContractTests::MakeUsage(TEXT("Sledgehammer"), 5.f, 20, 0.f));
+
+	const FDebriefResult Both = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, FScoringParams());
+
+	TestEqual(TEXT("both tools"), Both.Upkeep, 146);
+	TestEqual(TEXT("payout after the penalty and the upkeep"), Both.Payout, 754);
+	TestEqual(TEXT("lines add up"), PBContractTests::SumOfLinesBeforePayout(Both), Both.Payout);
+
+	// No usage, or a tool that costs nothing: no line, nothing taken.
+	const FDebriefResult None = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), PBContractTests::MakeCleanSnapshot(), FScoringParams());
+
+	TestEqual(TEXT("no usage, no line"), None.Lines.Num(), 6);
+	TestEqual(TEXT("no usage, no upkeep"), None.Upkeep, 0);
+
+	FMissionSnapshot Free = PBContractTests::MakeCleanSnapshot();
+	Free.ToolUsage.Add(PBContractTests::MakeUsage(TEXT("Crowbar"), 120.f, 0, 0.f));
+
+	const FDebriefResult FreeTool = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Free, FScoringParams());
+
+	TestEqual(TEXT("free tool, no line"), FreeTool.Lines.Num(), 6);
+	TestEqual(TEXT("free tool, full pay"), FreeTool.Payout, 1000);
+
+	return true;
+}
+
+// The penalty cap leaves 200 of a 1000 base (see PenaltyCap). A jackhammer that drilled 100 s wants 50 + 200 = 250: only the 200 that
+// is left is taken, the payout is 0 and never negative, and the report says how much of the fee it could take.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorUpkeepFloorTest, "PlotBuilder.Contracts.Evaluator.UpkeepFloor", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBEvaluatorUpkeepFloorTest::RunTest(const FString& Parameters)
+{
+	FMissionSnapshot Snapshot = PBContractTests::MakeCleanSnapshot();
+	Snapshot.MustStayDestroyedWeight = 400;
+	Snapshot.ToolUsage.Add(PBContractTests::MakeUsage(TEXT("Jackhammer"), 100.f, 50, 2.f));
+
+	const FDebriefResult Result = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, FScoringParams());
+
+	TestEqual(TEXT("only what is left is taken"), Result.Upkeep, 200);
+	TestEqual(TEXT("payout is zero"), Result.Payout, 0);
+	TestEqual(TEXT("lines add up"), PBContractTests::SumOfLinesBeforePayout(Result), Result.Payout);
+	TestTrue(TEXT("the line says how much could be taken"), Result.Lines[Result.Lines.Num() - 2].Detail.Contains(TEXT("200 of 250 taken")));
+
+	// A job that earned nothing owes nothing either.
+	FMissionSnapshot Nothing = PBContractTests::MakeCleanSnapshot();
+	Nothing.TargetDestroyedWeight = 0;
+	Nothing.ToolUsage.Add(PBContractTests::MakeUsage(TEXT("Jackhammer"), 10.f, 50, 2.f));
+
+	const FDebriefResult Unpaid = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Nothing, FScoringParams());
+
+	TestEqual(TEXT("nothing earned, nothing taken"), Unpaid.Upkeep, 0);
+	TestEqual(TEXT("nothing earned, nothing paid"), Unpaid.Payout, 0);
+
+	return true;
+}
+
 // 100 m2: a total demolition shows 6 minutes and pays 1200 (0.06 min and 12 money per m2), a partial one 3.6 and 720 (x0.6), a renovation 3 and 600 (x0.5).
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorEstimatesTest, "PlotBuilder.Contracts.Evaluator.Estimates", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPBEvaluatorEstimatesTest::RunTest(const FString& Parameters)
