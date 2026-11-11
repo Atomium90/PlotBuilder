@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Destruction/DemolitionTypes.h"
 #include "Progress/ToolShop.h"
 #include "ToolCardWidget.generated.h"
 
@@ -31,8 +32,11 @@ class UToolCardWidget : public UUserWidget
 
 public:
 
-	/** Fills the card with the state of the game now. Stock is the charges in stock, which only a consumable shows. */
-	void SetOffer(FName InToolId, const FToolOfferRow& InRow, bool bInOwned, int32 InMoney, bool bInInfiniteMoney, int32 InStock);
+	/**
+	 *  Fills the card with the state of the game now. Stock is the charges in stock, which only a consumable shows. InUpkeep is what the tool
+	 *  costs to keep, read by the tab from the tool's data asset (free for a tool that costs nothing, and for a consumable).
+	 */
+	void SetOffer(FName InToolId, const FToolOfferRow& InRow, bool bInOwned, int32 InMoney, bool bInInfiniteMoney, int32 InStock, const FToolUpkeep& InUpkeep);
 
 	FName GetToolId() const { return ToolId; }
 
@@ -94,7 +98,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget> OwnedBadge;
 
-	/** "Upkeep 40 per use", hidden when the tool costs nothing to keep. */
+	/** "Upkeep: 50 per job + 2 per second", hidden when the tool costs nothing to keep. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> UpkeepText;
 
@@ -133,6 +137,7 @@ private:
 
 	FName ToolId;
 	FToolOfferRow Row;
+	FToolUpkeep Upkeep;
 	bool bOwned = false;
 	int32 Money = 0;
 	bool bInfiniteMoney = false;

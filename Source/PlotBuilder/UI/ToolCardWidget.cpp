@@ -26,10 +26,11 @@ void UToolCardWidget::NativeOnInitialized()
 	}
 }
 
-void UToolCardWidget::SetOffer(const FName InToolId, const FToolOfferRow& InRow, const bool bInOwned, const int32 InMoney, const bool bInInfiniteMoney, const int32 InStock)
+void UToolCardWidget::SetOffer(const FName InToolId, const FToolOfferRow& InRow, const bool bInOwned, const int32 InMoney, const bool bInInfiniteMoney, const int32 InStock, const FToolUpkeep& InUpkeep)
 {
 	ToolId = InToolId;
 	Row = InRow;
+	Upkeep = InUpkeep;
 	bOwned = bInOwned;
 	Money = InMoney;
 	bInfiniteMoney = bInInfiniteMoney;
@@ -95,8 +96,8 @@ void UToolCardWidget::Redraw()
 
 	if (UpkeepText)
 	{
-		UpkeepText->SetText(FText::Format(NSLOCTEXT("ToolCard", "Upkeep", "Upkeep: {0} per use"), FText::AsNumber(Row.UpkeepPerUse)));
-		UpkeepText->SetVisibility(Row.UpkeepPerUse > 0 ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		UpkeepText->SetText(FText::Format(NSLOCTEXT("ToolCard", "Upkeep", "Upkeep: {0}"), FText::FromString(Upkeep.Describe())));
+		UpkeepText->SetVisibility(Upkeep.IsFree() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	}
 
 	if (StockText)

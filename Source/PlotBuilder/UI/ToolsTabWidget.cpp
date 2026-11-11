@@ -6,6 +6,7 @@
 #include "Engine/DataTable.h"
 #include "GameFramework/Pawn.h"
 #include "Interaction/HotbarComponent.h"
+#include "Interaction/ToolbeltComponent.h"
 #include "PlotBuilder.h"
 #include "Progress/ProgressSubsystem.h"
 #include "Progress/ToolShop.h"
@@ -16,6 +17,12 @@ namespace
 	{
 		const APawn* Pawn = Widget.GetOwningPlayerPawn();
 		return Pawn ? Pawn->FindComponentByClass<UHotbarComponent>() : nullptr;
+	}
+
+	const UToolbeltComponent* ToolsTabFindBelt(const UUserWidget& Widget)
+	{
+		const APawn* Pawn = Widget.GetOwningPlayerPawn();
+		return Pawn ? Pawn->FindComponentByClass<UToolbeltComponent>() : nullptr;
 	}
 }
 
@@ -72,7 +79,11 @@ void UToolsTabWidget::Refresh()
 		// What costs nothing (the hands) is always owned, even in a save older than the shop.
 		const bool bOwned = Row->Price == 0 || Progress->OwnsTool(RowNames[Index]);
 
-		Cards[Index]->SetOffer(RowNames[Index], *Row, bOwned, Hotbar->GetMoney(), Hotbar->IsInfiniteMoney(), Progress->GetCharges());
+		// The row names are the tool ids; what a tool costs to keep is on its data asset, which the belt reaches through the tool class of its slot.
+		const UToolbeltComponent* Belt = ToolsTabFindBelt(*this);
+		const FToolUpkeep Upkeep = Belt ? Belt->GetUpkeepForTool(RowNames[Index]) : FToolUpkeep();
+
+		Cards[Index]->SetOffer(RowNames[Index], *Row, bOwned, Hotbar->GetMoney(), Hotbar->IsInfiniteMoney(), Progress->GetCharges(), Upkeep);
 	}
 }
 

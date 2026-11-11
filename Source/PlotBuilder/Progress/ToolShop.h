@@ -39,10 +39,6 @@ struct FToolOfferRow : public FTableRowBase
 	/** Used up by playing: bought by the unit and never shown as owned. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Offer")
 	bool bConsumable = false;
-
-	/** What the tool costs to keep per use, only shown on the card (0 = nothing to show). The debrief takes it, later. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Offer", meta = (ClampMin = "0"))
-	int32 UpkeepPerUse = 0;
 };
 
 enum class EOfferState : uint8
