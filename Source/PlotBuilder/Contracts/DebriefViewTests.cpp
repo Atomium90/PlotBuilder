@@ -209,4 +209,47 @@ bool FPBDebriefCapSharedTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// The jackhammer drilled 38 s (50 per job + 2 per second = 126) on a 1 000 job with one crush (100 off): the waterfall goes 1 000, minus the crush,
+// minus the upkeep taken from the 900 that is left, down to 774. The upkeep step is neutral, does not count as the biggest loss, and the steps add up.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBDebriefUpkeepTest, "PlotBuilder.Contracts.Debrief.Upkeep", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBDebriefUpkeepTest::RunTest(const FString& Parameters)
+{
+	FContractDefinition Contract;
+	Contract.BasePayout = 1000;
+
+	FMissionSnapshot Snapshot;
+	Snapshot.TargetWeight = 500;
+	Snapshot.TargetDestroyedWeight = 500;
+	Snapshot.CrushEvents = 1;
+
+	FToolUsage& Usage = Snapshot.ToolUsage.AddDefaulted_GetRef();
+	Usage.ToolId = FName(TEXT("Jackhammer"));
+	Usage.ActiveSeconds = 38.f;
+	Usage.Upkeep.PerJob = 50;
+	Usage.Upkeep.PerSecond = 2.f;
+
+	const FScoringParams Params;
+	const FDebriefResult Result = UContractEvaluator::Evaluate(Contract, Snapshot, Params);
+	const FDebriefView View = MissionDebrief::Build(Result, MissionNotebook::Build(Contract, Snapshot, Params));
+
+	TestEqual(TEXT("payout"), Result.Payout, 774);
+
+	if (!TestEqual(TEXT("base, safety, upkeep, paid"), View.Steps.Num(), 4))
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("safety is shown for the crush alone"), View.Steps[1].Amount(), 100);
+	TestEqual(TEXT("the upkeep step"), View.Steps[2].Name, FString(TEXT("Upkeep")));
+	TestEqual(TEXT("it starts where the crush ended"), View.Steps[2].From, 900);
+	TestEqual(TEXT("it ends on the payout"), View.Steps[2].To, 774);
+	TestEqual(TEXT("its amount"), View.Steps[2].Amount(), 126);
+	TestTrue(TEXT("it is an upkeep, not a loss"), View.Steps[2].Kind == EDebriefStepKind::Upkeep);
+	TestTrue(TEXT("it says which tool and for how long"), View.Steps[2].Detail.Contains(TEXT("Jackhammer, 38 s")));
+	TestEqual(TEXT("the biggest loss stays the crush"), View.BiggestLossIndex, 1);
+	TestEqual(TEXT("the last total is the payout"), View.Steps.Last().To, 774);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

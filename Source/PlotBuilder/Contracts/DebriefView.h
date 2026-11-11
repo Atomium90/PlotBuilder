@@ -16,7 +16,9 @@ enum class EDebriefStepKind : uint8
 	/** Money not earned because the job was not finished (a part of the house left standing). A loss in the figures, but not a fault: it is drawn in a neutral colour. */
 	Unfinished,
 	/** A term that applies to the contract and cost nothing (a forbidden tool that was not used). */
-	Nothing
+	Nothing,
+	/** What the tools cost to keep. Money gone, but the cost of working and not a mistake: drawn in a neutral colour, and never the biggest loss. Appended last so the serialized values stay valid. */
+	Upkeep
 };
 
 /** One row of the waterfall: where the running total starts, where it ends, and what to say about it. */

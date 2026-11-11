@@ -78,7 +78,7 @@ void UDebriefStepWidget::SetStep(const FDebriefStep& Step, const int32 Base, con
 		{
 			Fill = bPayout ? Style->Success : UUIStyle::Srgb(93, 107, 130);
 		}
-		else if (Step.Kind == EDebriefStepKind::Unfinished)
+		else if (Step.Kind == EDebriefStepKind::Unfinished || Step.Kind == EDebriefStepKind::Upkeep)
 		{
 			Fill = UUIStyle::Srgb(122, 135, 156);
 		}

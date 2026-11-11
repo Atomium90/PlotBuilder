@@ -85,7 +85,8 @@ FDebriefView MissionDebrief::Build(const FDebriefResult& Result, const FNotebook
 		Largest = Taken[Index] > Taken[Largest] ? Index : Largest;
 	}
 
-	const int32 Applied = FMath::Max(0, Result.Earned - Result.Payout);
+	// The upkeep of the tools is taken after the penalty and is not one of the terms: only what is left of the earned money counts here.
+	const int32 Applied = FMath::Max(0, Result.Earned - Result.Payout - Result.Upkeep);
 	const bool bReduced = Terms > Applied;
 
 	if (bReduced && Terms > 0)
@@ -167,6 +168,17 @@ FDebriefView MissionDebrief::Build(const FDebriefResult& Result, const FNotebook
 	else if (Taken[DebriefTermTool] > 0)
 	{
 		AddLoss(TEXT("Forbidden tool"), FString(TEXT("A forbidden tool was used")) + Capped, Taken[DebriefTermTool]);
+	}
+
+	// The tools that cost something to keep, when one of them worked.
+	if (const FDebriefLine* UpkeepLine = DebriefFindLine(Result, TEXT("Upkeep")))
+	{
+		AddLoss(TEXT("Upkeep"), UpkeepLine->Detail, Result.Upkeep);
+
+		if (Result.Upkeep > 0)
+		{
+			View.Steps.Last().Kind = EDebriefStepKind::Upkeep;
+		}
 	}
 
 	AddTotal(TEXT("Paid to you"), TEXT("What reaches your account"), Result.Payout);
