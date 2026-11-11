@@ -48,18 +48,57 @@ int32 UProgressRingWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
 	return FMath::Max(SuperLayer, InContext.MaxLayer);
 }
 
+void UProgressChipWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	if (UGameFlowSubsystem* Flow = UGameFlowSubsystem::Get(this))
+	{
+		// The flow only looks a few times a second and still holds the state of the level before this one: look now, so a chip built at
+		// the start of a mission is right from its first frame.
+		Flow->Refresh();
+
+		Flow->OnStateChanged.Remove(FlowChangedHandle);
+		FlowChangedHandle = Flow->OnStateChanged.AddUObject(this, &UProgressChipWidget::HandleFlowChanged);
+	}
+
+	ApplyVisibility();
+}
+
+void UProgressChipWidget::NativeDestruct()
+{
+	if (UGameFlowSubsystem* Flow = UGameFlowSubsystem::Get(this))
+	{
+		Flow->OnStateChanged.Remove(FlowChangedHandle);
+	}
+
+	FlowChangedHandle.Reset();
+
+	Super::NativeDestruct();
+}
+
+void UProgressChipWidget::HandleFlowChanged(EGameFlowState /*OldState*/, EGameFlowState /*NewState*/)
+{
+	ApplyVisibility();
+}
+
+void UProgressChipWidget::ApplyVisibility()
+{
+	// The chip only means something in a mission; elsewhere it takes no room.
+	const UGameFlowSubsystem* Flow = UGameFlowSubsystem::Get(this);
+	const bool bInMission = Flow && Flow->GetState() == EGameFlowState::OnSite && UMissionResultSubsystem::Get(this);
+
+	SetVisibility(bInMission ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+}
+
 void UProgressChipWidget::NativeTick(const FGeometry& MyGeometry, const float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	// The chip only means something in a mission; elsewhere it takes no room.
+	// Visibility is not decided here: a collapsed widget is never ticked again (see ApplyVisibility).
 	UMissionResultSubsystem* Results = UMissionResultSubsystem::Get(this);
-	const UGameFlowSubsystem* Flow = UGameFlowSubsystem::Get(this);
-	const bool bInMission = Results && Flow && Flow->GetState() == EGameFlowState::OnSite;
 
-	SetVisibility(bInMission ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
-
-	if (!bInMission)
+	if (!Results)
 	{
 		return;
 	}

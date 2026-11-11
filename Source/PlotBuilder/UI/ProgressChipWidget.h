@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Flow/GameFlow.h"
 #include "ProgressChipWidget.generated.h"
 
 class UTextBlock;
@@ -51,6 +52,9 @@ private:
  *  The progress chip of the mission HUD: a ring with the share of the house that is down and what it measures. It shows itself only in a
  *  mission and reads the same live data as the notebook (UMissionResultSubsystem::GetLiveNotebook, which is read twice a second at most,
  *  so a chip on screen all the time costs nothing). The widget Blueprint only lays it out (the named widgets below are required).
+ *
+ *  Its visibility follows the game flow (OnSite) and is set when the widget is built and whenever the flow changes, never from the tick:
+ *  a collapsed widget is not ticked, so a chip that hid itself from NativeTick could never show itself again.
  */
 UCLASS(Abstract)
 class UProgressChipWidget : public UUserWidget
@@ -59,6 +63,8 @@ class UProgressChipWidget : public UUserWidget
 
 protected:
 
+	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	UPROPERTY(meta = (BindWidget))
@@ -67,4 +73,13 @@ protected:
 	/** The percentage inside the ring, without the sign. */
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> PercentText;
+
+private:
+
+	/** Shown while the flow says OnSite, collapsed (no room taken) otherwise. */
+	void ApplyVisibility();
+
+	void HandleFlowChanged(EGameFlowState OldState, EGameFlowState NewState);
+
+	FDelegateHandle FlowChangedHandle;
 };
