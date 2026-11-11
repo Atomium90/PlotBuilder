@@ -4,6 +4,7 @@
 #include "PaintBrushComponent.h"
 #include "Destruction/ExplosiveCharge.h"
 #include "Destruction/DemolitionTool.h"
+#include "Destruction/DemolitionToolData.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "PlotBuilder.h"
@@ -243,6 +244,22 @@ FName UToolbeltComponent::ToolIdForSlot(const int32 Index)
 	default:
 		return NAME_None;
 	}
+}
+
+FToolUpkeep UToolbeltComponent::GetUpkeepForTool(const FName ToolId) const
+{
+	for (int32 Index = 0; Index < MeleeToolClasses.Num(); ++Index)
+	{
+		if (!MeleeToolClasses[Index] || ToolIdForSlot(FirstMeleeSlotIndex + Index) != ToolId)
+		{
+			continue;
+		}
+
+		const ADemolitionTool* Tool = MeleeToolClasses[Index]->GetDefaultObject<ADemolitionTool>();
+		return (Tool && Tool->ToolData) ? Tool->ToolData->Upkeep : FToolUpkeep();
+	}
+
+	return FToolUpkeep();
 }
 
 bool UToolbeltComponent::IsSlotOwned(int32 Index) const

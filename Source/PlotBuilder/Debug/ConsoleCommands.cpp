@@ -25,6 +25,7 @@
 #include "UI/GameHUDWidget.h"
 #include "Player/PlayerCharacter.h"
 #include "Interaction/HotbarComponent.h"
+#include "Interaction/ToolbeltComponent.h"
 #include "Destruction/DemolitionTool.h"
 #include "Generation/HouseGenerator.h"
 
@@ -632,6 +633,46 @@ static FAutoConsoleCommandWithWorldAndArgs PbForbidToolCommand(
 		const bool bNone = Args[0].Equals(TEXT("none"), ESearchCase::IgnoreCase);
 		Results->SetForbiddenTool(bNone ? NAME_None : FName(*Args[0]));
 		UE_LOG(LogPlotBuilder, Log, TEXT("pb.ForbidTool: %s"), bNone ? TEXT("no tool is forbidden") : *FString::Printf(TEXT("the %s is forbidden"), *Args[0]));
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbAddToolTimeCommand(
+	TEXT("pb.AddToolTime"),
+	TEXT("pb.AddToolTime <Sledgehammer|Crowbar|Jackhammer> <seconds> - counts that many seconds of work for the tool in this mission, as if it had been used that long, with the upkeep set on the tool's data asset (DA_Jackhammer). Then pb.EndMission or pb.Settle shows the Upkeep line of the report without a play session. Starting a mission again (pb.SetSeed, pb.AcceptOffer) restarts the count from zero. Without arguments, prints what has been counted."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		UMissionResultSubsystem* Results = World ? UMissionResultSubsystem::Get(World) : nullptr;
+
+		if (!Results)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.AddToolTime: no mission result subsystem in this world"));
+			return;
+		}
+
+		if (Args.Num() < 2)
+		{
+			FString Counted;
+
+			for (const FToolUsage& Usage : Results->GetToolUsage())
+			{
+				Counted += FString::Printf(TEXT(" %s %.1f s (%s) = %d;"), *Usage.ToolId.ToString(), Usage.ActiveSeconds, *Usage.Upkeep.Describe(), Usage.Upkeep.Cost(Usage.ActiveSeconds));
+			}
+
+			UE_LOG(LogPlotBuilder, Log, TEXT("pb.AddToolTime: usage pb.AddToolTime <tool> <seconds>. Counted so far:%s"), Counted.IsEmpty() ? TEXT(" nothing") : *Counted);
+			return;
+		}
+
+		const APlayerCharacter* Player = GetDebugPlayerCharacter(World);
+		const UToolbeltComponent* Belt = Player ? Player->FindComponentByClass<UToolbeltComponent>() : nullptr;
+		const FToolUpkeep Upkeep = Belt ? Belt->GetUpkeepForTool(FName(*Args[0])) : FToolUpkeep();
+
+		if (Upkeep.IsFree())
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.AddToolTime: '%s' costs nothing to keep (or is not a tool of the belt): set Upkeep on its data asset, nothing was counted."), *Args[0]);
+			return;
+		}
+
+		Results->RecordToolActivity(FName(*Args[0]), Upkeep, FCString::Atof(*Args[1]));
+		UE_LOG(LogPlotBuilder, Log, TEXT("pb.AddToolTime: counted %s s for %s (%s)."), *Args[1], *Args[0], *Upkeep.Describe());
 	}));
 
 static FAutoConsoleCommandWithWorldAndArgs PbClearContractCommand(

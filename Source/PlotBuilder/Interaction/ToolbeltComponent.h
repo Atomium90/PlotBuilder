@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Destruction/DemolitionTypes.h"
 #include "ToolbeltComponent.generated.h"
 
 class AExplosiveCharge;
@@ -151,6 +152,12 @@ public:
 	/** How many slots the player does not own yet. The belt widgets show them as one padlock slot. */
 	UFUNCTION(BlueprintPure, Category = "Toolbelt")
 	int32 CountMissingTools() const;
+
+	/**
+	 *  What the tool with that id costs to keep (the ids are the row names of DT_ToolShop: "Sledgehammer", "Crowbar", "Jackhammer"), read from
+	 *  the data asset of the tool class in its slot. Free for an unknown id or a slot with no class. The PC card and pb.AddToolTime read it here.
+	 */
+	FToolUpkeep GetUpkeepForTool(FName ToolId) const;
 
 	/** Primary use (LMB) on the currently equipped tool. Slot 0 (Hands): Grab. Slot 1 (Charge): stick a charge on the surface in reach. Melee slots: swing. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")

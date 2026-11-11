@@ -118,4 +118,22 @@ struct FToolUpkeep
 
 		return FMath::Max(0, PerJob) + FMath::RoundToInt(FMath::Max(0.f, PerSecond) * ActiveSeconds);
 	}
+
+	/** The fee in words, for the card, the warning and the report: "50 per job + 2 per second", "2 per second", "50 per job". Empty when free. */
+	FString Describe() const
+	{
+		const FString Rate = FString::SanitizeFloat(PerSecond, 0);
+
+		if (PerJob > 0 && PerSecond > 0.f)
+		{
+			return FString::Printf(TEXT("%d per job + %s per second"), PerJob, *Rate);
+		}
+
+		if (PerSecond > 0.f)
+		{
+			return FString::Printf(TEXT("%s per second"), *Rate);
+		}
+
+		return PerJob > 0 ? FString::Printf(TEXT("%d per job"), PerJob) : FString();
+	}
 };

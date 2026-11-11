@@ -328,6 +328,10 @@ bool FPBToolUpkeepCostTest::RunTest(const FString& Parameters)
 
 	TestEqual(TEXT("rounded to whole money"), Rate.Cost(3.f), 8);
 
+	TestEqual(TEXT("both parts, in words"), Jackhammer.Describe(), FString(TEXT("50 per job + 2 per second")));
+	TestEqual(TEXT("rate only, in words"), Rate.Describe(), FString(TEXT("2.5 per second")));
+	TestTrue(TEXT("free says nothing"), FToolUpkeep().Describe().IsEmpty());
+
 	TestTrue(TEXT("default is free"), FToolUpkeep().IsFree());
 	TestEqual(TEXT("free however long"), FToolUpkeep().Cost(600.f), 0);
 
@@ -350,7 +354,7 @@ bool FPBEvaluatorUpkeepTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("six terms and the upkeep"), Result.Lines.Num(), 7);
 	TestEqual(TEXT("the line"), Result.Lines[5].Label, FString(TEXT("Upkeep")));
 	TestEqual(TEXT("the line takes money"), Result.Lines[5].Money, -126);
-	TestTrue(TEXT("the line names the tool and the seconds"), Result.Lines[5].Detail.Contains(TEXT("Jackhammer, 38 s (50 + 2 per second)")));
+	TestTrue(TEXT("the line names the tool and the seconds"), Result.Lines[5].Detail.Contains(TEXT("Jackhammer, 38 s (50 per job + 2 per second)")));
 	TestEqual(TEXT("lines add up"), PBContractTests::SumOfLinesBeforePayout(Result), Result.Payout);
 
 	// Two tools add: a 20 flat fee for the sledgehammer (5 s) and the jackhammer's 126. The penalty is taken first: a 0.10 crush

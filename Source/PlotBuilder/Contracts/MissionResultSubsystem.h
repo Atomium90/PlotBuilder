@@ -54,6 +54,15 @@ public:
 	bool WasForbiddenToolUsed() const { return bForbiddenToolUsed; }
 
 	/**
+	 *  A tool worked for Seconds more (called by ADemolitionTool each time a hit lands). Only a tool with a fee is kept: the seconds add up per
+	 *  tool, and the report charges Upkeep over the whole mission. The first time a tool with a fee works, the player is told what it costs.
+	 */
+	void RecordToolActivity(FName ToolId, const FToolUpkeep& Upkeep, float Seconds);
+
+	/** The tools that worked this mission, with their active seconds. */
+	const TArray<FToolUsage>& GetToolUsage() const { return ToolUsage; }
+
+	/**
 	 *  The rules asset the pieces of the house carry (DA_DemolitionRules), which holds the scoring. The mission director
 	 *  gives it when it binds the contract, while a piece still stands: at the end of a mission the house may be gone, and
 	 *  nothing else is certain to hold the asset.
@@ -120,4 +129,7 @@ private:
 	/** See SetForbiddenTool and RecordToolUse. */
 	FName ForbiddenTool;
 	bool bForbiddenToolUsed = false;
+
+	/** See RecordToolActivity. One entry per tool with a fee that worked. */
+	TArray<FToolUsage> ToolUsage;
 };

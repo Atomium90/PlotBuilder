@@ -19,22 +19,7 @@ namespace
 			bOutAnyTool = true;
 			Wanted += Usage.Upkeep.Cost(Usage.ActiveSeconds);
 
-			FString Rate;
-
-			if (Usage.Upkeep.PerJob > 0 && Usage.Upkeep.PerSecond > 0.f)
-			{
-				Rate = FString::Printf(TEXT("%d + %s per second"), Usage.Upkeep.PerJob, *FString::SanitizeFloat(Usage.Upkeep.PerSecond, 0));
-			}
-			else if (Usage.Upkeep.PerSecond > 0.f)
-			{
-				Rate = FString::Printf(TEXT("%s per second"), *FString::SanitizeFloat(Usage.Upkeep.PerSecond, 0));
-			}
-			else
-			{
-				Rate = FString::Printf(TEXT("%d per job"), Usage.Upkeep.PerJob);
-			}
-
-			OutDetail += FString::Printf(TEXT("%s%s, %.0f s (%s)"), OutDetail.IsEmpty() ? TEXT("") : TEXT("; "), *Usage.ToolId.ToString(), Usage.ActiveSeconds, *Rate);
+			OutDetail += FString::Printf(TEXT("%s%s, %.0f s (%s)"), OutDetail.IsEmpty() ? TEXT("") : TEXT("; "), *Usage.ToolId.ToString(), Usage.ActiveSeconds, *Usage.Upkeep.Describe());
 		}
 
 		return Wanted;

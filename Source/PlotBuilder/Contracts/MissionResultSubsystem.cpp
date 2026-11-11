@@ -73,6 +73,7 @@ void UMissionResultSubsystem::ResetCounters()
 	CrushEvents = 0;
 	ExplosionEvents = 0;
 	bForbiddenToolUsed = false;
+	ToolUsage.Reset();
 	NotebookStamp = -1.0;
 	bSettled = false;
 }
@@ -97,6 +98,35 @@ void UMissionResultSubsystem::RecordToolUse(FName ToolId)
 	if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
 	{
 		Messages->Notify(FText::Format(NSLOCTEXT("Mission", "ForbiddenToolUsed", "The client forbade the {0}. It will show in the report."), FText::FromName(ForbiddenTool)), EMessageTone::Warning, 6.f);
+	}
+}
+
+void UMissionResultSubsystem::RecordToolActivity(FName ToolId, const FToolUpkeep& Upkeep, float Seconds)
+{
+	if (Upkeep.IsFree() || Seconds <= 0.f)
+	{
+		return;
+	}
+
+	FToolUsage* Usage = ToolUsage.FindByPredicate([ToolId](const FToolUsage& Entry) { return Entry.ToolId == ToolId; });
+
+	if (Usage)
+	{
+		Usage->ActiveSeconds += Seconds;
+		Usage->Upkeep = Upkeep;
+		return;
+	}
+
+	FToolUsage& Added = ToolUsage.AddDefaulted_GetRef();
+	Added.ToolId = ToolId;
+	Added.ActiveSeconds = Seconds;
+	Added.Upkeep = Upkeep;
+
+	UE_LOG(LogPlotBuilder, Log, TEXT("UMissionResultSubsystem: the %s started to work, upkeep %s."), *ToolId.ToString(), *Upkeep.Describe());
+
+	if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
+	{
+		Messages->Notify(FText::Format(NSLOCTEXT("Mission", "ToolUpkeep", "{0} upkeep: {1}. It will show in the report."), FText::FromName(ToolId), FText::FromString(Upkeep.Describe())), EMessageTone::Info, 6.f);
 	}
 }
 
@@ -221,6 +251,7 @@ FMissionSnapshot UMissionResultSubsystem::BuildSnapshot() const
 	Snapshot.ExplosionEvents = ExplosionEvents;
 	Snapshot.ForbiddenToolName = ForbiddenTool;
 	Snapshot.bForbiddenToolUsed = bForbiddenToolUsed;
+	Snapshot.ToolUsage = ToolUsage;
 
 	return Snapshot;
 }
@@ -234,6 +265,11 @@ FString UMissionResultSubsystem::DescribeSnapshot(const FMissionSnapshot& Snapsh
 	if (!Snapshot.ForbiddenToolName.IsNone())
 	{
 		Text += FString::Printf(TEXT(" | forbidden tool %s: %s"), *Snapshot.ForbiddenToolName.ToString(), Snapshot.bForbiddenToolUsed ? TEXT("used") : TEXT("not used"));
+	}
+
+	for (const FToolUsage& Usage : Snapshot.ToolUsage)
+	{
+		Text += FString::Printf(TEXT("\n  Tool %s: %.1f s of work, upkeep %s = %d"), *Usage.ToolId.ToString(), Usage.ActiveSeconds, *Usage.Upkeep.Describe(), Usage.Upkeep.Cost(Usage.ActiveSeconds));
 	}
 
 	for (const FSalvageResult& Item : Snapshot.Salvage)

@@ -48,6 +48,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool")
 	bool bContinuous = false;
 
+	/**
+	 *  What the tool costs to keep: a flat fee for a mission where it worked, plus a rate per second of active use. Both 0 for a tool that
+	 *  costs nothing (the sledgehammer and the crowbar). The mission report charges it, the PC card shows it - tune it here, no code.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Upkeep")
+	FToolUpkeep Upkeep;
+
 	/** Camera shake played on a landed hit - per-tool, since "strong but imprecise" vs "fast and clean" is a tool trait (GDD §7.4), not a material one. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Feedback")
 	TSubclassOf<UCameraShakeBase> HitCameraShakeClass;

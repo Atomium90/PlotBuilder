@@ -1,4 +1,5 @@
 #include "DemolitionTool.h"
+#include "Contracts/MissionResultSubsystem.h"
 #include "Debug/DebugDisplay.h"
 #include "DemolitionToolData.h"
 #include "DemolitionRules.h"
@@ -168,6 +169,8 @@ void ADemolitionTool::ResolveHit()
 		Targets.Add(Hit.GetActor());
 	}
 
+	const FName ToolId(*StaticEnum<EDemolitionTool>()->GetNameStringByValue(static_cast<int64>(ToolData->Tool)));
+
 	bool bHitSomething = false;
 	EDemolitionMaterial HitMaterial = EDemolitionMaterial::Wood;
 
@@ -185,7 +188,7 @@ void ADemolitionTool::ResolveHit()
 		FDamageInfo DamageInfo;
 		DamageInfo.Amount = FinalDamage;
 		DamageInfo.Multiplier = ToolData->BaseDamage > 0.f ? FinalDamage / ToolData->BaseDamage : 1.f;
-		DamageInfo.ToolId = FName(*StaticEnum<EDemolitionTool>()->GetNameStringByValue(static_cast<int64>(ToolData->Tool)));
+		DamageInfo.ToolId = ToolId;
 		DamageInfo.HitLocation = Hit.Location;
 		DamageInfo.Instigator = this;
 
@@ -204,6 +207,15 @@ void ADemolitionTool::ResolveHit()
 	if (bHitSomething)
 	{
 		PlayHitFeedback(Hit.Location, HitMaterial);
+
+		// A hit that landed is 1 / Rate seconds of work: the mission report charges the upkeep of the tool over that time.
+		if (!ToolData->Upkeep.IsFree())
+		{
+			if (UMissionResultSubsystem* Mission = GetWorld()->GetSubsystem<UMissionResultSubsystem>())
+			{
+				Mission->RecordToolActivity(ToolId, ToolData->Upkeep, ToolData->Rate > 0.f ? 1.f / ToolData->Rate : 1.f);
+			}
+		}
 	}
 }
 
