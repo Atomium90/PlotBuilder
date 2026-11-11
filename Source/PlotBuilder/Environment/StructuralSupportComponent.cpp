@@ -299,6 +299,14 @@ bool UStructuralSupportComponent::AreSocketsLinked(EStructuralSocketType A, EStr
 	return false;
 }
 
+bool UStructuralSupportComponent::IsRestingOnSlab(EStructuralSocketType SlabSide, EStructuralSocketType OtherSide)
+{
+	const bool bSlab = SlabSide == EStructuralSocketType::FloorEdge || SlabSide == EStructuralSocketType::FloorCorner;
+	const bool bStandsOn = OtherSide == EStructuralSocketType::WallBottom || OtherSide == EStructuralSocketType::RoofLow;
+
+	return bSlab && bStandsOn;
+}
+
 TMap<FIntVector, TObjectPtr<ABuildablePiece>>* UStructuralSupportComponent::GetOccupancyMap(EBuildAnchor SlotType)
 {
 	switch (SlotType)
@@ -557,6 +565,7 @@ float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSock
 	const float VerticalLoss = Rules ? Rules->VerticalLoss : 0.1f;
 	const float HorizontalLoss = Rules ? Rules->HorizontalLoss : 0.6f;
 	const float RoofLateralLoss = Rules ? Rules->RoofLateralLoss : 0.2f;
+	const float SubAnchorMinimum = Rules ? Rules->SubAnchorMinimumIncomingStability : 0.1f;
 	float BestStability = 0.f;
 
 	for (const FStructuralSocket& Socket : Sockets)
@@ -581,7 +590,16 @@ float UStructuralSupportComponent::ComputeStability(const TArray<FStructuralSock
 				const float Loss = bIsHanging ? 0.f : (bIsVertical ? VerticalLoss : (bIsRoofLateral ? RoofLateralLoss : HorizontalLoss));
 				const UDurabilityComponent* EntryDurability = Entry.Owner->GetDurabilityComponent();
 				const float Coupling = EntryDurability ? EntryDurability->GetStabilityCoupling() : 1.f;
-				BestStability = FMath::Max(BestStability, Entry.Owner->GetStability() * Coupling - Loss);
+
+				// A reinforcement slab hands the full stability to what stands on it, as long as it stands itself (see RelaxStability).
+				float Supplied = Entry.Owner->GetStability();
+
+				if (Entry.Owner->ResetsStability() && IsRestingOnSlab(Entry.Type, Socket.Type) && Supplied >= SubAnchorMinimum)
+				{
+					Supplied = 1.f;
+				}
+
+				BestStability = FMath::Max(BestStability, Supplied * Coupling - Loss);
 			}
 		}
 	}
@@ -730,6 +748,7 @@ void UStructuralSupportComponent::RelaxStability(const ABuildablePiece* Excluded
 	const float VerticalLoss = Rules ? Rules->VerticalLoss : 0.1f;
 	const float HorizontalLoss = Rules ? Rules->HorizontalLoss : 0.6f;
 	const float RoofLateralLoss = Rules ? Rules->RoofLateralLoss : 0.2f;
+	const float SubAnchorMinimum = Rules ? Rules->SubAnchorMinimumIncomingStability : 0.1f;
 
 	// DryRunResult == nullptr: read/write each piece's own Stability field directly, exactly as
 	// before this was factored out of RecomputeStability. DryRunResult != nullptr (WouldBeBottleneck):
@@ -809,21 +828,32 @@ void UStructuralSupportComponent::RelaxStability(const ABuildablePiece* Excluded
 
 					if (AreSocketsLinked(Socket.Type, Entry.Type, bIsVertical, bIsRoofLateral, &bIsHanging))
 					{
+						// A reinforcement slab takes nothing from what stands on it: that piece got its stability from the slab, so
+						// handing it back would let the slab prop itself up (and, through the slab beside it, a whole floor).
+						if (Piece->ResetsStability() && IsRestingOnSlab(Socket.Type, Entry.Type))
+						{
+							continue;
+						}
+
 						const float Loss = bIsHanging ? 0.f : (bIsVertical ? VerticalLoss : (bIsRoofLateral ? RoofLateralLoss : HorizontalLoss));
 						const UDurabilityComponent* EntryDurability = Entry.Owner->GetDurabilityComponent();
 						const float Coupling = EntryDurability ? EntryDurability->GetStabilityCoupling() : 1.f;
-						BestStability = FMath::Max(BestStability, ReadStability(Entry.Owner) * Coupling - Loss);
+
+						// Sub-anchor slab (GDD §8, D28): a floor in every respect but one. Its own stability is worked out like any
+						// floor's, from what is under it and beside it, so it falls when that gives out. What it hands to the piece
+						// standing on it is 1.0, as long as it stands itself (its own stability reaches the minimum): the stack above
+						// starts again from full, which is what lets a tall building hold. Re-checked every pass, and every non-anchor
+						// is re-seeded to 0 at the top, so it stops as soon as the chain under the slab is cut.
+						float Supplied = ReadStability(Entry.Owner);
+
+						if (Entry.Owner->ResetsStability() && IsRestingOnSlab(Entry.Type, Socket.Type) && Supplied >= SubAnchorMinimum)
+						{
+							Supplied = 1.f;
+						}
+
+						BestStability = FMath::Max(BestStability, Supplied * Coupling - Loss);
 					}
 				}
-			}
-
-			// Sub-anchor slab (GDD §8, D28): resets to 1.0 like a real Anchor, but only once its own
-			// incoming chain is itself valid - a floating sub-anchor must not hold up a building.
-			// Re-checked every relaxation pass, so this naturally stops once the chain below it is
-			// removed (RelaxStability re-seeds every non-anchor to 0 at the top, every time).
-			if (Piece->ResetsStability() && BestStability >= (Rules ? Rules->SubAnchorMinimumIncomingStability : 0.1f))
-			{
-				BestStability = 1.f;
 			}
 
 			if (BestStability > ReadStability(Piece) + KINDA_SMALL_NUMBER)

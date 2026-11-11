@@ -214,6 +214,14 @@ private:
 	 */
 	static bool AreSocketsLinked(EStructuralSocketType A, EStructuralSocketType B, bool& OutIsVertical, bool& OutIsRoofLateral, bool* OutIsHanging = nullptr);
 
+	/**
+	 *  For a link between two sockets (already known to be linked, see AreSocketsLinked): true when SlabSide is the edge or the corner of
+	 *  a floor slab and OtherSide is the bottom of a wall or the low edge of a roof tile, that is, the other piece stands ON the slab.
+	 *  A reinforcement slab (ABuildablePiece::ResetsStability) hands the full stability to what stands on it, and only to that: its own
+	 *  stability, the one that decides whether it falls, comes from what is under it and beside it, like any floor.
+	 */
+	static bool IsRestingOnSlab(EStructuralSocketType SlabSide, EStructuralSocketType OtherSide);
+
 	void RecomputeStability();
 
 	/**

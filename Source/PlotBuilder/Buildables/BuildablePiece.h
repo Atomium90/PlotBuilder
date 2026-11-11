@@ -120,9 +120,11 @@ public:
 	bool bIsLoadBearing = true;
 
 	/**
-	 *  Sub-anchor slab (GDD §8, D28): resets this piece's stability to 1.0, same as a real Anchor
-	 *  socket, but only once its own incoming chain is itself valid (see
-	 *  UStructuralSupportComponent::RelaxStability and UStructuralRules::SubAnchorMinimumIncomingStability).
+	 *  Reinforcement behaviour (GDD §8, D28), set on the floor slab: a floor in every respect but one. It hands the full stability (1.0)
+	 *  to whatever stands on it (the walls and roof tiles resting on its edge), as long as it stands itself,
+	 *  i.e. its own stability reaches UStructuralRules::SubAnchorMinimumIncomingStability. Its own
+	 *  stability is worked out like any floor's, from what is under it and beside it, so it falls as a
+	 *  floor does when that gives out (see UStructuralSupportComponent::RelaxStability).
 	 *  Fixes tall stacks hitting the collapse threshold around the fifth storey even at full health -
 	 *  a plain visual/material swap on the floor slab BP, same footprint and height, nothing else
 	 *  about the piece changes. False for every other piece, including the real foundation (which

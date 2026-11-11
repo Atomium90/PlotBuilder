@@ -41,10 +41,10 @@ public:
 	float CollapseThreshold = 0.1f;
 
 	/**
-	 *  Minimum stability a sub-anchor slab (ABuildablePiece::ResetsStability) must be receiving from
-	 *  its own neighbours before it resets to 1.0 - GDD §8, D28. Keep this equal to CollapseThreshold
-	 *  (its default) unless deliberately tuning the two apart: a floating sub-anchor with no valid
-	 *  chain below it must not hold up a building just because it has the flag.
+	 *  Minimum stability a sub-anchor slab (ABuildablePiece::ResetsStability) must itself have, worked out
+	 *  like a floor's, before it hands 1.0 to what stands on it - GDD §8, D28. Keep this equal to
+	 *  CollapseThreshold (its default) unless deliberately tuning the two apart: a floating sub-anchor with
+	 *  no valid chain below it must not hold up a building just because it has the flag.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Structural")
 	float SubAnchorMinimumIncomingStability = 0.1f;
