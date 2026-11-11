@@ -5,6 +5,7 @@
 #include "Environment/Plot.h"
 #include "Environment/StructuralSupportComponent.h"
 #include "Environment/StructuralRules.h"
+#include "Props/PhysicsProp.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/OverlapResult.h"
@@ -46,10 +47,15 @@ void UBuildModeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	if (bShowDebug && GEngine)
 	{
 		const FString ClassName = LastPreviewedClass ? LastPreviewedClass->GetName() : TEXT("(none)");
-		const ABuildablePiece* CDO = LastPreviewedClass ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
+		const ABuildablePiece* CDO = GetPreviewedPiece();
 		const EBuildAnchor Anchor = CDO ? CDO->GetBuildAnchor() : EBuildAnchor::Legacy;
 
-		if (Anchor != EBuildAnchor::Legacy)
+		if (GetPreviewedProp())
+		{
+			PBDebug::Message(500, 0.f, FColor::Green, FString::Printf(TEXT("Build Mode: prop %s | rotation %d deg | on %s | %s"),
+				*ClassName, FMath::RoundToInt(RotationSteps * PropRotationStepDegrees), PendingSupport.IsValid() ? *PendingSupport->GetName() : TEXT("(nothing)"), *LastBlockReason));
+		}
+		else if (Anchor != EBuildAnchor::Legacy)
 		{
 			PBDebug::Message(500, 0.f, FColor::Green, FString::Printf(TEXT("Build Mode: %s | level %d | roof step %d | cell (%d,%d,%d) | %s%s"),
 				*ClassName, BuildLevel, RoofStepValue, PendingGridCoord.X, PendingGridCoord.Y, PendingGridCoord.Z, *LastBlockReason, bIsRisky ? TEXT(" | risky") : TEXT("")));
@@ -136,7 +142,15 @@ void UBuildModeComponent::RotatePreview(int32 Direction)
 		return;
 	}
 
-	const ABuildablePiece* SelectedCDO = LastPreviewedClass ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
+	// A prop turns by its own, finer step: furniture is arranged by eye.
+	if (GetPreviewedProp())
+	{
+		const int32 StepsPerTurn = FMath::Max(1, FMath::RoundToInt(360.f / FMath::Max(1.f, PropRotationStepDegrees)));
+		RotationSteps = (RotationSteps + FMath::Sign(Direction) + StepsPerTurn) % StepsPerTurn;
+		return;
+	}
+
+	const ABuildablePiece* SelectedCDO = GetPreviewedPiece();
 	const EBuildAnchor Anchor = SelectedCDO ? SelectedCDO->GetBuildAnchor() : EBuildAnchor::Legacy;
 
 	// Vertex pieces (posts) don't rotate - they look the same from every side at a grid vertex.
@@ -196,7 +210,7 @@ void UBuildModeComponent::ConfirmPlacement()
 	FInventorySlot SelectedEntry;
 
 	if (!HotbarComponent->GetSelectedEntry(SelectedEntry) || !SelectedEntry.ActorClass
-		|| !SelectedEntry.ActorClass->IsChildOf(ABuildablePiece::StaticClass()))
+		|| !(SelectedEntry.ActorClass->IsChildOf(ABuildablePiece::StaticClass()) || SelectedEntry.ActorClass->IsChildOf(APhysicsProp::StaticClass())))
 	{
 		return;
 	}
@@ -210,6 +224,29 @@ void UBuildModeComponent::ConfirmPlacement()
 				? TEXT("Can't place here - outside the plot.")
 				: TEXT("Can't place here - blocked."));
 		}
+		return;
+	}
+
+	// A prop is set down where the ghost is and stays there, like a wall: no grid, no plot registration (it is not part of the structure).
+	if (SelectedEntry.ActorClass->IsChildOf(APhysicsProp::StaticClass()))
+	{
+		const FVector PropLocation = PreviewActor->GetActorLocation();
+		const FRotator PropRotation = PreviewActor->GetActorRotation();
+		AActor* Support = PendingSupport.Get();
+
+		const FInventorySlot ConsumedProp = HotbarComponent->ConsumeSelected();
+
+		// The ghost has already checked the overlap, so the prop is spawned exactly there.
+		FActorSpawnParameters PropSpawnParams;
+		PropSpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		if (APhysicsProp* Prop = GetWorld()->SpawnActor<APhysicsProp>(ConsumedProp.ActorClass, PropLocation, PropRotation, PropSpawnParams))
+		{
+			Prop->SetActorScale3D(ConsumedProp.Scale);
+			Prop->Place(Support);
+		}
+
+		RefreshPreviewMesh();
 		return;
 	}
 
@@ -278,7 +315,7 @@ void UBuildModeComponent::RefreshPreviewMesh()
 
 	FInventorySlot SelectedEntry;
 	const bool bHasBuildableSelected = HotbarComponent->GetSelectedEntry(SelectedEntry) && SelectedEntry.ActorClass
-		&& SelectedEntry.ActorClass->IsChildOf(ABuildablePiece::StaticClass());
+		&& (SelectedEntry.ActorClass->IsChildOf(ABuildablePiece::StaticClass()) || SelectedEntry.ActorClass->IsChildOf(APhysicsProp::StaticClass()));
 
 	if (!bHasBuildableSelected)
 	{
@@ -289,7 +326,8 @@ void UBuildModeComponent::RefreshPreviewMesh()
 
 	PreviewActor->SetActorHiddenInGame(false);
 
-	const ABuildablePiece* CDO = SelectedEntry.ActorClass->GetDefaultObject<ABuildablePiece>();
+	const bool bProp = SelectedEntry.ActorClass->IsChildOf(APhysicsProp::StaticClass());
+	const ABuildablePiece* CDO = bProp ? nullptr : SelectedEntry.ActorClass->GetDefaultObject<ABuildablePiece>();
 
 	// A mirror-variant piece reuses the Edge "flip" toggle (RotationSteps) to pick which of its two
 	// mirrored meshes to preview, instead of rotating 180 - see TryResolveGridPlacement's Edge
@@ -312,17 +350,33 @@ void UBuildModeComponent::RefreshPreviewMesh()
 		RotationSteps = 0;
 	}
 
-	const ABuildablePiece* MeshSourceCDO = (bPreviewMirrored && CDO->MirrorVariantClass)
-		? CDO->MirrorVariantClass->GetDefaultObject<ABuildablePiece>()
-		: CDO;
 	UStaticMeshComponent* MeshComp = PreviewActor->GetStaticMeshComponent();
 
-	if (!MeshSourceCDO || !MeshComp)
+	if (!MeshComp)
 	{
 		return;
 	}
 
-	MeshComp->SetStaticMesh(MeshSourceCDO->GetMeshComponent() ? MeshSourceCDO->GetMeshComponent()->GetStaticMesh() : nullptr);
+	if (bProp)
+	{
+		const APhysicsProp* PropCDO = SelectedEntry.ActorClass->GetDefaultObject<APhysicsProp>();
+		MeshComp->SetStaticMesh(PropCDO && PropCDO->GetMeshComponent() ? PropCDO->GetMeshComponent()->GetStaticMesh() : nullptr);
+		PreviewPlacement = APhysicsProp::GetPlacement(TSubclassOf<APhysicsProp>(SelectedEntry.ActorClass.Get()));
+	}
+	else
+	{
+		const ABuildablePiece* MeshSourceCDO = (bPreviewMirrored && CDO->MirrorVariantClass)
+			? CDO->MirrorVariantClass->GetDefaultObject<ABuildablePiece>()
+			: CDO;
+
+		if (!MeshSourceCDO)
+		{
+			return;
+		}
+
+		MeshComp->SetStaticMesh(MeshSourceCDO->GetMeshComponent() ? MeshSourceCDO->GetMeshComponent()->GetStaticMesh() : nullptr);
+	}
+
 	PreviewActor->SetActorScale3D(SelectedEntry.Scale);
 
 	// New mesh slots have no ghost material assigned yet - force UpdateGhostMaterial to (re)apply
@@ -349,11 +403,36 @@ void UBuildModeComponent::UpdatePreviewTransform()
 	FRotator ViewRotation;
 	OwnerController->GetPlayerViewPoint(ViewLocation, ViewRotation);
 
-	const ABuildablePiece* SelectedCDO = LastPreviewedClass ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
+	const ABuildablePiece* SelectedCDO = GetPreviewedPiece();
 	const EBuildAnchor Anchor = SelectedCDO ? SelectedCDO->GetBuildAnchor() : EBuildAnchor::Legacy;
 
 	FVector CandidateLocation;
 	FRotator CandidateRotation;
+
+	if (GetPreviewedProp())
+	{
+		AActor* Support = nullptr;
+
+		if (!TryFindPropTransform(ViewLocation, ViewRotation, CandidateLocation, CandidateRotation, Support))
+		{
+			PreviewActor->SetActorHiddenInGame(true);
+			PendingSupport.Reset();
+			bIsBlocked = true;
+			bIsRisky = false;
+			LastBlockReason = PreviewPlacement.bHangsOnWall ? TEXT("aim at a plain wall to hang this on") : TEXT("nothing in reach to stand on");
+			return;
+		}
+
+		PendingSupport = Support;
+		PreviewActor->SetActorLocationAndRotation(CandidateLocation, CandidateRotation);
+
+		// The support (the floor it stands on) touches the prop by design, so it is not an obstacle; anything else overlapping is.
+		bIsBlocked = IsCandidateBlocked(CandidateLocation, CandidateRotation, Support);
+		bIsRisky = false;
+		LastBlockReason = bIsBlocked ? TEXT("blocked") : TEXT("free");
+		UpdateGhostMaterial(bIsBlocked, false);
+		return;
+	}
 
 	if (Anchor != EBuildAnchor::Legacy)
 	{
@@ -403,6 +482,151 @@ void UBuildModeComponent::ComputeFreeTransform(const FVector& ViewLocation, cons
 	OutLocation.Z = FMath::GridSnap(OutLocation.Z, HotbarComponent->GridSize);
 
 	OutRotation = FRotator(0.f, RotationSteps * RotationStepDegrees, 0.f);
+}
+
+const ABuildablePiece* UBuildModeComponent::GetPreviewedPiece() const
+{
+	return (LastPreviewedClass && LastPreviewedClass->IsChildOf(ABuildablePiece::StaticClass())) ? LastPreviewedClass->GetDefaultObject<ABuildablePiece>() : nullptr;
+}
+
+const APhysicsProp* UBuildModeComponent::GetPreviewedProp() const
+{
+	return (LastPreviewedClass && LastPreviewedClass->IsChildOf(APhysicsProp::StaticClass())) ? LastPreviewedClass->GetDefaultObject<APhysicsProp>() : nullptr;
+}
+
+bool UBuildModeComponent::TryFindPropTransform(const FVector& ViewLocation, const FRotator& ViewRotation, FVector& OutLocation, FRotator& OutRotation, AActor*& OutSupport) const
+{
+	OutSupport = nullptr;
+
+	const APhysicsProp* PropCDO = GetPreviewedProp();
+	const UStaticMesh* Mesh = (PropCDO && PropCDO->GetMeshComponent()) ? PropCDO->GetMeshComponent()->GetStaticMesh() : nullptr;
+
+	if (!Mesh || !PreviewActor || !HotbarComponent)
+	{
+		return false;
+	}
+
+	// A normal pointing this far up is a floor (or the top of a table); anything steeper is a wall, a ceiling or a side.
+	constexpr float FloorNormalZ = 0.7f;
+
+	const FVector Scale = PreviewActor->GetActorScale3D();
+	const FBoxSphereBounds LocalBounds = Mesh->GetBounds();
+
+	OutRotation = FRotator(0.f, RotationSteps * FMath::Max(1.f, PropRotationStepDegrees), 0.f);
+
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(GetOwner());
+	QueryParams.AddIgnoredActor(PreviewActor);
+
+	FHitResult Hit;
+	const FVector TraceEnd = ViewLocation + ViewRotation.Vector() * HotbarComponent->PlaceDistance;
+
+	if (!GetWorld()->LineTraceSingleByChannel(Hit, ViewLocation, TraceEnd, ECC_GameTraceChannel2, QueryParams))
+	{
+		return false;
+	}
+
+	// Rest = where the pivot goes (X, Y) and the surface the mesh's bottom rests on (Z).
+	FVector Rest = Hit.ImpactPoint;
+	AActor* Support = Hit.GetActor();
+	bool bSnapX = PropSnapSize > 0.f;
+	bool bSnapY = PropSnapSize > 0.f;
+
+	// Puts the pivot (X, Y of Rest) where the box of the mesh, turned as OutRotation is, lies flush against a vertical surface hit at ImpactPoint
+	// whose horizontal normal is Out, centred on the aimed point along the surface. The pivot is not the middle of the box (the Kenney
+	// meshes have it at a corner), so the box's middle is placed first and the pivot follows from it.
+	const auto PlaceFlushAgainst = [&](const FVector& Out)
+	{
+		const FVector BoxOffset = OutRotation.RotateVector(LocalBounds.Origin * Scale);
+		const FVector AxisX = OutRotation.RotateVector(FVector::XAxisVector);
+		const FVector AxisY = OutRotation.RotateVector(FVector::YAxisVector);
+
+		// Half the box's width measured along the normal of the wall.
+		const float Reach = FMath::Abs(FVector::DotProduct(Out, AxisX)) * LocalBounds.BoxExtent.X * Scale.X
+			+ FMath::Abs(FVector::DotProduct(Out, AxisY)) * LocalBounds.BoxExtent.Y * Scale.Y;
+
+		// Walls of the kit run along an axis: there the distance to the wall is exact (only the position along the wall is rounded), so
+		// the prop touches it. A skewed wall has no exact axis to keep out of the rounding, so it gets the rounding as a margin.
+		const bool bWallAlongY = FMath::Abs(Out.X) > 0.99f;
+		const bool bWallAlongX = FMath::Abs(Out.Y) > 0.99f;
+		const float Gap = (bWallAlongY || bWallAlongX) ? 1.f : 1.f + PropSnapSize * 0.71f;
+
+		const FVector BoxMiddle = Hit.ImpactPoint + Out * (Reach + Gap);
+
+		Rest.X = BoxMiddle.X - BoxOffset.X;
+		Rest.Y = BoxMiddle.Y - BoxOffset.Y;
+
+		bSnapX = bSnapX && !bWallAlongY;
+		bSnapY = bSnapY && !bWallAlongX;
+	};
+
+	if (PreviewPlacement.bHangsOnWall)
+	{
+		// A mirror or a cabinet hangs on a plain wall of the kit (what it is mounted on), at the height that was aimed, its front turned
+		// away from the wall. Anywhere else it has nothing to hang on.
+		const ABuildablePiece* Wall = Cast<ABuildablePiece>(Hit.GetActor());
+		const bool bPlainWall = Wall && (Wall->PieceClass == EPieceClass::ExteriorWall || Wall->PieceClass == EPieceClass::InteriorWall)
+			&& FMath::Abs(Hit.ImpactNormal.Z) < 0.5f;
+
+		if (!bPlainWall)
+		{
+			return false;
+		}
+
+		const FVector Out = FVector(Hit.ImpactNormal.X, Hit.ImpactNormal.Y, 0.f).GetSafeNormal();
+
+		OutRotation = FRotator(0.f, FRotator::NormalizeAxis(FMath::RadiansToDegrees(FMath::Atan2(Out.Y, Out.X)) + PreviewPlacement.FrontYawOffset), 0.f);
+		PlaceFlushAgainst(Out);
+
+		// The middle of the box is at the aimed height.
+		Rest.Z = Hit.ImpactPoint.Z - LocalBounds.BoxExtent.Z * Scale.Z;
+
+		if (PropSnapSize > 0.f)
+		{
+			Rest.Z = FMath::GridSnap(Rest.Z, PropSnapSize);
+		}
+	}
+	else if (Hit.ImpactNormal.Z < FloorNormalZ)
+	{
+		// Not a floor: the prop stands on the floor at the foot of what was aimed, not in the air at the height that was aimed. The floor
+		// is looked for right against the surface, so it does not depend on the prop's size or on how it is turned.
+		const FVector Out = FVector(Hit.ImpactNormal.X, Hit.ImpactNormal.Y, 0.f).GetSafeNormal();
+		const FVector DropStart = Hit.ImpactPoint + Out * 2.f;
+
+		FHitResult Floor;
+
+		if (!GetWorld()->LineTraceSingleByChannel(Floor, DropStart, DropStart - FVector(0.f, 0.f, PropDropDistance), ECC_GameTraceChannel2, QueryParams)
+			|| Floor.ImpactNormal.Z < FloorNormalZ)
+		{
+			return false;
+		}
+
+		Rest.Z = Floor.ImpactPoint.Z;
+		Support = Floor.GetActor();
+
+		// A ceiling has no horizontal normal: the prop simply stands under the point that was aimed. A wall: flush against it.
+		if (!Out.IsNearlyZero())
+		{
+			PlaceFlushAgainst(Out);
+		}
+	}
+
+	if (bSnapX)
+	{
+		Rest.X = FMath::GridSnap(Rest.X, PropSnapSize);
+	}
+
+	if (bSnapY)
+	{
+		Rest.Y = FMath::GridSnap(Rest.Y, PropSnapSize);
+	}
+
+	// Rotation is yaw only, which never changes Z: the mesh's bottom stays a fixed offset below its pivot, and it goes right on the surface.
+	const float LocalBottomZ = (LocalBounds.Origin.Z - LocalBounds.BoxExtent.Z) * Scale.Z;
+	OutLocation = FVector(Rest.X, Rest.Y, Rest.Z - LocalBottomZ);
+	OutSupport = Support;
+
+	return true;
 }
 
 bool UBuildModeComponent::TryFindSnapTransform(const FVector& ViewLocation, const FRotator& ViewRotation, FVector& OutLocation, FRotator& OutRotation, AActor*& OutSnapTarget) const

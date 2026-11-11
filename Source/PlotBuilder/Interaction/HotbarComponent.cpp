@@ -3,6 +3,7 @@
 #include "ShopItemRow.h"
 #include "Buildables/BuildablePiece.h"
 #include "Props/PaintBucket.h"
+#include "Props/PhysicsProp.h"
 #include "Progress/ProgressSubsystem.h"
 #include "UI/PlayerMessages.h"
 #include "GameFramework/Pawn.h"
@@ -102,8 +103,8 @@ bool UHotbarComponent::SlotQualifies(const FInventorySlot& Slot, bool bBuildable
 		return true;
 	}
 
-	// Build mode can only build what is there.
-	return !Slot.IsEmpty() && Slot.ActorClass->IsChildOf(ABuildablePiece::StaticClass());
+	// Build mode can only place what is there: the pieces, and the props, which it sets down like a wall (the paint buckets are the brush's, never placed).
+	return !Slot.IsEmpty() && (Slot.ActorClass->IsChildOf(ABuildablePiece::StaticClass()) || Slot.ActorClass->IsChildOf(APhysicsProp::StaticClass()));
 }
 
 int32 UHotbarComponent::AddItem(TSubclassOf<AActor> ActorClass, const FVector& Scale, int32 StackSize, int32 Count)
@@ -444,12 +445,13 @@ void UHotbarComponent::TryPlace()
 		return;
 	}
 
-	if (SelectedEntry.ActorClass->IsChildOf(ABuildablePiece::StaticClass()))
+	// Pieces and props are both set down through the build mode's preview: a prop is placed like a wall, not dropped to tumble about.
+	if (SelectedEntry.ActorClass->IsChildOf(ABuildablePiece::StaticClass()) || SelectedEntry.ActorClass->IsChildOf(APhysicsProp::StaticClass()))
 	{
 		// Say why the click did nothing. This one used to be debug text, so the player never saw it.
 		if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
 		{
-			Messages->Notify(NSLOCTEXT("Hotbar", "EnterBuildMode", "Enter Build Mode to place buildables."), EMessageTone::Info);
+			Messages->Notify(NSLOCTEXT("Hotbar", "EnterBuildMode", "Enter Build Mode to place this."), EMessageTone::Info);
 		}
 		return;
 	}

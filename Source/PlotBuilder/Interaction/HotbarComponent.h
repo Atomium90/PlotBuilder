@@ -222,10 +222,10 @@ public:
 	const FShopItemRow* FindRowForClass(TSubclassOf<AActor> ActorClass) const;
 
 	/**
-	 *  Spawns the selected entry, grid-snapped, in front of the view. Instant placement, no
-	 *  preview: this is the APhysicsProp path. ABuildablePiece entries are refused here - they
-	 *  go through UBuildModeComponent's preview + confirm flow instead - and so are the paint
-	 *  buckets (APaintBucket), which only the brush uses and which are never spawned.
+	 *  Spawns the selected entry, grid-snapped, in front of the view, for whatever is neither a piece nor a prop. Pieces
+	 *  (ABuildablePiece) and props (APhysicsProp) are refused here with a line telling the player to enter Build Mode: both
+	 *  go through UBuildModeComponent's preview + confirm flow, and a prop is set down there like a wall. The paint
+	 *  buckets (APaintBucket) are refused too, silently: only the brush uses them and they are never spawned.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	void TryPlace();

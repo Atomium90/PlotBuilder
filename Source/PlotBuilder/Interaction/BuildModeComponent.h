@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Buildables/BuildAnchor.h"
+#include "Props/PhysicsProp.h"
 #include "BuildModeComponent.generated.h"
 
 class UHotbarComponent;
@@ -10,6 +11,7 @@ class UMaterialInterface;
 class AStaticMeshActor;
 class APlot;
 class ABuildablePiece;
+class APhysicsProp;
 
 /**
  *  Placement flow for ABuildablePiece, separate from the instant placement UHotbarComponent::TryPlace
@@ -26,6 +28,11 @@ class ABuildablePiece;
  *  Either way, one obstruction test per tick decides whether the current transform is blocked (red)
  *  or free (green) to confirm - IsCandidateBlocked for Legacy, IsGridCandidateBlocked for the grid
  *  path (plot bounds, occupancy table, a ground-clipped overlap, and structural stability).
+ *
+ *  A third path is for props (APhysicsProp, the furniture of the hotbar): they are placed like a wall, not
+ *  dropped. The ghost goes where the view lands on a surface, whatever the BuildLevel (TryFindPropTransform),
+ *  turns by a finer step, uses the Legacy obstruction test, and the confirmed prop is set down frozen on what it
+ *  stands on (APhysicsProp::Place), taken back with E like a piece.
  */
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class UBuildModeComponent : public UActorComponent
@@ -51,6 +58,18 @@ public:
 	/** Yaw step size, in degrees, applied per RotatePreview call - Legacy pieces only, grid pieces use a fixed step per EBuildAnchor (90 deg for Cell, 180 deg for Edge, none for Vertex). */
 	UPROPERTY(EditAnywhere, Category = "Build Mode")
 	float RotationStepDegrees = 45.f;
+
+	/** Yaw step, in degrees, of a prop's preview (a piece uses RotationStepDegrees or its anchor's step): finer, since furniture is arranged by eye. */
+	UPROPERTY(EditAnywhere, Category = "Build Mode|Props", meta = (ClampMin = "1", ClampMax = "90"))
+	float PropRotationStepDegrees = 15.f;
+
+	/** A prop's position is rounded to this size, in cm, on the floor (0 = exactly where the view lands). Far finer than the grid of the pieces. */
+	UPROPERTY(EditAnywhere, Category = "Build Mode|Props", meta = (ClampMin = "0"))
+	float PropSnapSize = 10.f;
+
+	/** How far down, in cm, a prop looks for a floor when the view lands on a wall or something steep: it stands on the floor beside it. */
+	UPROPERTY(EditAnywhere, Category = "Build Mode|Props", meta = (ClampMin = "0"))
+	float PropDropDistance = 300.f;
 
 	/** Highest BuildLevel ChangeBuildLevel will reach - level 0 is the ground floor. */
 	UPROPERTY(EditAnywhere, Category = "Build Mode")
@@ -133,6 +152,21 @@ private:
 	 */
 	bool TryFindSnapTransform(const FVector& ViewLocation, const FRotator& ViewRotation, FVector& OutLocation, FRotator& OutRotation, AActor*& OutSnapTarget) const;
 
+	/** The class being previewed as a piece, or nullptr when it is a prop (or nothing). The one safe way to read the piece's defaults. */
+	const ABuildablePiece* GetPreviewedPiece() const;
+
+	/** The class being previewed as a prop, or nullptr when it is a piece (or nothing). */
+	const APhysicsProp* GetPreviewedProp() const;
+
+	/**
+	 *  Prop path. A prop is not placed on the grid or on a plane at the BuildLevel: it goes where the view lands. Traces the view on the
+	 *  interaction channel; a floor-like hit (normal pointing up) is where the mesh's bottom rests, with the position rounded to PropSnapSize;
+	 *  anything steeper (a wall) puts the mesh's box flush against it, centred on the aimed point, on the floor at the wall's foot. False when nothing is in reach or
+	 *  there is no floor to stand on. OutSupport is the actor it stands on (a piece, the ground...), which the obstruction test ignores and
+	 *  the prop is mounted on once placed.
+	 */
+	bool TryFindPropTransform(const FVector& ViewLocation, const FRotator& ViewRotation, FVector& OutLocation, FRotator& OutRotation, AActor*& OutSupport) const;
+
 	/** Legacy path fallback when TryFindSnapTransform finds nothing to snap onto: view + fixed distance, grid-snapped. */
 	void ComputeFreeTransform(const FVector& ViewLocation, const FRotator& ViewRotation, FVector& OutLocation, FRotator& OutRotation) const;
 
@@ -198,6 +232,12 @@ private:
 	bool bIsRisky = false;
 	int32 BuildLevel = 0;
 	int32 RoofStepValue = 0;
+
+	/** What the prop ghost stands on this tick (see TryFindPropTransform) - consumed by ConfirmPlacement. Meaningless for a piece. */
+	TWeakObjectPtr<AActor> PendingSupport;
+
+	/** How the previewed prop class is set down (hung on a wall or standing), read once when the class changes. Meaningless for a piece. */
+	FPropPlacement PreviewPlacement;
 
 	/** Grid coordinate/orientation the ghost resolved to this tick, for a non-Legacy piece - consumed by ConfirmPlacement. Meaningless for a Legacy piece. */
 	FIntVector PendingGridCoord = FIntVector::ZeroValue;
