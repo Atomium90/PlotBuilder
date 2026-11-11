@@ -13,6 +13,7 @@
 #include "Components/TextBlock.h"
 #include "Contracts/ClientRow.h"
 #include "Contracts/ContractSubsystem.h"
+#include "FocusCardWidget.h"
 #include "Flow/GameFlowSubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "Interaction/HotbarComponent.h"
@@ -70,11 +71,28 @@ void UGameHUDWidget::NativeConstruct()
 
 	CurrentMenu = NAME_None;
 	TryBind();
+
+	// The card of what the crosshair looks at lives over the game, beside this HUD, not inside it.
+	if (!FocusCard && FocusCardClass)
+	{
+		FocusCard = CreateWidget<UFocusCardWidget>(GetOwningPlayer(), FocusCardClass);
+
+		if (FocusCard)
+		{
+			FocusCard->AddToViewport(FocusCardZOrder);
+		}
+	}
 }
 
 void UGameHUDWidget::NativeDestruct()
 {
 	Unbind();
+
+	if (FocusCard)
+	{
+		FocusCard->RemoveFromParent();
+		FocusCard = nullptr;
+	}
 
 	Super::NativeDestruct();
 }
@@ -92,6 +110,12 @@ void UGameHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	if (IsMenuOpen())
 	{
 		FollowPointer();
+	}
+
+	// A screen over the game: the card steps aside.
+	if (FocusCard)
+	{
+		FocusCard->SetSuppressed(IsMenuOpen());
 	}
 }
 

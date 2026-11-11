@@ -7,6 +7,7 @@
 
 class AExplosiveCharge;
 class ADemolitionTool;
+class UDemolitionToolData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBeltChanged);
 
@@ -158,6 +159,12 @@ public:
 	 *  the data asset of the tool class in its slot. Free for an unknown id or a slot with no class. The PC card and pb.AddToolTime read it here.
 	 */
 	FToolUpkeep GetUpkeepForTool(FName ToolId) const;
+
+	/** The data of the melee tool in hand (sledgehammer, crowbar, jackhammer), or nullptr for the hands, the brush and the charge. The focus card reads it against the material under the crosshair. */
+	const UDemolitionToolData* GetEquippedToolData() const;
+
+	/** The id of the melee tool in hand ("Sledgehammer"...), or None for any other slot. */
+	FName GetEquippedToolId() const { return ToolIdForSlot(EquippedIndex); }
 
 	/** Primary use (LMB) on the currently equipped tool. Slot 0 (Hands): Grab. Slot 1 (Charge): stick a charge on the surface in reach. Melee slots: swing. */
 	UFUNCTION(BlueprintCallable, Category = "Toolbelt")

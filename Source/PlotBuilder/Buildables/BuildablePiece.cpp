@@ -434,6 +434,11 @@ void ABuildablePiece::OnCompromisedStart()
 	}
 }
 
+bool ABuildablePiece::IsCompromised() const
+{
+	return GetWorld() && GetWorldTimerManager().IsTimerActive(CompromisedJiggleHandle);
+}
+
 void ABuildablePiece::OnCompromisedCancelled()
 {
 	if (!GetWorldTimerManager().IsTimerActive(CompromisedJiggleHandle) && !CompromisedWarningAudio)

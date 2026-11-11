@@ -7,6 +7,7 @@
 class UControlsHintWidget;
 class UCursorStackWidget;
 class UDebriefWidget;
+class UFocusCardWidget;
 class UHotbarComponent;
 class UInventoryWidget;
 class ULeaveConfirmWidget;
@@ -124,6 +125,17 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<ULeaveConfirmWidget> LeaveMenu;
 
+	/**
+	 *  The card of the thing under the crosshair (WBP_FocusCard). The HUD makes one when it is built and puts it over the game, so the
+	 *  Blueprint of the HUD does not have to hold it. Empty means no card.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Focus card")
+	TSubclassOf<UFocusCardWidget> FocusCardClass;
+
+	/** Where the card sits among the widgets of the viewport: above the game, under nothing that needs the pointer (the card is hidden while a screen is open). */
+	UPROPERTY(EditDefaultsOnly, Category = "Focus card")
+	int32 FocusCardZOrder = 5;
+
 private:
 
 	/** Finds the player's hotbar and listens to its money. False while the pawn does not exist yet (the HUD is built before it). */
@@ -151,6 +163,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UHotbarComponent> Hotbar;
+
+	/** The focus card this HUD made, if any. */
+	UPROPERTY()
+	TObjectPtr<UFocusCardWidget> FocusCard;
 
 	bool bBound = false;
 };

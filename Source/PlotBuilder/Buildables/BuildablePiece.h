@@ -217,6 +217,9 @@ public:
 	/** Called by UStructuralSupportComponent::CancelCompromised: stops the warning placeholders started by OnCompromisedStart - D29's "dependants destroyed first" un-Compromise case. No-op if not currently Compromised. */
 	void OnCompromisedCancelled();
 
+	/** Whether the piece is warning as Compromised right now (between OnCompromisedStart and the end of the warning). The focus card says so. */
+	bool IsCompromised() const;
+
 protected:
 
 	virtual void BeginPlay() override;

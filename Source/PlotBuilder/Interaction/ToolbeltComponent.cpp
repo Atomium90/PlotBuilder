@@ -262,6 +262,19 @@ FToolUpkeep UToolbeltComponent::GetUpkeepForTool(const FName ToolId) const
 	return FToolUpkeep();
 }
 
+const UDemolitionToolData* UToolbeltComponent::GetEquippedToolData() const
+{
+	const int32 Index = EquippedIndex - FirstMeleeSlotIndex;
+
+	if (!MeleeToolClasses.IsValidIndex(Index) || !MeleeToolClasses[Index])
+	{
+		return nullptr;
+	}
+
+	const ADemolitionTool* Tool = MeleeToolClasses[Index]->GetDefaultObject<ADemolitionTool>();
+	return Tool ? Tool->ToolData : nullptr;
+}
+
 bool UToolbeltComponent::IsSlotOwned(int32 Index) const
 {
 	if (Index < 0 || Index >= NumSlots)
