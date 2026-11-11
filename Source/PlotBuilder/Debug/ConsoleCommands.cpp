@@ -17,6 +17,7 @@
 #include "Environment/DropZone.h"
 #include "Environment/MissionGround.h"
 #include "Environment/ProtectedZone.h"
+#include "Flow/GameFlowSubsystem.h"
 #include "Home/HomeDirector.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "ProfilingDebugging/MiscTrace.h"
@@ -609,6 +610,23 @@ static FAutoConsoleCommandWithWorldAndArgs PbShowDebriefCommand(
 		{
 			Hud->ShowDebrief(false);
 		}
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs PbStateCommand(
+	TEXT("pb.State"),
+	TEXT("pb.State - prints where the player is in the loop (InHub, ContractSelected, OnSite, Debrief, InHome) and the facts that state is worked out from: a mission level, a home, the debrief open, a contract taken. Nothing records the state: it is read from those facts a few times a second, and pb.State reads them right now."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		UGameFlowSubsystem* Flow = World ? UGameFlowSubsystem::Get(World) : nullptr;
+
+		if (!Flow)
+		{
+			UE_LOG(LogPlotBuilder, Warning, TEXT("pb.State: no game flow subsystem (no game instance)"));
+			return;
+		}
+
+		Flow->Refresh();
+		Flow->ShowOnScreen(10.f);
 	}));
 
 static FAutoConsoleCommandWithWorldAndArgs PbForbidToolCommand(
