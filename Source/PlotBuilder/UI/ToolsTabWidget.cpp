@@ -100,14 +100,15 @@ void UToolsTabWidget::HandleBuy(const FName ToolId, const int32 Quantity)
 
 	// Judged again here, not trusted from the card: the money may have moved since it was drawn.
 	const bool bOwned = Row->Price == 0 || Progress->OwnsTool(ToolId);
-	const FOfferStatus Status = ToolShop::Evaluate(*Row, bOwned, Hotbar->GetMoney(), Hotbar->IsInfiniteMoney(), Quantity);
+	const int32 Stock = Progress->GetCharges();
+	const FOfferStatus Status = ToolShop::Evaluate(*Row, bOwned, Hotbar->GetMoney(), Hotbar->IsInfiniteMoney(), Quantity, Stock);
 
 	if (Status.State != EOfferState::CanBuy || !Hotbar->TrySpend(Status.Total))
 	{
 		return;
 	}
 
-	const int32 Bought = Row->bConsumable ? ToolShop::ClampQuantity(Quantity) : 1;
+	const int32 Bought = Row->bConsumable ? ToolShop::ClampQuantity(Quantity, ToolShop::Room(*Row, Stock)) : 1;
 
 	// The only consumable is the explosive charge, kept as a stock in the progress.
 	if (Row->bConsumable)

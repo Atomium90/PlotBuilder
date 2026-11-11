@@ -68,9 +68,13 @@ void UToolCardWidget::BuildChips()
 
 void UToolCardWidget::Redraw()
 {
-	const FOfferStatus Status = ToolShop::Evaluate(Row, bOwned, Money, bInfiniteMoney, Quantity);
+	// The quantity follows the room left in the stock (it may have shrunk since the card was drawn).
+	Quantity = ToolShop::ClampQuantity(Quantity, ToolShop::Room(Row, Stock));
+
+	const FOfferStatus Status = ToolShop::Evaluate(Row, bOwned, Money, bInfiniteMoney, Quantity, Stock);
 	const bool bIsOwned = Status.State == EOfferState::Owned;
 	const bool bCanBuy = Status.State == EOfferState::CanBuy;
+	const bool bAtLimit = Status.State == EOfferState::AtLimit;
 
 	NameText->SetText(Row.DisplayName);
 	BlurbText->SetText(Row.Blurb);
@@ -102,7 +106,9 @@ void UToolCardWidget::Redraw()
 
 	if (StockText)
 	{
-		StockText->SetText(FText::Format(NSLOCTEXT("ToolCard", "Stock", "In stock: {0}"), FText::AsNumber(Stock)));
+		StockText->SetText(Row.MaxStock > 0
+			? FText::Format(NSLOCTEXT("ToolCard", "StockOf", "In stock: {0} of {1}"), FText::AsNumber(Stock), FText::AsNumber(Row.MaxStock))
+			: FText::Format(NSLOCTEXT("ToolCard", "Stock", "In stock: {0}"), FText::AsNumber(Stock)));
 		StockText->SetVisibility(Row.bConsumable ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 
@@ -129,6 +135,10 @@ void UToolCardWidget::Redraw()
 	if (bIsOwned)
 	{
 		Label = NSLOCTEXT("ToolCard", "OnBelt", "On your belt");
+	}
+	else if (bAtLimit)
+	{
+		Label = NSLOCTEXT("ToolCard", "StockFull", "Stock full");
 	}
 	else if (bCanBuy)
 	{
@@ -167,14 +177,14 @@ void UToolCardWidget::Redraw()
 
 void UToolCardWidget::HandleBuy()
 {
-	const FOfferStatus Status = ToolShop::Evaluate(Row, bOwned, Money, bInfiniteMoney, Quantity);
+	const FOfferStatus Status = ToolShop::Evaluate(Row, bOwned, Money, bInfiniteMoney, Quantity, Stock);
 
 	if (Status.State != EOfferState::CanBuy)
 	{
 		return;
 	}
 
-	const int32 Asked = Row.bConsumable ? ToolShop::ClampQuantity(Quantity) : 1;
+	const int32 Asked = Row.bConsumable ? ToolShop::ClampQuantity(Quantity, ToolShop::Room(Row, Stock)) : 1;
 
 	// Back to one for the next time; the tab redraws the card from the new state.
 	Quantity = 1;
@@ -184,12 +194,12 @@ void UToolCardWidget::HandleBuy()
 
 void UToolCardWidget::HandleMinus()
 {
-	Quantity = ToolShop::ClampQuantity(Quantity - 1);
+	Quantity = ToolShop::ClampQuantity(Quantity - 1, ToolShop::Room(Row, Stock));
 	Redraw();
 }
 
 void UToolCardWidget::HandlePlus()
 {
-	Quantity = ToolShop::ClampQuantity(Quantity + 1);
+	Quantity = ToolShop::ClampQuantity(Quantity + 1, ToolShop::Room(Row, Stock));
 	Redraw();
 }

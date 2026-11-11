@@ -39,6 +39,10 @@ struct FToolOfferRow : public FTableRowBase
 	/** Used up by playing: bought by the unit and never shown as owned. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Offer")
 	bool bConsumable = false;
+
+	/** The most of this consumable the player may hold at once (the charges in stock). The stepper and the purchase stop there. 0 = no limit. Ignored for a tool. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Offer", meta = (ClampMin = "0"))
+	int32 MaxStock = 10;
 };
 
 enum class EOfferState : uint8
@@ -49,6 +53,8 @@ enum class EOfferState : uint8
 	CanBuy,
 	/** The player cannot pay yet: Missing says how much is short. */
 	TooExpensive,
+	/** A consumable of which the player already holds as many as the row allows. */
+	AtLimit,
 };
 
 struct FOfferStatus
@@ -87,14 +93,17 @@ struct FParcelStatus
  */
 namespace ToolShop
 {
-	/** The most of one consumable the stepper goes to. */
-	constexpr int32 MaxQuantity = 9;
+	/** The most of one consumable the stepper goes to when its row sets no limit (MaxStock 0). */
+	constexpr int32 MaxQuantityUnlimited = 99;
 
-	/** The quantity kept between 1 and MaxQuantity. */
-	int32 ClampQuantity(int32 Requested);
+	/** How many more of this consumable the player may take: what is left under the row's MaxStock, or MaxQuantityUnlimited with no limit. 0 = the stock is full. */
+	int32 Room(const FToolOfferRow& Row, int32 Stock);
 
-	/** What a card says. Quantity only matters for a consumable. */
-	FOfferStatus Evaluate(const FToolOfferRow& Row, bool bOwned, int32 Money, bool bInfiniteMoney, int32 Quantity = 1);
+	/** The quantity kept between 1 and RoomLeft (never below 1, so that the stepper still shows a number when the stock is full). */
+	int32 ClampQuantity(int32 Requested, int32 RoomLeft);
+
+	/** What a card says. Quantity and Stock only matter for a consumable: Stock is what the player holds, and caps the quantity at the room left. */
+	FOfferStatus Evaluate(const FToolOfferRow& Row, bool bOwned, int32 Money, bool bInfiniteMoney, int32 Quantity = 1, int32 Stock = 0);
 
 	/** What the Parcel tab says. */
 	FParcelStatus EvaluateParcel(int32 Price, bool bOwned, int32 Money, bool bInfiniteMoney);

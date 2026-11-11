@@ -1,22 +1,33 @@
 #include "ToolShop.h"
 
-int32 ToolShop::ClampQuantity(const int32 Requested)
+int32 ToolShop::Room(const FToolOfferRow& Row, const int32 Stock)
 {
-	return FMath::Clamp(Requested, 1, MaxQuantity);
+	return Row.MaxStock > 0 ? FMath::Max(0, Row.MaxStock - Stock) : MaxQuantityUnlimited;
 }
 
-FOfferStatus ToolShop::Evaluate(const FToolOfferRow& Row, const bool bOwned, const int32 Money, const bool bInfiniteMoney, const int32 Quantity)
+int32 ToolShop::ClampQuantity(const int32 Requested, const int32 RoomLeft)
+{
+	return FMath::Clamp(Requested, 1, FMath::Max(1, RoomLeft));
+}
+
+FOfferStatus ToolShop::Evaluate(const FToolOfferRow& Row, const bool bOwned, const int32 Money, const bool bInfiniteMoney, const int32 Quantity, const int32 Stock)
 {
 	FOfferStatus Status;
 
-	// A tool is bought once; a consumable is bought by the unit and can always be bought again.
+	// A tool is bought once; a consumable is bought by the unit and can be bought again, up to what the player may hold.
 	if (!Row.bConsumable && bOwned)
 	{
 		Status.State = EOfferState::Owned;
 		return Status;
 	}
 
-	Status.Total = Row.Price * (Row.bConsumable ? ClampQuantity(Quantity) : 1);
+	if (Row.bConsumable && Room(Row, Stock) <= 0)
+	{
+		Status.State = EOfferState::AtLimit;
+		return Status;
+	}
+
+	Status.Total = Row.Price * (Row.bConsumable ? ClampQuantity(Quantity, Room(Row, Stock)) : 1);
 
 	if (bInfiniteMoney || Money >= Status.Total)
 	{
