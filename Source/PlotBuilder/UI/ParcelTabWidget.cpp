@@ -12,7 +12,7 @@
 
 namespace
 {
-	UHotbarComponent* FindHotbar(const UUserWidget& Widget)
+	UHotbarComponent* ParcelTabFindHotbar(const UUserWidget& Widget)
 	{
 		const APawn* Pawn = Widget.GetOwningPlayerPawn();
 		return Pawn ? Pawn->FindComponentByClass<UHotbarComponent>() : nullptr;
@@ -29,7 +29,7 @@ void UParcelTabWidget::NativeOnInitialized()
 void UParcelTabWidget::Refresh()
 {
 	const UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
-	const UHotbarComponent* Hotbar = FindHotbar(*this);
+	const UHotbarComponent* Hotbar = ParcelTabFindHotbar(*this);
 
 	if (!Progress || !Hotbar)
 	{
@@ -92,7 +92,7 @@ void UParcelTabWidget::Refresh()
 void UParcelTabWidget::HandleBuy()
 {
 	UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
-	UHotbarComponent* Hotbar = FindHotbar(*this);
+	UHotbarComponent* Hotbar = ParcelTabFindHotbar(*this);
 
 	if (!Progress || !Hotbar)
 	{

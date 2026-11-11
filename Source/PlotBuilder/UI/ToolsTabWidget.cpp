@@ -12,7 +12,7 @@
 
 namespace
 {
-	UHotbarComponent* FindHotbar(const UUserWidget& Widget)
+	UHotbarComponent* ToolsTabFindHotbar(const UUserWidget& Widget)
 	{
 		const APawn* Pawn = Widget.GetOwningPlayerPawn();
 		return Pawn ? Pawn->FindComponentByClass<UHotbarComponent>() : nullptr;
@@ -22,7 +22,7 @@ namespace
 void UToolsTabWidget::Refresh()
 {
 	UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
-	const UHotbarComponent* Hotbar = FindHotbar(*this);
+	const UHotbarComponent* Hotbar = ToolsTabFindHotbar(*this);
 
 	if (!Offers || !CardClass || !Progress || !Hotbar)
 	{
@@ -79,7 +79,7 @@ void UToolsTabWidget::Refresh()
 void UToolsTabWidget::HandleBuy(const FName ToolId, const int32 Quantity)
 {
 	UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
-	UHotbarComponent* Hotbar = FindHotbar(*this);
+	UHotbarComponent* Hotbar = ToolsTabFindHotbar(*this);
 	const FToolOfferRow* Row = Offers ? Offers->FindRow<FToolOfferRow>(ToolId, TEXT("UToolsTabWidget::HandleBuy")) : nullptr;
 
 	if (!Progress || !Hotbar || !Row)
