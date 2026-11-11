@@ -542,13 +542,18 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 Salvage
 		const UEnum* RoomEnum = StaticEnum<ERoomType>();
 		const int64 RoomValue = RoomEnum ? RoomEnum->GetValueByName(KeepRoom) : INDEX_NONE;
 
+		// A room can only be kept standing on the lowest storey that comes down: the ground floor in a total demolition, the first storey that
+		// goes in a partial one (a partial demolition is a total one that starts there, on top of the storeys that stay whole). A room higher
+		// up would be left hanging in the air once the storeys under it are gone.
+		const int32 KeepLevel = Type == EContractType::PartialDemolition ? FMath::Max(0, FromLevel) : 0;
+
 		TArray<const FRoom*> Matching;
 
 		if (RoomValue != INDEX_NONE)
 		{
 			for (const FRoom& Room : House->GetRooms())
 			{
-				if (static_cast<int64>(Room.Type) == RoomValue)
+				if (static_cast<int64>(Room.Type) == RoomValue && Room.Level == KeepLevel)
 				{
 					Matching.Add(&Room);
 				}
@@ -561,7 +566,7 @@ void AMissionDirector::Rebind(EContractType Type, int32 FromLevel, int32 Salvage
 		}
 		else if (Matching.IsEmpty())
 		{
-			KeptNote = FString::Printf(TEXT("Keep standing: this house has no %s, nothing is kept."), *KeepRoom.ToString());
+			KeptNote = FString::Printf(TEXT("Keep standing: this house has no %s on storey %d, the lowest one that comes down, so nothing is kept."), *KeepRoom.ToString(), KeepLevel);
 		}
 		else
 		{

@@ -700,6 +700,8 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed, const FGenerati
 	TArray<int32> Rerolled;
 	TArray<int32> HashDiffers;
 	int32 HousesWithType[TypeCount] = {};
+	// The same on the ground floor only: the one storey whose rooms a contract can ask to keep standing in a total demolition.
+	int32 HousesWithTypeOnGround[TypeCount] = {};
 
 	// Per standing (1 to 3): houses, and the tiers of the furniture picked from groups that have several rows.
 	constexpr int32 StandingCount = 3;
@@ -739,15 +741,18 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed, const FGenerati
 		}
 
 		bool bHasType[TypeCount] = {};
+		bool bHasTypeOnGround[TypeCount] = {};
 
 		for (const FRoom& Room : Rooms)
 		{
 			bHasType[static_cast<int32>(Room.Type)] = true;
+			bHasTypeOnGround[static_cast<int32>(Room.Type)] |= Room.Level == 0;
 		}
 
 		for (int32 Type = 0; Type < TypeCount; ++Type)
 		{
 			HousesWithType[Type] += bHasType[Type] ? 1 : 0;
+			HousesWithTypeOnGround[Type] += bHasTypeOnGround[Type] ? 1 : 0;
 		}
 
 		if (Standing >= 1 && Standing <= StandingCount)
@@ -783,11 +788,13 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed, const FGenerati
 	bKeepUnstableHouse = bSavedKeepUnstable;
 
 	FString TypeLine;
+	FString GroundTypeLine;
 	bool bAllTypesSeen = true;
 
 	for (int32 Type = 0; Type < TypeCount; ++Type)
 	{
 		TypeLine += FString::Printf(TEXT("%s%s %d"), Type == 0 ? TEXT("") : TEXT(", "), *RoomTypeName(static_cast<ERoomType>(Type)), HousesWithType[Type]);
+		GroundTypeLine += FString::Printf(TEXT("%s%s %d"), Type == 0 ? TEXT("") : TEXT(", "), *RoomTypeName(static_cast<ERoomType>(Type)), HousesWithTypeOnGround[Type]);
 		bAllTypesSeen = bAllTypesSeen && HousesWithType[Type] > 0;
 	}
 
@@ -818,6 +825,7 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed, const FGenerati
 		Result.Add(FString::Printf(TEXT("Re-rolled or fallback: %s"), *Join(Rerolled)));
 		Result.Add(FString::Printf(TEXT("Same seed twice (T6): %d of %d gave the same hash (differs: %s)"), ValidCount - HashDiffers.Num(), ValidCount, *Join(HashDiffers)));
 		Result.Add(FString::Printf(TEXT("Houses with each room type (of %d): %s"), ValidCount, *TypeLine));
+		Result.Add(FString::Printf(TEXT("Houses with each room type on the ground floor (of %d): %s"), ValidCount, *GroundTypeLine));
 		Result.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d | support posts per house: %d to %d | storeys: %d to %d"), MinProps, MaxProps, MinPosts, MaxPosts, MinFloorsSeen, MaxFloorsSeen) : FString(TEXT("Props per house: no valid house")));
 
 		// Where the posts are: the average per house under the slab of each storey (the highest one is the ceiling slab), to see which storeys need them.
