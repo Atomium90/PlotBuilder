@@ -137,6 +137,13 @@ void ABuildablePiece::Interact_Implementation(AActor* InteractingActor)
 			return;
 		}
 
+		// A piece that holds others up does not leave on one press: the first says so, the second (within a couple of seconds) takes
+		// it. Same test as the collapse warning, a dry run that changes nothing.
+		if (Hotbar && StructuralComponent && StructuralComponent->WouldBeBottleneck(this) && !Hotbar->ConfirmTakeBack(this))
+		{
+			return;
+		}
+
 		// The piece goes back in the bag (to correct a mistake without losing it). The bag is checked before the piece
 		// leaves the graph, so a full bag changes nothing.
 		if (Hotbar)

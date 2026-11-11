@@ -380,6 +380,24 @@ bool UHotbarComponent::TakeBack(const ABuildablePiece* Piece)
 	return true;
 }
 
+bool UHotbarComponent::ConfirmTakeBack(const ABuildablePiece* Piece)
+{
+	const UWorld* World = GetWorld();
+	const double Now = World ? World->GetTimeSeconds() : 0.0;
+
+	if (TakeBackGuard.Confirm(Piece, Now, TakeBackConfirmSeconds))
+	{
+		return true;
+	}
+
+	if (UPlayerMessages* Messages = UPlayerMessages::Get(this))
+	{
+		Messages->Notify(NSLOCTEXT("Hotbar", "ConfirmTakeBack", "Taking this piece back would bring others down. Press E again to confirm."), EMessageTone::Warning);
+	}
+
+	return false;
+}
+
 TSubclassOf<AActor> UHotbarComponent::PopLast()
 {
 	for (int32 i = Slots.Num() - 1; i >= 0; --i)

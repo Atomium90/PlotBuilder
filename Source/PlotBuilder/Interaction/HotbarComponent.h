@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "Engine/DataTable.h"
 #include "ShopCartTypes.h"
+#include "Interaction/TakeBackConfirm.h"
 #include "HotbarComponent.generated.h"
 
 struct FShopItemRow;
@@ -171,6 +172,16 @@ public:
 	 */
 	bool TakeBack(const ABuildablePiece* Piece);
 
+	/**
+	 *  The guard in front of TakeBack for a piece that holds others up. The first call arms it, tells the player why nothing happened and
+	 *  answers false; a second call on the same piece within TakeBackConfirmSeconds answers true. Call it only for such a piece.
+	 */
+	bool ConfirmTakeBack(const ABuildablePiece* Piece);
+
+	/** Seconds the player has, after the warning, to take back a piece that holds others up by pressing the interact key again. */
+	UPROPERTY(EditAnywhere, Category = "Hotbar", meta = (ClampMin = "0.5"))
+	float TakeBackConfirmSeconds = 2.f;
+
 	/** Removes and returns one unit's class from the selected slot, decrementing its Count (clearing it at 0). Returns nullptr if the selection is empty. */
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	TSubclassOf<AActor> PopLast();
@@ -316,6 +327,9 @@ private:
 
 	/** See SetAllowed. */
 	bool bAllowed = true;
+
+	/** The piece a take-back is armed on, if any (see ConfirmTakeBack). */
+	FTakeBackConfirm TakeBackGuard;
 
 	UPROPERTY()
 	TArray<FInventorySlot> Slots;

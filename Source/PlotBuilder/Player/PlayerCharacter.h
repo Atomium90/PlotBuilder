@@ -175,6 +175,12 @@ protected:
 	/** Place Input Action handler: confirms the Build Mode preview if active, otherwise instantly places a Prop */
 	void PlaceInput();
 
+	/**
+	 *  Interact Input Action handler. In Build Mode the key belongs to the rotation (E turns the preview), so interacting is off there:
+	 *  turning a piece must never take one back, open a door or pick something up. Leave Build Mode to do any of those.
+	 */
+	void InteractInput();
+
 	/** Rotate Preview Input Action handler */
 	void RotatePreviewInput(const FInputActionValue& Value);
 

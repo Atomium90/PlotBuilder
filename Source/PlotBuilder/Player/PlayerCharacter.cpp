@@ -106,7 +106,7 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &APlayerCharacter::LegacyPushInput);
 
 		// Interact: generic Interact() on the current focus (also how storable objects get picked up)
-		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, InteractionComponent, &UInteractionComponent::TryInteract);
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::InteractInput);
 
 		// Place: confirms the Build Mode preview if active, otherwise instantly places a Prop
 		EnhancedInputComponent->BindAction(PlaceAction, ETriggerEvent::Started, this, &APlayerCharacter::PlaceInput);
@@ -212,6 +212,19 @@ void APlayerCharacter::PlaceInput()
 	else if (HotbarComponent)
 	{
 		HotbarComponent->TryPlace();
+	}
+}
+
+void APlayerCharacter::InteractInput()
+{
+	if (BuildModeComponent && BuildModeComponent->IsBuildModeActive())
+	{
+		return;
+	}
+
+	if (InteractionComponent)
+	{
+		InteractionComponent->TryInteract();
 	}
 }
 
