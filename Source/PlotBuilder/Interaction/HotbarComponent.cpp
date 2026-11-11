@@ -28,6 +28,38 @@ void UHotbarComponent::BeginPlay()
 	{
 		Money = Progress->GetMoney();
 		OnMoneyChanged.AddDynamic(this, &UHotbarComponent::HandleMoneyChanged);
+
+		// Payments and purchases reach the progress without passing here: follow it, and let go in EndPlay.
+		ProgressChangedHandle = Progress->OnProgressChanged.AddUObject(this, &UHotbarComponent::HandleProgressChanged);
+
+		// A HUD built before this ran has read the editor value (0): tell it the amount that was just read.
+		OnMoneyChanged.Broadcast();
+	}
+}
+
+void UHotbarComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (ProgressChangedHandle.IsValid())
+	{
+		if (UProgressSubsystem* Progress = UProgressSubsystem::Get(this))
+		{
+			Progress->OnProgressChanged.Remove(ProgressChangedHandle);
+		}
+
+		ProgressChangedHandle.Reset();
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void UHotbarComponent::HandleProgressChanged()
+{
+	const UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
+
+	if (Progress && Progress->GetMoney() != Money)
+	{
+		Money = Progress->GetMoney();
+		OnMoneyChanged.Broadcast();
 	}
 }
 

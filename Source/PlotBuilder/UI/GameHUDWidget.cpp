@@ -17,6 +17,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Interaction/HotbarComponent.h"
 #include "PlotBuilder.h"
+#include "Progress/ProgressSubsystem.h"
 
 const FName UGameHUDWidget::ShopMenuName(TEXT("Shop"));
 const FName UGameHUDWidget::InventoryMenuName(TEXT("Inventory"));
@@ -226,7 +227,11 @@ bool UGameHUDWidget::ShowDebrief(const bool bOnlyIfUnseen)
 	const UHotbarComponent* Source = FindHotbar();
 	const FNotebookData& Notebook = Contracts->GetLastNotebook();
 
-	DebriefMenu->ShowReport(Result, Notebook, Contracts->FindClient(Notebook.Contract.ClientId), Contracts->GetLastPaid(), Source ? Source->GetMoney() : 0, Source && Source->IsInfiniteMoney());
+	// The account is the progress, which the payment was credited to; the hotbar only holds a copy of it for the map.
+	const UProgressSubsystem* Progress = UProgressSubsystem::Get(this);
+	const int32 Balance = Progress ? Progress->GetMoney() : (Source ? Source->GetMoney() : 0);
+
+	DebriefMenu->ShowReport(Result, Notebook, Contracts->FindClient(Notebook.Contract.ClientId), Contracts->GetLastPaid(), Balance, Source && Source->IsInfiniteMoney());
 	OpenMenu(DebriefMenuName);
 
 	return true;

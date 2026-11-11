@@ -115,6 +115,7 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 public:
@@ -330,6 +331,15 @@ private:
 
 	/** The piece a take-back is armed on, if any (see ConfirmTakeBack). */
 	FTakeBackConfirm TakeBackGuard;
+
+	/**
+	 *  The progress changed: take the money from it when it differs from the copy held here. A payment is credited to the progress
+	 *  directly (UMissionResultSubsystem::Settle), so without this the copy, and everything that reads it (the HUD, the report), would
+	 *  keep the amount it had when the map started.
+	 */
+	void HandleProgressChanged();
+
+	FDelegateHandle ProgressChangedHandle;
 
 	UPROPERTY()
 	TArray<FInventorySlot> Slots;
