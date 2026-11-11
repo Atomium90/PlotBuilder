@@ -75,25 +75,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "0", ClampMax = "30"))
 	int32 MaxFloors = 0;
 
-	/** A reinforcement slab replaces the normal floor slab every N storeys (GDD §8, D28). 0 = never. Irrelevant under 2 storeys. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Size", meta = (ClampMin = "0"))
-	int32 SubAnchorInterval = 0;
-
 	/** Ground floor and foundation in one piece (one per room cell). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
 	TSubclassOf<ABuildablePiece> FoundationClass;
 
-	/** Floor slab of the upper storeys (one per room cell and storey). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
-	TSubclassOf<ABuildablePiece> FloorSlabClass;
-
 	/**
-	 *  Reinforcement slab used instead of FloorSlabClass every SubAnchorInterval storeys. It is also the ceiling slab
-	 *  under every roof (whatever SubAnchorInterval says), so a roof always starts from a stability reset: the first
-	 *  row of roof tiles rests on its edge. Empty = FlatRoofClass is used for the ceiling.
+	 *  Floor slab of the upper storeys (one per room cell and storey), and the ceiling slab under every roof. It is the
+	 *  reinforcement slab (ABuildablePiece::bResetsStability, GDD §8, D28): a floor in every respect, which also hands the
+	 *  full stability to the walls and roof tiles that stand on it, so a tall house holds and a roof starts from a reset.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
-	TSubclassOf<ABuildablePiece> SubAnchorSlabClass;
+	TSubclassOf<ABuildablePiece> FloorSlabClass;
 
 	/** Plain exterior wall. Also the fallback when an opening class below is left empty. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
@@ -141,10 +133,10 @@ public:
 	TSubclassOf<ABuildablePiece> CeilingLightClass;
 
 	/**
-	 *  Ceiling slab laid on every room cell above the last storey, under any roof (flat or pitched), when SubAnchorSlabClass
-	 *  is empty: use the floor slab. Its FloorBottom sockets rest on the walls' WallTop, and the ceiling lamps of the last
-	 *  storey hang from it. The roof tiles don't work here: even the flat one (BP_Roof_Flat) has its RoofLow sockets at
-	 *  RoofStep 1, made to join the RoofHigh of a slope tile, not to sit on a wall top.
+	 *  Ceiling slab used when FloorSlabClass is empty. Normally empty: the ceiling slab laid on every room cell above the last
+	 *  storey, under any roof (flat or pitched), is the floor slab. Its FloorBottom sockets rest on the walls' WallTop, and the
+	 *  ceiling lamps of the last storey hang from it. The roof tiles don't work here: even the flat one (BP_Roof_Flat) has its
+	 *  RoofLow sockets at RoofStep 1, made to join the RoofHigh of a slope tile, not to sit on a wall top.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pieces")
 	TSubclassOf<ABuildablePiece> FlatRoofClass;

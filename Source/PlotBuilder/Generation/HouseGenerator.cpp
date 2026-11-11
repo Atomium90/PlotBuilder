@@ -712,6 +712,9 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed, const FGenerati
 	int32 MaxProps = 0;
 	int32 MinPosts = MAX_int32;
 	int32 MaxPosts = 0;
+	// Posts by the storey of the slab they hold up (a post one storey down holds the slab of the storey above; the ceiling slab is the last one).
+	constexpr int32 PostLevelCount = 16;
+	int32 PostsUnderSlab[PostLevelCount] = {};
 	int32 MinFloorsSeen = MAX_int32;
 	int32 MaxFloorsSeen = 0;
 	int32 ValidCount = 0;
@@ -760,6 +763,11 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed, const FGenerati
 		MaxProps = FMath::Max(MaxProps, Props.Num());
 		MinPosts = FMath::Min(MinPosts, PostVertices.Num());
 		MaxPosts = FMath::Max(MaxPosts, PostVertices.Num());
+
+		for (const FIntVector& PostCell : PostVertices)
+		{
+			PostsUnderSlab[FMath::Clamp(PostCell.Z + 1, 0, PostLevelCount - 1)] += 1;
+		}
 		MinFloorsSeen = FMath::Min(MinFloorsSeen, ActiveFloors);
 		MaxFloorsSeen = FMath::Max(MaxFloorsSeen, ActiveFloors);
 
@@ -811,6 +819,22 @@ void AHouseGenerator::TestSeeds(int32 FirstSeed, int32 LastSeed, const FGenerati
 		Result.Add(FString::Printf(TEXT("Same seed twice (T6): %d of %d gave the same hash (differs: %s)"), ValidCount - HashDiffers.Num(), ValidCount, *Join(HashDiffers)));
 		Result.Add(FString::Printf(TEXT("Houses with each room type (of %d): %s"), ValidCount, *TypeLine));
 		Result.Add(ValidCount > 0 ? FString::Printf(TEXT("Props per house: %d to %d | support posts per house: %d to %d | storeys: %d to %d"), MinProps, MaxProps, MinPosts, MaxPosts, MinFloorsSeen, MaxFloorsSeen) : FString(TEXT("Props per house: no valid house")));
+
+		// Where the posts are: the average per house under the slab of each storey (the highest one is the ceiling slab), to see which storeys need them.
+		if (ValidCount > 0)
+		{
+			FString PostsLine;
+
+			for (int32 Level = 1; Level < PostLevelCount; ++Level)
+			{
+				if (PostsUnderSlab[Level] > 0 || Level <= MaxFloorsSeen)
+				{
+					PostsLine += FString::Printf(TEXT("%sslab %d: %.2f"), PostsLine.IsEmpty() ? TEXT("") : TEXT(" | "), Level, static_cast<float>(PostsUnderSlab[Level]) / ValidCount);
+				}
+			}
+
+			Result.Add(FString::Printf(TEXT("Support posts per house, by the slab they hold up: %s"), *PostsLine));
+		}
 
 		// The standing leans the furniture: the average tier of the props that had a choice should rise with it.
 		for (int32 Index = 0; Index < StandingCount; ++Index)
@@ -1143,9 +1167,9 @@ bool AHouseGenerator::EmitRoof(FRandomStream& Stream, const FRoomRect& Footprint
 
 	RoofShape = Shape;
 
-	// The ceiling slab: a reinforcement slab on every cell above the last storey, whatever the roof, and independent of SubAnchorInterval.
+	// The ceiling slab: the floor slab (a reinforcement slab) on every cell above the last storey, whatever the roof.
 	// The ceiling lamps hang from it, and the roof's first row rests on its edge, so a wide roof starts from a stability reset.
-	const TSubclassOf<ABuildablePiece> CeilingClass = Archetype->SubAnchorSlabClass ? Archetype->SubAnchorSlabClass : Archetype->FlatRoofClass;
+	const TSubclassOf<ABuildablePiece> CeilingClass = Archetype->FloorSlabClass ? Archetype->FloorSlabClass : Archetype->FlatRoofClass;
 
 	if (CeilingClass)
 	{
@@ -1162,7 +1186,7 @@ bool AHouseGenerator::EmitRoof(FRandomStream& Stream, const FRoomRect& Footprint
 	}
 	else
 	{
-		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' has neither SubAnchorSlabClass nor FlatRoofClass, the last storey has no ceiling"), *GetName(), *Archetype->GetName());
+		UE_LOG(LogPlotBuilder, Warning, TEXT("AHouseGenerator '%s': archetype '%s' has neither FloorSlabClass nor FlatRoofClass, the last storey has no ceiling"), *GetName(), *Archetype->GetName());
 	}
 
 	if (Shape == EHouseRoof::Flat)
@@ -1809,14 +1833,8 @@ bool AHouseGenerator::EmitHouse(FRandomStream& Stream)
 
 	for (int32 Level = 0; Level < Floors; ++Level)
 	{
-		// The foundation is the ground floor; every storey above gets a slab, a reinforcement one every SubAnchorInterval.
-		TSubclassOf<ABuildablePiece> FloorClass = Archetype->FoundationClass;
-
-		if (Level > 0)
-		{
-			const bool bReinforce = Archetype->SubAnchorInterval > 0 && Level % Archetype->SubAnchorInterval == 0 && Archetype->SubAnchorSlabClass;
-			FloorClass = bReinforce ? Archetype->SubAnchorSlabClass : Archetype->FloorSlabClass;
-		}
+		// The foundation is the ground floor; every storey above gets the floor slab, which is a reinforcement slab.
+		const TSubclassOf<ABuildablePiece> FloorClass = Level > 0 ? Archetype->FloorSlabClass : Archetype->FoundationClass;
 
 		if (!FloorClass)
 		{

@@ -951,7 +951,7 @@ static FAutoConsoleCommandWithWorldAndArgs PbCollapseAllCommand(
 
 static FAutoConsoleCommandWithWorldAndArgs PbTestHousesCommand(
 	TEXT("pb.TestHouses"),
-	TEXT("pb.TestHouses [firstSeed] [lastSeed] [width depth] [floors] - builds every seed of the range (default 1 to 20, at most 100) twice with the level's AHouseGenerator and prints a summary: valid houses, re-rolls, same hash twice (T6), room types seen, props per house. Leaves the last house in the world. width and depth (room cells, 0 = the archetype's) and floors (0 = the archetype's) ask for the size and the storeys a contract can ask for, the same for every seed."),
+	TEXT("pb.TestHouses [firstSeed] [lastSeed] [width depth] [floors] - builds every seed of the range (default 1 to 20, at most 100) twice with the level's AHouseGenerator and prints a summary: valid houses, re-rolls, same hash twice (T6), room types seen, props per house. Leaves the last house in the world. width and depth (room cells, 0 = the archetype's) and floors (0 = the archetype's) ask for the size and the storeys a contract can ask for, the same for every seed. The summary also gives the support posts per house by the slab they hold up."),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 	{
 		if (!World)
