@@ -11,6 +11,16 @@ class UStaticMeshComponent;
 class UDurabilityComponent;
 class ABuildablePiece;
 
+/** How a kind of prop is meant to be set down (see APhysicsProp::GetPlacement). */
+struct FPropPlacement
+{
+	/** Hung on a wall, back against it, at the height chosen (a mirror, a cabinet) instead of standing on the floor. */
+	bool bHangsOnWall = false;
+
+	/** Degrees added to the yaw that points the mesh's local +X at the front, so a mesh that faces another way turns the right way round. */
+	float FrontYawOffset = 0.f;
+};
+
 /**
  *  Generic physics-simulated prop (crate, barrel, furniture...). Mass and friction are tuned
  *  per Blueprint variant via the mesh's own physics properties, nothing hardcoded in C++.
@@ -45,6 +55,21 @@ public:
 
 	/** Lets go of the wall (see MountOn) and wakes the physics body, so the prop falls, and the hands tool can grab it. Safe to call on a prop that is not mounted. */
 	void Release();
+
+	/**
+	 *  Sets the prop down where it stands, the way a wall is placed: the body stops simulating, so it stays exactly where the build mode
+	 *  put it, and the hands cannot grab it (E takes it back into the bag where building is allowed). Support is what it stands on. If that is
+	 *  a piece of the kit the prop is mounted on it (MountOn), so damage or collapse of the piece, or its removal, lets the prop fall. Anything
+	 *  else (the ground, level geometry, another prop) holds it for good. Used by the build mode and by the home when it puts its props back.
+	 */
+	void Place(AActor* Support);
+
+	/**
+	 *  Where a prop class goes, read from DT_FurnishingRules, the table the house generator furnishes with (the row whose PropClass is this
+	 *  class). One table therefore says it for everyone who sets a prop down: the generator, the build mode and the home. A class without a
+	 *  row, or no table, gives the defaults (stands on the floor).
+	 */
+	static FPropPlacement GetPlacement(TSubclassOf<APhysicsProp> PropClass);
 
 	bool IsMounted() const { return bMounted; }
 

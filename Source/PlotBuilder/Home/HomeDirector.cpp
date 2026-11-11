@@ -167,9 +167,37 @@ void AHomeDirector::RestorePlot()
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-		if (GetWorld()->SpawnActor<AActor>(PropClass, Record.PlotRelativeTransform * PlotTransform, SpawnParams))
+		if (AActor* Spawned = GetWorld()->SpawnActor<AActor>(PropClass, Record.PlotRelativeTransform * PlotTransform, SpawnParams))
 		{
 			++PropsPlaced;
+
+			// A prop of the home is set down like a placed one: it would otherwise drop and tumble on every visit. What holds it is found
+			// from its box: the floor just under it, or for a prop that hangs (a mirror) the wall behind it, so taking that away lets it fall.
+			if (APhysicsProp* Prop = Cast<APhysicsProp>(Spawned))
+			{
+				const FBoxSphereBounds Bounds = Prop->GetMeshComponent()->Bounds;
+				const FPropPlacement Placement = APhysicsProp::GetPlacement(Prop->GetClass());
+
+				FVector Start = FVector(Bounds.Origin.X, Bounds.Origin.Y, Bounds.Origin.Z - Bounds.BoxExtent.Z + 10.f);
+				FVector End = Start - FVector(0.f, 0.f, 30.f);
+
+				if (Placement.bHangsOnWall)
+				{
+					// The front points at yaw - FrontYawOffset, the back is the opposite way; the wall is within the half-size of the box.
+					const FVector Back = -FRotator(0.f, Prop->GetActorRotation().Yaw - Placement.FrontYawOffset, 0.f).Vector();
+
+					Start = Bounds.Origin;
+					End = Start + Back * (Bounds.BoxExtent.Size() + 10.f);
+				}
+
+				FCollisionQueryParams SupportParams;
+				SupportParams.AddIgnoredActor(Prop);
+
+				FHitResult Support;
+				GetWorld()->LineTraceSingleByChannel(Support, Start, End, ECC_GameTraceChannel2, SupportParams);
+
+				Prop->Place(Support.GetActor());
+			}
 		}
 	}
 

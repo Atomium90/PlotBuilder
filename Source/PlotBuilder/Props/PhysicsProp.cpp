@@ -5,7 +5,10 @@
 #include "Destruction/DurabilityComponent.h"
 #include "Destruction/DemolitionRules.h"
 #include "Debug/DebugDisplay.h"
+#include "Engine/DataTable.h"
 #include "Engine/World.h"
+#include "Generation/FurnishingRuleRow.h"
+#include "PlotBuilder.h"
 
 APhysicsProp::APhysicsProp()
 {
@@ -132,6 +135,47 @@ void APhysicsProp::Release()
 
 	MeshComponent->SetSimulatePhysics(true);
 	MeshComponent->WakeAllRigidBodies();
+}
+
+void APhysicsProp::Place(AActor* Support)
+{
+	// MountOn does nothing for a null or a non-piece support; either way the body stops here.
+	MountOn(Cast<ABuildablePiece>(Support));
+	MeshComponent->SetSimulatePhysics(false);
+}
+
+FPropPlacement APhysicsProp::GetPlacement(const TSubclassOf<APhysicsProp> PropClass)
+{
+	FPropPlacement Result;
+
+	if (!PropClass)
+	{
+		return Result;
+	}
+
+	static const FSoftObjectPath RulesPath(TEXT("/Game/Generation/DT_FurnishingRules"));
+	const UDataTable* Table = Cast<UDataTable>(RulesPath.TryLoad());
+
+	if (!Table)
+	{
+		UE_LOG(LogPlotBuilder, Warning, TEXT("APhysicsProp::GetPlacement: %s not found, every prop stands on the floor."), *RulesPath.ToString());
+		return Result;
+	}
+
+	bool bFound = false;
+
+	Table->ForeachRow<FFurnishingRuleRow>(TEXT("APhysicsProp::GetPlacement"), [&Result, &bFound, PropClass](const FName& /*RowName*/, const FFurnishingRuleRow& Row)
+	{
+		// Several rows may share a class (versions of one object): the first is enough, they set it down the same way.
+		if (!bFound && Row.PropClass == PropClass)
+		{
+			bFound = true;
+			Result.bHangsOnWall = Row.Placement == EFurniturePlacement::OnWall;
+			Result.FrontYawOffset = Row.FrontYawOffset;
+		}
+	});
+
+	return Result;
 }
 
 void APhysicsProp::HandleMountDamaged(const FDamageInfo& DamageInfo)
