@@ -279,8 +279,9 @@ bool FPBPoolTypesTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-// The keep-standing and forbidden-tool conditions: always there with a chance of 1, never with 0; never keep-standing on a renovation;
-// the room and the tool come from the template's lists, and a template with an empty list never asks.
+// The keep-standing and forbidden-tool conditions: always there with a chance of 1, never with 0; keep-standing only on a total
+// demolition, never on a renovation or a partial demolition; the room and the tool come from the template's lists, and a template
+// with an empty list never asks.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBPoolNamedConditionsTest, "PlotBuilder.Contracts.Pool.NamedConditions", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPBPoolNamedConditionsTest::RunTest(const FString& Parameters)
 {
@@ -304,9 +305,16 @@ bool FPBPoolNamedConditionsTest::RunTest(const FString& Parameters)
 	Strip.TotalWeight = 0.f;
 	Strip.RenovationWeight = 1.f;
 
+	// Two storeys, so that a partial demolition can be drawn.
+	FContractTemplate Upper = Always;
+	Upper.MinFloors = 2;
+	Upper.MaxFloors = 2;
+	Upper.TotalWeight = 0.f;
+	Upper.PartialWeight = 1.f;
+
 	for (int32 Seed = 1; Seed <= 20; ++Seed)
 	{
-		FRandomStream A(Seed), B(Seed), C(Seed), D(Seed);
+		FRandomStream A(Seed), B(Seed), C(Seed), D(Seed), E(Seed);
 
 		const FContractDefinition Yes = Pool->DrawContract(Always, A);
 		TestEqual(TEXT("keep-standing is asked"), Yes.CountOf(EConditionType::KeepStanding), 1);
@@ -324,6 +332,11 @@ bool FPBPoolNamedConditionsTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("renovation"), Renovation.Type == EContractType::Renovation);
 		TestTrue(TEXT("no keep-standing on a renovation"), !Renovation.FindCondition(EConditionType::KeepStanding));
 		TestEqual(TEXT("a renovation can still forbid a tool"), Renovation.CountOf(EConditionType::ForbiddenTool), 1);
+
+		const FContractDefinition Partial = Pool->DrawContract(Upper, E);
+		TestTrue(TEXT("partial demolition"), Partial.Type == EContractType::PartialDemolition);
+		TestTrue(TEXT("no keep-standing on a partial demolition"), !Partial.FindCondition(EConditionType::KeepStanding));
+		TestEqual(TEXT("a partial demolition can still forbid a tool"), Partial.CountOf(EConditionType::ForbiddenTool), 1);
 	}
 
 	return true;

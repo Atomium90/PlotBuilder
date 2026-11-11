@@ -95,8 +95,9 @@ FContractDefinition UContractPool::DrawContract(const FContractTemplate& Templat
 		Condition.Count = Zones;
 	}
 
-	// A renovation already keeps the whole shell: asking to keep a room of it would add nothing.
-	if (Contract.Type != EContractType::Renovation && !Template.KeepStandingRooms.IsEmpty() && KeepRoll < Template.KeepStandingChance)
+	// Only a total demolition asks to keep a room. A renovation already keeps the whole shell, and a partial demolition keeps whole storeys:
+	// the room would be lumped in with them when the report counts what had to stay, without the cap of its own.
+	if (Contract.Type == EContractType::TotalDemolition && !Template.KeepStandingRooms.IsEmpty() && KeepRoll < Template.KeepStandingChance)
 	{
 		FContractCondition& Condition = Contract.Conditions.AddDefaulted_GetRef();
 		Condition.Type = EConditionType::KeepStanding;

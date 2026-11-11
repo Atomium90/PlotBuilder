@@ -74,9 +74,9 @@ struct FContractTemplate
 	int32 MaxZones = 0;
 
 	/**
-	 *  Chance, 0 to 1, that a job of this kind asks to keep a room standing. Never on a renovation, which keeps the whole shell
-	 *  already. The room is one of KeepStandingRooms, drawn here; which of the house's rooms of that type is kept is decided when
-	 *  the house is built.
+	 *  Chance, 0 to 1, that a job of this kind asks to keep a room standing. Only on a total demolition: a renovation keeps the whole
+	 *  shell already, and a partial demolition keeps whole storeys, which the report counts together with the room. The room is one
+	 *  of KeepStandingRooms, drawn here; which of the house's rooms of that type is kept is decided when the house is built.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Conditions", meta = (ClampMin = "0", ClampMax = "1"))
 	float KeepStandingChance = 0.f;
