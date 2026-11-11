@@ -141,7 +141,7 @@ bool FPBDebriefPerfectTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-// The cap on the penalty: everything that had to stay is gone, 1.5 x 1000 would take more than the 800 the cap allows. The collateral is
+// The cap on the penalty: a protected zone wrecked, 1.5 x 1000 would take more than the 800 the cap allows. The zone is
 // shown for the 800 really taken, the waterfall goes from 1 000 to 200 and never under zero.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBDebriefCapTest, "PlotBuilder.Contracts.Debrief.PenaltyCap", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPBDebriefCapTest::RunTest(const FString& Parameters)
@@ -152,8 +152,9 @@ bool FPBDebriefCapTest::RunTest(const FString& Parameters)
 	FMissionSnapshot Snapshot;
 	Snapshot.TargetWeight = 100;
 	Snapshot.TargetDestroyedWeight = 100;
-	Snapshot.MustStayWeight = 100;
-	Snapshot.MustStayDestroyedWeight = 100;
+	FZoneResult Zone;
+	Zone.ToolDamageRatio = 1.f;
+	Snapshot.Zones = {Zone};
 
 	const FScoringParams Params;
 	const FDebriefResult Result = UContractEvaluator::Evaluate(Contract, Snapshot, Params);
@@ -167,8 +168,8 @@ bool FPBDebriefCapTest::RunTest(const FString& Parameters)
 		return false;
 	}
 
-	TestEqual(TEXT("collateral starts at the base"), View.Steps[1].From, 1000);
-	TestEqual(TEXT("collateral ends on the payout"), View.Steps[1].To, 200);
+	TestEqual(TEXT("the zone starts at the base"), View.Steps[1].From, 1000);
+	TestEqual(TEXT("the zone ends on the payout"), View.Steps[1].To, 200);
 	TestTrue(TEXT("and says it was reduced"), View.Steps[1].Detail.EndsWith(TEXT("(reduced by the cap)")));
 	TestEqual(TEXT("the biggest loss"), View.BiggestLossIndex, 1);
 	TestEqual(TEXT("the last total is the payout"), View.Steps.Last().To, 200);
@@ -186,8 +187,9 @@ bool FPBDebriefCapSharedTest::RunTest(const FString& Parameters)
 	FMissionSnapshot Snapshot;
 	Snapshot.TargetWeight = 100;
 	Snapshot.TargetDestroyedWeight = 100;
-	Snapshot.MustStayWeight = 100;
-	Snapshot.MustStayDestroyedWeight = 100;
+	FZoneResult Zone;
+	Zone.ToolDamageRatio = 1.f;
+	Snapshot.Zones = {Zone};
 	Snapshot.CrushEvents = 2;
 
 	const FScoringParams Params;

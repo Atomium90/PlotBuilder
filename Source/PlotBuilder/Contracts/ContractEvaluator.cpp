@@ -124,11 +124,21 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 	// Once for the whole mission, whatever the number of uses.
 	Result.ForbiddenTool = Snapshot.bForbiddenToolUsed ? Params.ForbiddenToolPenalty : 0.f;
 
-	const float CollateralShare = Params.CollateralCoefficient * Result.Collateral;
-	const float ZoneShare = Params.ZoneCoefficient * Result.ZoneDamage;
-	const float FurnitureShare = Params.FurnitureCoefficient * Result.FurnitureLoss;
-	const float Uncapped = CollateralShare + ZoneShare + FurnitureShare + Result.Safety + Result.ForbiddenTool;
 	const float Cap = FMath::Clamp(Params.PenaltyCap, 0.f, 1.f);
+
+	// A room kept in a total demolition has a cap of its own, below the penalty cap: weighed 1.5 times, losing half of it would already take
+	// the whole 80 %. A partial demolition keeps whole storeys and a renovation the whole shell: they have no cap of their own, the penalty
+	// cap alone holds them. The caps of a term hold that term only; the penalty cap below still holds the total, and the report says so.
+	const float CollateralCap = Contract.Type == EContractType::TotalDemolition ? Params.CollateralCap : TNumericLimits<float>::Max();
+	const float CollateralWanted = Params.CollateralCoefficient * Result.Collateral;
+	const float CollateralShare = FMath::Min(CollateralCap, CollateralWanted);
+	const float ZoneShare = Params.ZoneCoefficient * Result.ZoneDamage;
+
+	// The furniture is held by a cap of its own, per mission: a share of what was earned for each piece asked.
+	const float FurnitureCap = Params.FurnitureCapPerItem * static_cast<float>(Snapshot.Salvage.Num());
+	const float FurnitureWanted = Params.FurnitureCoefficient * Result.FurnitureLoss;
+	const float FurnitureShare = FMath::Min(FurnitureCap, FurnitureWanted);
+	const float Uncapped = CollateralShare + ZoneShare + FurnitureShare + Result.Safety + Result.ForbiddenTool;
 
 	Result.bPenaltyCapped = Uncapped > Cap;
 	Result.Penalty = FMath::Min(Uncapped, Cap);
@@ -170,16 +180,21 @@ FDebriefResult UContractEvaluator::Evaluate(const FContractDefinition& Contract,
 		FString::Printf(TEXT("destroyed %lld of %lld, %.0f%% of the %d base payout"), Snapshot.TargetDestroyedWeight, Snapshot.TargetWeight, Result.Completion * 100.f, Contract.BasePayout),
 		Result.Completion, Result.Earned);
 
+	// Said only for the cap of the room itself: the penalty cap has its own line.
+	const FString CollateralHeld = CollateralWanted > CollateralCap ? FString::Printf(TEXT(", held at %.0f%%"), CollateralCap * 100.f) : FString();
+
 	AddLine(TEXT("Collateral"),
-		FString::Printf(TEXT("%lld of %lld that had to stay was destroyed (x%.2f)"), Snapshot.MustStayDestroyedWeight, Snapshot.MustStayWeight, Params.CollateralCoefficient),
+		FString::Printf(TEXT("%lld of %lld that had to stay was destroyed (x%.2f)%s"), Snapshot.MustStayDestroyedWeight, Snapshot.MustStayWeight, Params.CollateralCoefficient, *CollateralHeld),
 		Result.Collateral, -CollateralMoney);
 
 	AddLine(TEXT("Protected zones"),
 		FString::Printf(TEXT("%d zone(s), damage %.0f%% (x%.2f)"), Snapshot.Zones.Num(), Result.ZoneDamage * 100.f, Params.ZoneCoefficient),
 		Result.ZoneDamage, -ZoneMoney);
 
+	const FString FurnitureHeld = FurnitureWanted > FurnitureCap ? FString::Printf(TEXT(", held at %.0f%% for %d piece(s)"), FurnitureCap * 100.f, Snapshot.Salvage.Num()) : FString();
+
 	AddLine(TEXT("Furniture"),
-		FString::Printf(TEXT("kept %.0f of %.0f value, %d of %d delivered, %d destroyed, %d left on the plot (x%.2f)"), ValueKept, ValueAsked, Delivered, Snapshot.Salvage.Num(), Destroyed, OnSite, Params.FurnitureCoefficient),
+		FString::Printf(TEXT("kept %.0f of %.0f value, %d of %d delivered, %d destroyed, %d left on the plot (x%.2f)%s"), ValueKept, ValueAsked, Delivered, Snapshot.Salvage.Num(), Destroyed, OnSite, Params.FurnitureCoefficient, *FurnitureHeld),
 		Result.FurnitureLoss, -FurnitureMoney);
 
 	AddLine(TEXT("Safety"),

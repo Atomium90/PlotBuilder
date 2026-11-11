@@ -19,7 +19,9 @@
  *  FurnitureLoss = 1 - value kept / value asked, an item being kept only if delivered, for its value times the HP curve
  *  Safety        = min(SafetyCap, crush events x CrushPenalty + explosion events x ExplosionPenalty)
  *  Forbidden     = ForbiddenToolPenalty if the tool the contract forbade was used at all, 0 otherwise (once for the mission)
- *  Penalty       = min(PenaltyCap, kCollateral x Collateral + kZone x ZoneDamage + kFurniture x FurnitureLoss + Safety + Forbidden)
+ *  Furniture     = min(FurnitureCapPerItem x pieces asked, kFurniture x FurnitureLoss): the furniture has a cap of its own, per mission
+ *  Kept          = min(CollateralCap, kCollateral x Collateral) for a total demolition (a room kept), kCollateral x Collateral for a partial one or a renovation
+ *  Penalty       = min(PenaltyCap, Kept + kZone x ZoneDamage + Furniture + Safety + Forbidden)
  *  Upkeep        = for each tool that worked and has a fee: PerJob + PerSecond x seconds of active use, summed; taken from what is left after the penalty
  *  Payout        = BasePayout x Completion x (1 - Penalty) - Upkeep, in whole money, never below 0
  *

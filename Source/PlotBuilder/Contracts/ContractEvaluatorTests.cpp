@@ -97,10 +97,10 @@ bool FPBEvaluatorCollateralTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-// Asked: a 300 item delivered whole and a 100 item not delivered. Kept 300 of 400, loss 0.25, kFurniture 1.0: 250 off a
-// 1000 base, payout 750. The default is the GDD curve (0 HP 0.05, 0.8 HP 0.5, full 1.0): with the 300 item at 0.8 HP, kept
-// 150 of 400, loss 0.625, payout 375. The curve itself: 0.9 HP is 0.75, 0.4 HP is 0.275, 0 HP is 0.05. With no points at
-// all the value goes down in a straight line with the HP.
+// Asked: a 300 item delivered whole and a 100 item not delivered. Kept 300 of 400, loss 0.25, kFurniture 1.0, but two pieces are
+// held at 2 x 10 % = 20 % by the cap of the furniture: 200 off a 1000 base, payout 800. The default is the GDD curve (0 HP 0.05,
+// 0.8 HP 0.5, full 1.0): with the 300 item at 0.8 HP, kept 150 of 400, loss 0.625, held at the same 20 %, payout 800. The curve
+// itself: 0.9 HP is 0.75, 0.4 HP is 0.275, 0 HP is 0.05. With no points at all the value goes down in a straight line with the HP.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorFurnitureTest, "PlotBuilder.Contracts.Evaluator.Furniture", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPBEvaluatorFurnitureTest::RunTest(const FString& Parameters)
 {
@@ -114,7 +114,7 @@ bool FPBEvaluatorFurnitureTest::RunTest(const FString& Parameters)
 	const FDebriefResult Whole = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, Defaults);
 
 	TestNearlyEqual(TEXT("furniture loss"), Whole.FurnitureLoss, 0.25f, 0.001f);
-	TestEqual(TEXT("payout"), Whole.Payout, 750);
+	TestEqual(TEXT("payout, held by the cap of two pieces"), Whole.Payout, 800);
 	TestEqual(TEXT("lines add up"), PBContractTests::SumOfLinesBeforePayout(Whole), Whole.Payout);
 
 	Snapshot.Salvage[0].HPRatio = 0.8f;
@@ -122,7 +122,7 @@ bool FPBEvaluatorFurnitureTest::RunTest(const FString& Parameters)
 	const FDebriefResult Damaged = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, Defaults);
 
 	TestNearlyEqual(TEXT("furniture loss with the default curve"), Damaged.FurnitureLoss, 0.625f, 0.001f);
-	TestEqual(TEXT("payout with the default curve"), Damaged.Payout, 375);
+	TestEqual(TEXT("payout with the default curve, held by the same cap"), Damaged.Payout, 800);
 
 	TestNearlyEqual(TEXT("curve at 0.9"), UContractEvaluator::FurnitureValueMultiplier(Defaults, 0.9f), 0.75f, 0.001f);
 	TestNearlyEqual(TEXT("curve at 0.4"), UContractEvaluator::FurnitureValueMultiplier(Defaults, 0.4f), 0.275f, 0.001f);
@@ -137,7 +137,8 @@ bool FPBEvaluatorFurnitureTest::RunTest(const FString& Parameters)
 }
 
 // Three items asked, a 100 one delivered, a 100 one destroyed, a 100 one left standing on the plot: kept 100 of 300, and the
-// report says so in words (1 of 3 delivered, 1 destroyed, 1 left on the plot). The words change nothing to the money.
+// report says so in words (1 of 3 delivered, 1 destroyed, 1 left on the plot). The words change nothing to the money, which is held
+// by the cap of three pieces (30 %).
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorFurnitureFateTest, "PlotBuilder.Contracts.Evaluator.FurnitureFate", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPBEvaluatorFurnitureFateTest::RunTest(const FString& Parameters)
 {
@@ -155,14 +156,52 @@ bool FPBEvaluatorFurnitureFateTest::RunTest(const FString& Parameters)
 
 	const FDebriefResult Result = UContractEvaluator::Evaluate(PBContractTests::MakeContract(900), Snapshot, FScoringParams());
 
-	// Kept 100 of 300, loss 2/3, so 600 off a 900 base.
+	// Kept 100 of 300, loss 2/3, which would be 600 off a 900 base; three pieces hold it at 30 %, so 270 off.
 	TestNearlyEqual(TEXT("furniture loss"), Result.FurnitureLoss, 2.f / 3.f, 0.001f);
-	TestEqual(TEXT("payout"), Result.Payout, 300);
+	TestEqual(TEXT("payout"), Result.Payout, 630);
 
 	const FString& Detail = Result.Lines[3].Detail;
 	TestTrue(TEXT("says 1 of 3 delivered"), Detail.Contains(TEXT("1 of 3 delivered")));
 	TestTrue(TEXT("says 1 destroyed"), Detail.Contains(TEXT("1 destroyed")));
 	TestTrue(TEXT("says 1 left on the plot"), Detail.Contains(TEXT("1 left on the plot")));
+
+	return true;
+}
+
+// The cap of the furniture, per mission: 10 % of what was earned for each piece asked, never above the penalty cap (80 %). On a 1000 base:
+// 3 pieces all lost is a loss of 100 %, held at 30 %, payout 700, and the line says so. 10 pieces, 5 lost (all of 100): loss 0.5, the cap
+// is 100 % held at 80 %, so the loss stands, payout 500. 20 pieces all lost: loss 100 % held at 80 %, payout 200.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorFurnitureCapTest, "PlotBuilder.Contracts.Evaluator.FurnitureCap", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBEvaluatorFurnitureCapTest::RunTest(const FString& Parameters)
+{
+	const auto Run = [](int32 Pieces, int32 PiecesLost)
+	{
+		FMissionSnapshot Snapshot;
+		Snapshot.TargetWeight = 500;
+		Snapshot.TargetDestroyedWeight = 500;
+
+		for (int32 Index = 0; Index < Pieces; ++Index)
+		{
+			Snapshot.Salvage.Add(PBContractTests::MakeSalvage(100, 1.f, Index >= PiecesLost));
+		}
+
+		return UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, FScoringParams());
+	};
+
+	const FDebriefResult Small = Run(3, 3);
+	TestNearlyEqual(TEXT("small: everything is lost"), Small.FurnitureLoss, 1.f, 0.001f);
+	TestEqual(TEXT("small: held at 30 %"), Small.Payout, 700);
+	TestTrue(TEXT("small: the report says it was held"), Small.Lines[3].Detail.Contains(TEXT("held at 30% for 3 piece(s)")));
+	TestEqual(TEXT("small: lines add up"), PBContractTests::SumOfLinesBeforePayout(Small), Small.Payout);
+
+	const FDebriefResult Medium = Run(10, 5);
+	TestNearlyEqual(TEXT("medium: half is lost"), Medium.FurnitureLoss, 0.5f, 0.001f);
+	TestEqual(TEXT("medium: the loss stands"), Medium.Payout, 500);
+	TestTrue(TEXT("medium: nothing was held"), !Medium.Lines[3].Detail.Contains(TEXT("held at")));
+
+	const FDebriefResult Large = Run(20, 20);
+	TestEqual(TEXT("large: held by the penalty cap"), Large.Payout, 200);
+	TestEqual(TEXT("large: lines add up"), PBContractTests::SumOfLinesBeforePayout(Large), Large.Payout);
 
 	return true;
 }
@@ -191,13 +230,15 @@ bool FPBEvaluatorSafetyTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-// All the 400 that had to stay is gone: collateral 1.0, 1.5 off a 1000 base on paper (1500), held at the penalty cap 0.8:
+// A protected zone wrecked: zone damage 1.0, 1.5 off a 1000 base on paper (1500), held at the penalty cap 0.8:
 // 800 off, payout 200. The report gives the 700 back on its own line so the lines still add up.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorPenaltyCapTest, "PlotBuilder.Contracts.Evaluator.PenaltyCap", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPBEvaluatorPenaltyCapTest::RunTest(const FString& Parameters)
 {
 	FMissionSnapshot Snapshot = PBContractTests::MakeCleanSnapshot();
-	Snapshot.MustStayDestroyedWeight = 400;
+	FZoneResult Zone;
+	Zone.ToolDamageRatio = 1.f;
+	Snapshot.Zones = {Zone};
 
 	const FDebriefResult Result = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, FScoringParams());
 
@@ -206,6 +247,59 @@ bool FPBEvaluatorPenaltyCapTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("earned"), Result.Earned, 1000);
 	TestEqual(TEXT("payout"), Result.Payout, 200);
 	TestEqual(TEXT("lines add up"), PBContractTests::SumOfLinesBeforePayout(Result), Result.Payout);
+
+	return true;
+}
+
+// A room kept in a total demolition has a cap of its own, 0.4, under the penalty cap. On a 1000 base, with 400 that had to stay: all of it gone is 1.5 on
+// paper, held at 0.4, payout 600, and the line says so. Half of it gone is 0.75 on paper, held at 0.4 as well, payout 600. A fifth gone
+// is 0.2, 0.3 weighed, under the cap: payout 700, nothing held.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorCollateralCapTest, "PlotBuilder.Contracts.Evaluator.CollateralCap", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPBEvaluatorCollateralCapTest::RunTest(const FString& Parameters)
+{
+	FMissionSnapshot Snapshot = PBContractTests::MakeCleanSnapshot();
+	Snapshot.MustStayDestroyedWeight = 400;
+
+	const FDebriefResult All = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, FScoringParams());
+
+	TestNearlyEqual(TEXT("all gone: collateral"), All.Collateral, 1.f, 0.001f);
+	TestTrue(TEXT("all gone: held by its own cap, not the penalty cap"), !All.bPenaltyCapped);
+	TestEqual(TEXT("all gone: held at 40 %"), All.Payout, 600);
+	TestTrue(TEXT("all gone: the line says so"), All.Lines[1].Detail.Contains(TEXT("held at 40%")));
+	TestEqual(TEXT("all gone: lines add up"), PBContractTests::SumOfLinesBeforePayout(All), All.Payout);
+
+	Snapshot.MustStayDestroyedWeight = 200;
+
+	const FDebriefResult Half = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, FScoringParams());
+
+	TestEqual(TEXT("half gone: held as well"), Half.Payout, 600);
+
+	Snapshot.MustStayDestroyedWeight = 80;
+
+	const FDebriefResult Fifth = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, FScoringParams());
+
+	TestEqual(TEXT("a fifth gone: under the cap"), Fifth.Payout, 700);
+	TestTrue(TEXT("a fifth gone: nothing held"), !Fifth.Lines[1].Detail.Contains(TEXT("held at")));
+
+	// The storeys of a partial demolition and the shell of a renovation have no cap of their own: all gone is 1.5 on paper, held by the
+	// penalty cap alone, 800 off, payout 200.
+	Snapshot.MustStayDestroyedWeight = 400;
+
+	FContractDefinition Storeys = PBContractTests::MakeContract(1000);
+	Storeys.Type = EContractType::PartialDemolition;
+
+	const FDebriefResult Partial = UContractEvaluator::Evaluate(Storeys, Snapshot, FScoringParams());
+
+	TestTrue(TEXT("partial: the penalty cap holds it"), Partial.bPenaltyCapped);
+	TestEqual(TEXT("partial: payout"), Partial.Payout, 200);
+
+	FContractDefinition Shell = PBContractTests::MakeContract(1000);
+	Shell.Type = EContractType::Renovation;
+
+	const FDebriefResult Renovation = UContractEvaluator::Evaluate(Shell, Snapshot, FScoringParams());
+
+	TestEqual(TEXT("renovation: payout"), Renovation.Payout, 200);
+	TestEqual(TEXT("renovation: lines add up"), PBContractTests::SumOfLinesBeforePayout(Renovation), Renovation.Payout);
 
 	return true;
 }
@@ -391,7 +485,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPBEvaluatorUpkeepFloorTest, "PlotBuilder.Contr
 bool FPBEvaluatorUpkeepFloorTest::RunTest(const FString& Parameters)
 {
 	FMissionSnapshot Snapshot = PBContractTests::MakeCleanSnapshot();
-	Snapshot.MustStayDestroyedWeight = 400;
+	FZoneResult Zone;
+	Zone.ToolDamageRatio = 1.f;
+	Snapshot.Zones = {Zone};
 	Snapshot.ToolUsage.Add(PBContractTests::MakeUsage(TEXT("Jackhammer"), 100.f, 50, 2.f));
 
 	const FDebriefResult Result = UContractEvaluator::Evaluate(PBContractTests::MakeContract(1000), Snapshot, FScoringParams());

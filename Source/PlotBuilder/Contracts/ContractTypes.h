@@ -130,12 +130,28 @@ struct FScoringParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scoring", meta = (ClampMin = "0"))
 	float CollateralCoefficient = 1.5f;
 
+	/**
+	 *  A room to keep in a total demolition has a cap of its own, per mission, normally below PenaltyCap: the collateral term never goes above
+	 *  this share of what was earned, whatever was destroyed. CollateralCoefficient alone would reach PenaltyCap after losing about half of it.
+	 *  Only for a total demolition: a partial demolition (the storeys below stay) and a renovation (the shell stays) are held by PenaltyCap alone.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scoring", meta = (ClampMin = "0", ClampMax = "1"))
+	float CollateralCap = 0.4f;
+
 	/** Same weight as collateral for the protected zones (the GDD formula had no zone term). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scoring", meta = (ClampMin = "0"))
 	float ZoneCoefficient = 1.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scoring", meta = (ClampMin = "0"))
 	float FurnitureCoefficient = 1.f;
+
+	/**
+	 *  The furniture has a cap of its own, per mission: this share of what was earned for each piece asked. A mission with few pieces to bring
+	 *  back therefore cannot lose most of its pay to the furniture: with 0.1, three pieces cost at most 30 %, while twenty pieces would reach
+	 *  PenaltyCap, which still holds the total. Only the furniture term is held: the other terms and the penalty cap are unchanged.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scoring", meta = (ClampMin = "0", ClampMax = "1"))
+	float FurnitureCapPerItem = 0.1f;
 
 	/** The penalty never goes above this share of what was earned: the player keeps at least 1 - PenaltyCap of it. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scoring", meta = (ClampMin = "0", ClampMax = "1"))
