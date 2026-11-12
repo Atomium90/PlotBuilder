@@ -1,10 +1,10 @@
-# PlotBuilder — Game Design Document
+# PlotBuilder: Game Design Document
 
 > **Working title:** TBD (code name `PlotBuilder`, kept because every class and the repo already use it).
-> **Engine:** Unreal Engine 5.8 — C++ skeleton, Blueprint variants.
+> **Engine:** Unreal Engine 5.8: C++ skeleton, Blueprint variants.
 > **Format:** Individual capstone, GTech 4 (MSc Video Game Development, Gaming Campus).
 > **Audience:** the author (private working document, not a pitch deck).
-> **Version:** 0.2 — written on 2026-10-24 (Q&A phase); bonus tier, home and hub decisions added on 2026-10-29 (see §23.1, D22–D27); stairwell wall link, sub-anchor slab and four backlog items added on 2026-10-31 (D28).
+> **Version:** 0.2, written on 2026-10-24 (Q&A phase); bonus tier, home and hub decisions added on 2026-10-29 (see §23.1, D22–D27); stairwell wall link, sub-anchor slab and four ideas noted during implementation added on 2026-10-31 (D28).
 
 ---
 
@@ -45,7 +45,7 @@ Every numeric value in this document is a **starting value to be tuned**, not a 
 - It reuses, rather than discards, the Weeks 1–2 work: the modular piece kit, the grid, the structural portance graph, Chaos, the physics manipulation tool.
 - It inverts the usual construction-sandbox loop (build → sell) into *dismantle → get paid → optionally build*, which differentiates it from Minecraft-style and House-Builder-style games, as intended.
 - It makes the technical showpiece (a structural graph driving collapse) the **core of the gameplay** rather than a hidden backend. The player *feels* the portance system: you have to think about what holds what.
-- It fits the CDC (`CDC_GTech4_Fil_Rouge`): systemic interactions, physics, environmental reactions and experimentation take priority over scripted progression; technical quality takes priority over content quantity.
+- It puts systemic interactions, physics, environmental reactions and experimentation ahead of scripted progression, and technical quality ahead of content quantity.
 
 **What the player does, minute to minute.** Reads a building, decides what to attack and in what order, hits things with a tool, hears and sees the structure complain, runs before it comes down, and then walks away from a pile of rubble with a client report.
 
@@ -81,7 +81,7 @@ Every numeric value in this document is a **starting value to be tuned**, not a 
 ### 3.2 Block 1 cut line (Nov 13)
 
 **Must have (indispensable)**
-- One mission map with **2–3 house templates** (generated hybrid, or hand-built as a fallback — see §19.1 gates).
+- One mission map with **2–3 house templates** (generated hybrid, or hand-built as a fallback, see §19.1 gates).
 - The **four tools**: explosive charge, sledgehammer, jackhammer, crowbar.
 - Demolition with **hit points, materials and a tool × material matrix**.
 - **Structural cascade** driven by the portance graph: staggered, legible, with warnings.
@@ -108,15 +108,15 @@ Every numeric value in this document is a **starting value to be tuned**, not a 
 | Home | `Lvl_Home` reached from the hub access point (a simple map switch), build mode there, **persistent across map switches** (pieces, props, inventory). One block: shipped together or cut together. |
 | Hub | Navigable v1: hall, mezzanine office with the PC, big door with the truck trigger, access-point trigger. Boxes or an asset pack; no dressing. |
 | Tooling | Console commands of §18.8, damage log, crush accumulator display. |
-| Backlog items (2026-10-31) | **Sticky charge** (§7.4), **jackhammer drill-loop sound** (§15.1), **paint tool** (§12), **tool wheel** (§14). Cut before every other bonus item, in this order: tool wheel, paint tool, jackhammer sound, sticky charge. |
+| Ideas of 2026-10-31 | **Sticky charge** (§7.4), **jackhammer drill-loop sound** (§15.1), **paint tool** (§12), **tool wheel** (§14). Cut before every other bonus item, in this order: tool wheel, paint tool, jackhammer sound, sticky charge. |
 
-The **stairwell wall link** and the **sub-anchor slab** (§8) are *not* bonus: they fix structural limits (stairwell walls with no slab, tall buildings that cannot be stable) and are core items of Sprint 2.
+The **stairwell wall link** and the **floors-restart-the-chain rule** (§8, first built as a sub-anchor slab) are *not* bonus: they fix structural limits (stairwell walls with no slab, tall buildings that cannot be stable) and are core items of Sprint 2.
 
 **`[OPTIONAL++]`** (bonus whenever there is slack, never a dependency): construction contracts (rebuild after demolition), debris-cleanup contracts (shovel, skip/dumpster), extra tools (mini-excavator, charges with different profiles).
 
 ### 3.3 Out of scope
 
-Multiplayer `[LOCKED]`; realistic structural simulation; voxel terrain (the Minecraft-style option from `CLAUDE.md` is dropped entirely); a real economy with market dynamics; voice acting; procedural city generation; open world.
+Multiplayer `[LOCKED]`; realistic structural simulation; voxel terrain (the Minecraft-style option considered at the start is dropped entirely); a real economy with market dynamics; voice acting; procedural city generation; open world.
 
 ---
 
@@ -144,12 +144,12 @@ Branch (B1 bonus tier, not blocking): once enough money is saved → **buy a par
 
 ### 4.2 Micro loop (inside a mission)
 
-1. **Read** the building (and the contract brief) — what is load-bearing, what is salvage, what must stay.
-2. **Prepare** — clear salvageable furniture out of the way (carry it to the client drop-zone) *before* the demolition starts.
-3. **Plan** — choose tool and attack point; place a charge if appropriate.
-4. **Strike** — apply damage; watch damage states and warnings.
-5. **React** — the structure shifts; step back; avoid being underneath.
-6. **Finish** — check objectives; leave through the truck trigger and confirm.
+1. **Read** the building (and the contract brief): what is load-bearing, what is salvage, what must stay.
+2. **Prepare**: clear salvageable furniture out of the way (carry it to the client drop-zone) *before* the demolition starts.
+3. **Plan**: choose tool and attack point; place a charge if appropriate.
+4. **Strike**: apply damage; watch damage states and warnings.
+5. **React**: the structure shifts; step back; avoid being underneath.
+6. **Finish**: check objectives; leave through the truck trigger and confirm.
 
 ### 4.3 Session shape
 
@@ -163,7 +163,7 @@ A mission is **5–10 minutes** in the normal range, **20–25 minutes** at most
 |---|---|---|
 | `Lvl_Hub` | The warehouse. Office with the mission PC, big door with the truck, and the access point to the player's own plot. | B1: navigable v1 (bonus tier; the PC + truck-trigger blockout is the fallback). B2: dressed warehouse. |
 | `Lvl_Mission` | Single generic mission level. The house is generated at load from the contract's seed. | B1 |
-| `Lvl_Home` | The player's own parcel. Evolves from today's `Lvl_Construction`. Locked until a parcel is purchased. | B1 bonus tier (simple map switch, persistent); polish and extensions B3 |
+| `Lvl_Home` | The player's own parcel. Evolves from the construction map of weeks 1 and 2. Locked until a parcel is purchased. | B1 bonus tier (simple map switch, persistent); polish and extensions B3 |
 | `Lvl_DemoTest` | Dev-only sandbox: hand-built structures and every tool, for tuning and for the oral defence. | B1 |
 
 **Transitions.** Level changes use `OpenLevel`; state that must survive (money, reputation, owned tools, the active contract and its seed) lives in a `UGameInstanceSubsystem` and is also serialised to a `USaveGame`. The generated mission house is **never saved**: it is rebuilt from the seed. The **player's home is saved** (pieces as class + grid cell + level + orientation, props as class + transform, plus the hotbar inventory) and restored through the same placement function the generator uses.
@@ -202,9 +202,9 @@ A contract is a **small data object** generated by the board:
 | Condition | Description | Status |
 |---|---|---|
 | **Salvage furniture** | The client wants specific items (e.g. "the sofa and the piano"); the rest is irrelevant. Items must be carried out to the client drop-zone *intact* before the house falls. Naturally forces a "clean the house first" phase. | `[LOCKED]` |
-| **Protected zone** | A volume that must not be damaged (a neighbour's shed, a tree, a fence, a garage). Used heavily in very hard contracts. | `[PROPOSAL]`, matches the "high-rise inside a residence" idea. |
-| **Keep standing** | A named part must remain (a façade, a load-bearing wall, the ground floor). | `[PROPOSAL]` — B1 bonus tier |
-| **Forbidden tool** | e.g. no jackhammer (noise ordinance) or no explosives. | `[PROPOSAL]` — B1 bonus tier |
+| **Protected zone** | A volume that must not be damaged (a neighbour's shed, a tree, a fence, a garage). Damaged by a tool or a blast, or by the house falling into it (counted when a collapsing piece breaks, fragments excluded). The levels hold Y zone slots, the contract activates X of them. Used heavily in very hard contracts. | `[LOCKED: D35]`, matches the "high-rise inside a residence" idea. |
+| **Keep standing** | A named part must remain: in B1, one room of a named type (the contract says "keep the bedroom"). | `[LOCKED: D35]`, B1 bonus tier |
+| **Forbidden tool** | e.g. no jackhammer (noise ordinance) or no explosives. The first damage dealt with it warns the player and costs a share of what was earned, once for the whole mission. | `[LOCKED: D35]`, B1 bonus tier |
 | ~~Time limit~~ | Explicitly doubtful. **Not in scope**; no time pressure in scoring. | dropped for now |
 
 ### 6.4 Offers `[LOCKED]`
@@ -213,7 +213,7 @@ A contract is a **small data object** generated by the board:
 - Each offer shows: **area in m²** (with the estimated duration), **type**, **conditions**, **payment**.
 - Hard offers (large, many conditions, protected zones) appear as reputation grows (B3). In B1 the offers are drawn from a weighted pool with no gating, or gated by a single "tier" integer.
 
-**Estimated duration (starting formula).** `Minutes ≈ 0.06 × AreaM2 × TypeFactor`, with `TypeFactor`: total 1.0, partial 0.6, renovation 0.5. A 100 m² total demolition shows ~6 min; a 400 m² building ~24 min. To be validated by playtests.
+**Estimated duration (starting formula).** `Minutes ≈ 0.06 × AreaM2 × TypeFactor + 0.5 × SalvageCount`, with `TypeFactor`: total 1.0, partial 0.6, renovation 0.5. A 100 m² total demolition shows ~6 min; a 400 m² building ~24 min. Each piece of furniture the client wants carried out adds half a minute (finding it, grabbing it, walking it to the drop zone), so the time on the offer stays honest when a contract asks for ten. To be validated by playtests.
 
 ### 6.5 Scoring and payment `[LOCKED: structure]`, `[TBD: coefficients]`
 
@@ -227,22 +227,36 @@ Collateral   = Σ weight(destroyed pieces ∉ TargetSet) / Σ weight(all non-tar
 FurnitureLoss= Σ value lost on client-keep items / Σ value of client-keep items
               (destroyed or left inside the building = lost; damaged = reduced value, §10.3)
 Safety       = min(SafetyCap, Σ penalty per crush/explosion event on the player)
+ZoneDamage   = min(1, Σ over active zones of min(1, tool damage ratio + fallen share of the house × ZoneFallFactor))
+Forbidden    = ForbiddenToolPenalty if the forbidden tool dealt damage, else 0 (once per mission)
 
-Penalty      = min(PenaltyCap, kCollateral·Collateral + kFurniture·FurnitureLoss + Safety)
-Payout       = BasePayout × Completion × (1 − Penalty)
+Penalty      = min(PenaltyCap, min(CollateralCap, kCollateral·Collateral) + kZone·ZoneDamage
+                               + min(FurnitureCapPerItem × SalvageCount, kFurniture·FurnitureLoss) + Safety + Forbidden)
+Upkeep       = Σ over tools that worked of (PerJob + PerSecond × active seconds)
+Payout       = max(0, BasePayout × Completion × (1 − Penalty) − Upkeep)
 ```
+
+`CollateralCap` applies to a total demolition only (the room kept standing); a partial demolition and a renovation have no cap of their own for it (D38).
+
+A zero denominator is defined, not left open: Completion is 1 when there is nothing to destroy, Collateral is 0 when nothing must stay, FurnitureLoss is 0 when the client asked for nothing (D35).
 
 | Parameter | Start value | Comment |
 |---|---|---|
-| `weight` of a piece or prop | the cost of its `DT_Shop` row (`FShopItemRow::Cost`), found by actor class | One source for costs. The `Cost` field on the piece Blueprints is unused (left at 0). A class with no shop row weighs its `Value` (props) or 1, and is counted in the mission summary. |
+| `weight` of a piece or prop | the cost of its `DT_Shop` row (`FShopItemRow::Cost`), found by actor class | One source for costs. The piece Blueprints have no cost field (the unused one was removed). A class with no shop row weighs its `Value` (props) or 1, and is counted in the mission summary. |
 | `kCollateral` | 1.5 | Collateral is weighed heavier than its raw share. |
+| `kZone` | 1.5 | Same weight as collateral for the protected zones (D35). |
+| `ZoneFallFactor` | 3 | A zone hit by a third of the house's weight counts as destroyed. |
+| `ForbiddenToolPenalty` | 0.15 | Once for the mission, whatever the number of uses. |
 | `kFurniture` | 1.0 | Value-weighted. |
+| `FurnitureCapPerItem` | 0.10 | The furniture term is held at this share of what was earned for each piece asked: three pieces cost at most 30 %. |
+| `CollateralCap` | 0.40 | The room kept in a total demolition: at weight 1.5, about half of it lost would already reach the penalty cap. |
+| Tool upkeep | per tool | A flat fee per mission where it worked plus a rate per second of work, on the tool's data asset. Taken after the penalty, never below zero. |
 | `PenaltyCap` | 0.8 | Never below 20% of the earned amount. |
 | `SafetyCap` | 0.25 | |
 | Crush event | −0.10 (stackable up to the cap) | See §7.7. |
 | Explosion on player | −0.10 | Same family of penalty. |
 
-**Debrief breakdown.** The report screen lists each term (completion %, collateral, furniture, safety) with its effect on the money. The same breakdown is printed in the debug log, which makes the evaluator easy to test and to defend orally.
+**Debrief breakdown.** The report screen lists each term (completion %, collateral, protected zones, furniture, safety, forbidden tool, tool upkeep) with its effect on the money. The same breakdown is printed in the debug log, which makes the evaluator easy to test and to defend orally.
 
 **End of mission.** The player ends the job by interacting with the truck. If completion is below 100% or conditions are unresolved, the game asks for confirmation. No automatic fail.
 
@@ -260,7 +274,7 @@ Every destructible thing (a `ABuildablePiece` or an `APhysicsProp` flagged as br
 
 `EDemolitionMaterial`: **Wood**, **Plaster** (partitions/drywall), **Brick**, **Concrete**, **Glass**, **Metal**.
 
-Furniture uses the same enum (wood furniture, metal appliances, glass tables...). A piece's material is data on its Blueprint, **separate from the mesh** — the same philosophy as sockets (§18). That makes "premium material" variants in B2 a data and shader change, not a code change.
+Furniture uses the same enum (wood furniture, metal appliances, glass tables...). A piece's material is data on its Blueprint, **separate from the mesh**, the same philosophy as sockets (§18). That makes "premium material" variants in B2 a data and shader change, not a code change.
 
 ### 7.3 Hit points
 
@@ -339,7 +353,7 @@ Readability is the key requirement (P2). Each piece moves through states by rema
 
 | State | Condition | Feedback (B1 basic → B2 final) |
 |---|---|---|
-| **Intact** | h ≥ 0.75 | — |
+| **Intact** | h ≥ 0.75 | - |
 | **Damaged** | 0.35 ≤ h < 0.75 | Material parameter `Damage` drives a crack/tint; small dust puffs on hit. |
 | **Critical** | h < 0.35 | Heavier cracks, creaking sound, dust trickle. For load-bearing pieces: **Compromised** (below). |
 | **Destroyed** | h = 0 | Removed from the graph, replaced by fragments. |
@@ -365,15 +379,15 @@ Readability is the key requirement (P2). Each piece moves through states by rema
 
 | Layer | Idea | Status |
 |---|---|---|
-| **A. Direction bias** | Each released piece gets a horizontal impulse away from the centroid of its still-stable neighbours → walls fall outward, slabs slide off, instead of dropping straight down. Cheap, deterministic. | `[PROPOSAL]` — B1 target |
-| **B. Overload** | Propagation also accumulates the **mass supported through each load-bearing piece**; if supported mass exceeds a capacity (itself reduced by `c(h)`), the piece becomes Compromised even if its chain to the anchor is intact. | `[PROPOSAL]` — B1 stretch / B2; fallback is A only |
+| **A. Direction bias** | Each released piece gets a horizontal impulse away from the centroid of its still-stable neighbours → walls fall outward, slabs slide off, instead of dropping straight down. Cheap, deterministic. | `[PROPOSAL]`, B1 target |
+| **B. Overload** | Propagation also accumulates the **mass supported through each load-bearing piece**; if supported mass exceeds a capacity (itself reduced by `c(h)`), the piece becomes Compromised even if its chain to the anchor is intact. | `[PROPOSAL]`, B1 stretch / B2; fallback is A only |
 
 **Why graph-driven rather than letting Chaos decide.** The portance graph is cheap, predictable, explainable in one sentence and visible on screen. Chaos only animates the consequence. This is the direct application of pillar P2, and it sidesteps the known Week 2 limitation (the Anchored bottom of `GC_wall` not surviving a cluster break), because the new pipeline **does not rely on clustered Geometry Collections holding together**: each piece is its own object and is replaced by fragments only when it is destroyed.
 
 ### 7.8 Fracture and debris `[LOCKED: simple, short lifetime]`
 
 - On destruction a piece is swapped for a **pre-fractured Geometry Collection per *piece mesh***, authored once and reused for all instances (so no per-instance fracturing cost). Fragment count is set per mesh rather than one fixed number: **8–10** for a larger mesh (3–6 looked too chunky in testing), down to **3–6** for a small one (e.g. a corner post). The 3–6 range stays as-is for the generic per-class fallback used by any mesh without an authored override.
-- Fragments have a **short life** — a few seconds (start at 6 s, matching today's behaviour of the falling chunk), then shrink/fade and despawn.
+- Fragments have a **short life**: a few seconds (start at 6 s, matching today's behaviour of the falling chunk), then shrink/fade and despawn.
 - A **`UDebrisSubsystem`** enforces a global cap on active fragments (start ~300), removes the oldest first, and puts slow fragments to sleep to save physics cost.
 - A dedicated **Debris** collision channel/object type: fragments collide with the world and each other only as needed, never block the player's movement, and are ignored by build-mode obstruction checks.
 - Large leftovers do not accumulate: **clean-up of rubble is not a requirement**. Rubble handling (shovel, skip) is `[OPTIONAL++]` and is designed so it can be added later (fragments are tagged, debris counts can be queried).
@@ -398,7 +412,7 @@ Structures should **resist** a naive bottom-up approach, as the author wants: th
 
 ---
 
-## 8. Structural system — what changes
+## 8. Structural system: what changes
 
 The existing portance graph (`UStructuralSupportComponent`, `DA_StructuralRules`) stays the heart. It currently supports placement and removal; this GDD requires it to support **gradual damage and staged failure**.
 
@@ -411,9 +425,9 @@ The existing portance graph (`UStructuralSupportComponent`, `DA_StructuralRules`
 | Direction | Neighbour-centroid impulse; optional overload accumulation. |
 | Generated houses | The generator registers through the **same API** as build mode, so generated structures are valid by construction. |
 | Debugging | Heat-map view of stability; wave visualisation; HP overlay (§18.7). |
-| Stairwell walls | **Direct wall link.** Walls bordering a stairwell hole have no slab beneath or above them at any level, so they have nothing to pass stability through, and a slab cannot be placed in a hole that is empty on purpose. A direct `WallTop` ↔ `WallBottom` link between a wall and the wall stacked on it on the same edge (vertical class, same loss as the other vertical links) lets stability climb through the stack. It only passes a value along, it creates none: a wall stack still needs a chain back to an anchor. This is the original bug; the sub-anchor below does *not* fix it. Tests in Appendix B (T9), passed 2026-11-01. `[LOCKED: D28]` |
-| Tall buildings | **Sub-anchor slab.** With `VerticalLoss` 0.1 and a collapse threshold of 0.1, a plain stack of walls and slabs reaches the threshold around the fifth storey, so a tall building cannot exist even at full health. A reinforced slab variant (same footprint and same 20 cm height as the normal slab, so storeys stay 300 cm and nothing is stacked) resets the stability to 1.0 like the foundation's Anchor, *provided the chain below it is valid*. The tall archetypes place one every `SubAnchorInterval` slabs (data); the player can place one in build mode. Tests in Appendix B (T8), passed 2026-11-01. `[LOCKED: D28]` |
-| Roofs | Under every roof there is a **ceiling slab, always a reinforcement slab** (sub-anchor, above) whatever the storey interval, and a roof tile can rest on a slab edge (`RoofLow` on `FloorEdge`). A wide roof on a tall house therefore starts from a stability reset. A roof without a slab (high ceilings) stays a backlog idea. `[LOCKED: D32]` |
+| Stairwell walls | **Direct wall link.** Walls bordering a stairwell hole have no slab beneath or above them at any level, so they have nothing to pass stability through, and a slab cannot be placed in a hole that is empty on purpose. A direct `WallTop` ↔ `WallBottom` link between a wall and the wall stacked on it on the same edge (vertical class, same loss as the other vertical links) lets stability climb through the stack. It only passes a value along, it creates none: a wall stack still needs a chain back to an anchor. This is the original bug; the floor rule below does *not* fix it. Tests in Appendix B (T9), passed 2026-11-01. `[LOCKED: D28]` |
+| Tall buildings | **Floors restart the chain.** With `VerticalLoss` 0.1 and a collapse threshold of 0.1, a plain stack of walls and slabs reaches the threshold around the fifth storey, so a tall building cannot exist even at full health. Every floor slab (same footprint and same 20 cm height as before, so storeys stay 300 cm and nothing is stacked) hands the full stability, 1.0, to the walls and roof tiles that stand on it, like the foundation's Anchor, *provided it stands itself*: its own stability is worked out like a floor's, from what is under and beside it, so it falls as a floor does when its support gives out. The rule sits on the ordinary floor slab, so every storey of a generated house restarts the chain and the player's own slabs follow the same rule; there is no separate slab to place and no interval. It started as a second slab placed every few storeys (D28) and became the floor slab itself on 2026-11-11 (D37). `[LOCKED: D28, D37]` |
+| Roofs | Under every roof there is a **ceiling slab**, which is a floor slab and so restarts the chain, and a roof tile can rest on a slab edge (`RoofLow` on `FloorEdge`). A wide roof on a tall house therefore starts from a stability reset. A roof without a slab (high ceilings) stays a backlog idea. `[LOCKED: D32]` |
 | Visual overlaps | Exterior walls back to 300 cm (visual only); parity bias at wall corners; slabs and stairs retreat near exterior walls. Scheduled Oct 29, Oct 31 and Nov 5 (§19.1). No change to sockets or the graph. |
 
 No new sockets are required. The author's note holds: structurally the kit is varied enough; the glass window will be a Blueprint like the door (a frame piece plus a glass sub-piece, two assets, one Blueprint; scheduled Nov 3, bonus tier), and a different staircase is possible but optional.
@@ -431,19 +445,19 @@ Hand-authored **archetype templates** with **procedural variation**, rather than
 ```
 Contract (archetype, seed, area target, type)
    ▼
-1. Archetype template        — footprint rules, number of storeys, room slots, roof type
+1. Archetype template        - footprint rules, number of storeys, room slots, roof type
    ▼
-2. Parameter rolling (seed)  — dimensions (in grid cells), openings, roof variant, material set
+2. Parameter rolling (seed)  - dimensions (in grid cells), openings, roof variant, material set
    ▼
-3. Shell emission            — foundation → walls → slabs → roof, via the same grid placement API
+3. Shell emission            - foundation → walls → slabs → roof, via the same grid placement API
    ▼
-4. Interior partitioning     — rooms assigned to slots, interior walls, doors
+4. Interior partitioning     - rooms assigned to slots, interior walls, doors
    ▼
-5. Structural validation     — all pieces connected; WouldBeStable for each; reject and re-roll on failure
+5. Structural validation     - all pieces connected; WouldBeStable for each; reject and re-roll on failure
    ▼
-6. Furnishing                — props per room type and quality tier, from rule tables
+6. Furnishing                - props per room type and quality tier, from rule tables
    ▼
-7. Contract binding          — target set, must-stay set, keep list, protected zones
+7. Contract binding          - target set, must-stay set, keep list, protected zones
 ```
 
 ### 9.3 Archetypes
@@ -452,7 +466,7 @@ Contract (archetype, seed, area target, type)
 |---|---|---|
 | Bungalow | Single storey, simple roof | B1 |
 | Two-storey house | Ground + upper floor, gable roof | B1 |
-| Small apartment block | 3+ storeys (up to 5–6 with sub-anchor slabs, §8), repeated floor plans | B1 bonus tier (first thing cut), otherwise B2 |
+| Small apartment block | 3+ storeys (up to 5–6, floors restart the chain, §8), repeated floor plans | B1 bonus tier (first thing cut), otherwise B2 |
 | Residence building | A high-rise inside a residential area with **neighbours that must not be touched** (ultra-hard contracts, protected zones) | B3 / `[OPTIONAL++]` |
 
 B1 needs **2–3 of the first three**; two are enough if the generator is solid.
@@ -477,13 +491,13 @@ Props come from the **Kenney Furniture Kit** (existing assets, imported and tagg
 
 **Standing per storey `[LOCKED: D33]`.** A plan that repeats its typical storeys (the apartment block) also gives each typical storey a standing of its own, 1 to 3. It decides how often that storey is stacked at each height (high standings go up) and moves the furniture of its rooms one tier up or down from the house's own standing, so a block can mix modest and well-off storeys. A storey with no standing of its own follows the house's.
 
-Each prop is a Blueprint (`BP_Prop_*`) with tags: **room type**, **quality tier**, **material**, **HP**, **value**, **placement rule** (against wall, in corner, centred, near plumbing…). Rules live in a `DT_FurnishingRules` Data Table; adding a variant is a new row, not new code. The variant count is "filling", as the author says — the pipeline is the work.
+Each prop is a Blueprint (`BP_Prop_*`) with tags: **room type**, **quality tier**, **material**, **HP**, **value**, **placement rule** (against wall, in corner, centred, near plumbing…). Rules live in a `DT_FurnishingRules` Data Table; adding a variant is a new row, not new code. The variant count is "filling", as the author says: the pipeline is the work.
 
 ### 9.5 Determinism and validation
 
 - `Seed → identical house`, always.
 - Every generated structure passes `WouldBeStable` before being accepted; failures re-roll the seed (bounded attempts, then fall back to a known-good seed).
-- A debug console command spawns any archetype with any seed (§18.8) — essential for testing and for the defence.
+- A debug console command spawns any archetype with any seed (§18.8), essential for testing and for the defence.
 
 ---
 
@@ -527,7 +541,7 @@ Used for client-keep items (report), sell zone, and keep zone. It is data (a cur
 
 - Money buys **tools**, **the parcel**, and **items** (props and structure).
 - **Purchases are made where they matter** (on site, in the build context), not in a hub shop. Tools **and the parcel** are bought at the **PC terminal** in the hub `[LOCKED 2026-10-29]` (no new hub place needed; the real purchase flow is B1 bonus tier, a stub is the fallback).
-- Demolition is cheap on purpose: you need only a sledgehammer to start and you never buy furniture inside a demolition contract, so **the risk of spending more than you earn is low** — in contrast with a construction game.
+- Demolition is cheap on purpose: you need only a sledgehammer to start and you never buy furniture inside a demolition contract, so **the risk of spending more than you earn is low**, in contrast with a construction game.
 - Some **starting money** is given.
 - Larger tools and vehicles have **maintenance costs** (details `[TBD]`).
 - **Reputation** accompanies money (B3).
@@ -539,8 +553,8 @@ Used for client-keep items (report), sell zone, and keep zone. It is data (a cur
 | Start money | 500 | Enough to buy one consumable or a cheap tool. |
 | Sledgehammer | owned | The starter tool (the author's "just a hammer"). |
 | Crowbar | 300 | |
-| Jackhammer | 2 500 | Maintenance per use `[TBD]`. |
-| Explosive charge | 150 each | Consumable. |
+| Jackhammer | 2 500 | Upkeep: a flat fee per mission plus a rate per second of work (D38); values on its data asset, to tune. |
+| Explosive charge | 250 each | Consumable, held in a stock of at most 10. |
 | Parcel | 40 000 | Roughly 15 average contracts. Confirmed as the default (2026-10-29); infinite-money mode and `pb.Money` make it testable, and it can be lowered if the instructor wants to play the full progression. |
 | Base payout | ~12 / m² (total demolition) | Partial ×0.6, renovation ×0.5 (aligned to duration). |
 
@@ -585,7 +599,7 @@ Default if this is ever built: **B**.
 
 ## 13. Environments
 
-### 13.1 Hub — the warehouse `[LOCKED]`
+### 13.1 Hub: the warehouse `[LOCKED]`
 
 | Element | Purpose |
 |---|---|
@@ -608,7 +622,7 @@ B1: a **navigable v1** (bonus tier): hall, mezzanine office with the PC reached 
 
 ### 13.3 Plot changes
 
-`APlot` is currently "bounds + ground reference + owns the structural graph". It becomes the **mission zone**: bounds, caution-tape perimeter, protected-zone registry, the three drop zones, and the contract binding (target / must-stay sets). **The "buy/sell with value" idea in the old `CLAUDE.md` is retired.**
+`APlot` is currently "bounds + ground reference + owns the structural graph". It becomes the **mission zone**: bounds, caution-tape perimeter, protected-zone registry, the three drop zones, and the contract binding (target / must-stay sets). **The "buy/sell with value" idea of the first brief is retired.**
 
 ---
 
@@ -616,13 +630,16 @@ B1: a **navigable v1** (bonus tier): hall, mezzanine office with the PC reached 
 
 | Screen | Content | Block |
 |---|---|---|
-| **Mission board** (PC) | 3 offers: m² and estimated time, type, conditions, payment. Pick one. | B1 |
-| **Mission HUD** | Tool belt and equipped tool; objective checklist (conditions with status); optional coarse "target demolished %"; warnings/toasts (e.g. "protected zone damaged"). | B1 |
-| **Debrief** | Itemised report (§6.5): completion, collateral, furniture, safety, payment, reputation. | B1 |
+| **PC terminal** | One window with three tabs. **Contracts:** 3 cards (client, type, site, estimated time, area, condition chips, base payout); the details of the hovered card (the job, one block per condition) show in a strip under the cards; a click takes the contract. **Tools** and **Parcel:** the purchases of §11 (bonus tier, the tabs exist from the start). | B1 (Contracts); bonus tier (Tools, Parcel) |
+| **Mission HUD** | Sober: a ring with the global "house demolished" percentage (top left), the tool belt and equipped tool, the money, and the message line for warnings (e.g. "protected zone damaged"). The objectives are not on the HUD: they live in the notebook. | B1 |
+| **Mission notebook** | Key N, centre of the screen. Left page: the contract (client, type, size, base payout). Right page: the live objectives (furniture to recover with its state, protected zones with their damage, the room to keep, the forbidden tool). The furniture list shows 5 lines and scrolls when there are more (up to 15). | B1 |
+| **Leave the site?** | Card shown at the truck when the job is not finished: completion and what is missing, in states and not in money. Esc keeps working, E leaves. A finished job leaves without asking. | B1 |
+| **Focus card** | Shown in a mission and in the home, for the piece or the furniture under the crosshair: name, material, storey (or the role of a piece of furniture), a health bar, the multiplier of the tool in hand against that material, a warning when the piece is about to fall, the value of furniture the client wants, and whether the take-back key does something. | B1 |
+| **Debrief** | Shown at the hub on return. A waterfall from the base payout down to the payout, one step per cause, so the player sees where the money was lost; the itemised report (§6.5) sits under it: completion, collateral, zones, furniture, safety, forbidden tool, payment, reputation. | B1 |
 | **Dialogue / negotiation** | See §16. | B3 |
 | **Home build UI** | The existing temporary UMG (HUD, inventory, shop). | existing |
 
-**Feedback policy `[PROPOSAL]`.** Live feedback during the mission is about *state and warnings* (damage states, compromised creaks, a red outline when touching a protected zone). The exact monetary effect of each penalty is revealed in the debrief — it keeps the mission tense and the debrief meaningful. This is easy to flip if testers need more information.
+**Feedback policy `[PROPOSAL]`.** Live feedback during the mission is about *state and warnings* (damage states, compromised creaks, a red outline when touching a protected zone). The exact monetary effect of each penalty is revealed in the debrief: it keeps the mission tense and the debrief meaningful. This is easy to flip if testers need more information.
 
 **Controls `[PROPOSAL]`.** The mission uses a tool belt, with the former Push/Pull/Launch collapsed into one "hands" tool:
 
@@ -735,31 +752,31 @@ Naming follows existing conventions: `A`/`U`/`I` prefixes, short role-descriptiv
 | `IDamageable` | C++ interface | `ApplyDamage(FDamageInfo)`; implemented by pieces and breakable props. Tools never know concrete classes. |
 | `UDurabilityComponent` | C++ | HP, material, damage state, events (`OnDamaged`, `OnStateChanged`, `OnDestroyed`). Drives the visual `Damage` parameter. |
 | `UToolbeltComponent` | C++ | Owned/equipped tool, switching, input routing. Separate from the inventory (single responsibility). |
-| `ADemolitionTool` | C++ base + `BP_Sledgehammer`, `BP_Jackhammer`, `BP_Crowbar` | One tool = one class; stats from a `UDemolitionToolData` data asset. Traces and calls `IDamageable`. |
+| `ADemolitionTool` | C++ base + `BP_SledgeHammer`, `BP_JackHammer`, `BP_Crowbar` | One tool = one class; stats from a `UDemolitionToolData` data asset. Traces and calls `IDamageable`. |
 | `AExplosiveCharge` | C++ + BP | Placeable physics actor; manual detonation; radial damage + impulse. |
 | `UDemolitionToolData` / `DA_DemolitionRules` | Data assets | Tool stats; tool × material matrix; HP table; state thresholds; `c(h)` curve. |
 | `UCrushDetectionComponent` | C++ | Impact accumulation on the player, crush events. |
 | `UPaintBrushComponent`, `UPaintPalette`, `APaintBucket` | C++ + data | The brush (last belt slot), the plot's palette of colours, a colour as an inventory item (D34). |
 | `UDebrisSubsystem` | C++ world subsystem | Fragment cap, oldest-first eviction, sleeping. |
-| `UFractureLibrary` (or data table) | C++ + assets | Piece mesh → Geometry Collection mapping. |
+| `MeshFractureOverrides` (on `DA_DemolitionRules`) | Data | Piece mesh → Geometry Collection mapping. |
 | `UContractSubsystem` | C++ game instance subsystem | Offers, active contract, evaluation, payment, progression hooks. |
-| `FContractDefinition`, `UContractEvaluator` | C++ struct + pure functions | Evaluator takes the mission result and returns the breakdown — **unit-testable without a level**. |
+| `FContractDefinition`, `UContractEvaluator` | C++ struct + pure functions | Evaluator takes the mission result and returns the breakdown: **unit-testable without a level**. |
 | `UProgressSave` | `USaveGame` | Money, reputation, owned tools, parcel flag, and the player's home snapshot (pieces as class + cell + level + orientation, props as class + transform, hotbar inventory). |
 | `AHouseGenerator` | C++ + BP | Runs the pipeline of §9 at level load. |
 | `UHouseArchetype` | Data asset | Template data. |
 | `DT_FurnishingRules` | Data table | Props per room, tier, placement rule. |
 | `ADropZone` | C++ (from `ADetectionZone`) | Client/Sell/Keep zones with item accounting. |
 | `AProtectedZone` | C++ | Volume that records damage for the evaluator. |
-| `WBP_MissionBoard`, `WBP_MissionHUD`, `WBP_Debrief` | UMG | UI. |
+| `WBP_MissionBoard`, `WBP_MissionNotebook`, `WBP_Debrief` | UMG | UI. |
 | `APlotBuilderGameMode`, `APlotBuilderPlayerController` | C++ | Game state flow; HUD creation. |
 
 ### 18.3 Data-driven design
 
-The following live in Data Assets/Tables and are tunable without recompiling: tool stats, the tool × material matrix, HP bases and class factors, damage-state thresholds, stability curve `c(h)`, collapse timings, crush thresholds, scoring coefficients, penalty caps, economy numbers, furnishing rules, archetype templates, offer weights, the sub-anchor interval, the paint palette.
+The following live in Data Assets/Tables and are tunable without recompiling: tool stats, the tool × material matrix, HP bases and class factors, damage-state thresholds, stability curve `c(h)`, collapse timings, crush thresholds, scoring coefficients, penalty caps, economy numbers, furnishing rules, archetype templates, offer weights, the paint palette.
 
 ### 18.4 Collision
 
-Existing: `GameTraceChannel2` "Interactable". Added `[PROPOSAL]`: **Debris** object type/profile (ignores player movement, ignores build-mode obstruction, collides with world); the tool traces use a **Damageable** query or reuse the Visibility/Interactable channel — decide at implementation time and note it in the tech doc.
+Existing: `GameTraceChannel2` "Interactable". Added `[PROPOSAL]`: **Debris** object type/profile (ignores player movement, ignores build-mode obstruction, collides with world); the tool traces use a **Damageable** query or reuse the Visibility/Interactable channel: decide at implementation time and note it in the tech doc.
 
 ### 18.5 Events and coupling
 
@@ -786,15 +803,15 @@ Existing: `GameTraceChannel2` "Interactable". Added `[PROPOSAL]`: **Debris** obj
 | Evaluator breakdown | Printed on screen at debrief (the same numbers as the report). |
 | Fragment counter | Active fragments vs. cap. |
 
-### 18.8 Console commands (proposal)
+### 18.8 Console commands
 
-`pb.SpawnHouse <archetype> <seed>`, `pb.Money <n>`, `pb.GiveTool <name>`, `pb.DamageAll <n>`, `pb.CollapseTest`, `pb.ShowStability 0|1`, `pb.ShowHP 0|1`, `pb.EndMission`, `pb.SetSeed <n>`. They make tuning and the oral defence fast and reproducible.
+`pb.SpawnHouse <archetype> <seed>`, `pb.Money <n>`, `pb.GiveAllTools`, `pb.DamageAll <n>`, `pb.CollapseTest`, `pb.ShowStability 0|1`, `pb.ShowHP 0|1`, `pb.EndMission`, `pb.SetSeed <n>`. They make tuning and the oral defence fast and reproducible. The full list, with what each does, is in `TECHNICAL.md` ("Debugging tools").
 
 ---
 
 ## 19. Production plan
 
-### 19.1 Block 1 — Oct 24 → Nov 13 (~150 h)
+### 19.1 Block 1: Oct 24 → Nov 13 (~150 h)
 
 Priority order follows **risk**: the collapse feel (pillar) first, then generation, then the contract loop (wide but low-risk).
 
@@ -809,7 +826,7 @@ Priority order follows **risk**: the collapse feel (pillar) first, then generati
 
 These total ~162 h for the core plan plus a 3 h explicit buffer on Nov 8; beyond that, the cut line (§3.2) is the buffer.
 
-**Bonus tier (added 2026-10-29).** The bonus items of §3.2 add ~43.5 h in the plan's conservative units (Phase 2 +4.5, Phase 3 +25.5, Phase 4 +13.5; the 2026-10-31 backlog items account for 9.5 of them), listed with the **[+]** tag in the sprint plans. From Oct 31 (Sprint 1 finished two days early, so Sprint 2 now runs Oct 31 – Nov 8 and Sprint 3 Nov 9–13) the plan needs about 144 conservative hours (97.5 core, 43.5 bonus, 3 buffer) against a capacity of about 150 (14 days × ~7.5 h ÷ the author's observed 0.7× pace): it fits on paper with very little slack, which is why each sprint plan ends with a cut order that removes the bonus items first. Decision gates are judged on the core loop only; the freeze rule (Nov 11 evening) applies to bonus items too.
+**Bonus tier (added 2026-10-29).** The bonus items of §3.2 add ~43.5 h in the plan's conservative units (Phase 2 +4.5, Phase 3 +25.5, Phase 4 +13.5; the four ideas of 2026-10-31 account for 9.5 of them), listed with the **[+]** tag in the sprint plans. From Oct 31 (Sprint 1 finished two days early, so Sprint 2 now runs Oct 31 – Nov 8 and Sprint 3 Nov 9–13) the plan needs about 144 conservative hours (97.5 core, 43.5 bonus, 3 buffer) against a capacity of about 150 (14 days × ~7.5 h ÷ the author's observed 0.7× pace): it fits on paper with very little slack, which is why each sprint plan ends with a cut order that removes the bonus items first. Decision gates are judged on the core loop only; the freeze rule (Nov 11 evening) applies to bonus items too.
 
 **Decision gates**
 
@@ -821,11 +838,11 @@ These total ~162 h for the core plan plus a 3 h explicit buffer on Nov 8; beyond
 
 **Definition of "done" for the week:** playable loop + one documented worst-case profile + one-page-plus AI statement + the updated technical documentation.
 
-### 19.2 Block 2 — after Nov 13 → Feb 19 (capacity `[TBD]`)
+### 19.2 Block 2: after Nov 13 → Feb 19 (capacity `[TBD]`)
 
 In priority order (cut from the bottom): damage shader and PBR materials → Niagara dust/debris/explosion → hub dressing (warehouse) → lighting and post-process → profiling and optimisation pass (incl. optional compute-shader experiment) → quality variants as visual work → third archetype (apartment block) if not already done.
 
-### 19.3 Block 3 — Feb 19 → May 7
+### 19.3 Block 3: Feb 19 → May 7
 
 Dialogue and negotiation → client profiles and evolution → reputation → Sequencer (intro, truck arrival, debrief) → camera work → sound design and pacing → environmental storytelling in the houses → home extensions (garden, workshop) and home polish; the basic home, parcel purchase and persistence are B1 bonus tier → `[OPTIONAL++]` construction/cleanup contracts and the residence-building contracts.
 
@@ -859,7 +876,7 @@ Testable acceptance checks:
 - [ ] Attacking the base of a structure with the wrong tool is clearly slower than the right tool.
 - [ ] A single wall falling on the player does **not** trigger a crush event; a multi-piece collapse does.
 - [ ] A seed generates the same house every time, and every generated house is stable at spawn.
-- [ ] Walls around a stairwell hole stand and fall correctly (T9); a tall stack of storeys with sub-anchor slabs is stable and still collapses correctly (T8).
+- [ ] Walls around a stairwell hole stand and fall correctly (T9); a tall stack of storeys is stable and still collapses correctly (T8, outdated since D37: check it on a generated apartment block).
 - [ ] A contract with *salvage furniture* and a *protected zone* can be completed, failed partially, and the debrief itemises exactly why.
 - [ ] The loop hub → mission → debrief → hub runs without errors three times in a row, with money and tools persisted.
 - [ ] A worst-case collapse is profiled and the numbers are documented.
@@ -873,22 +890,7 @@ Bonus tier (checked only if shipped):
 - [ ] The hub is navigable (hall, mezzanine office with the PC, door with the truck trigger, access-point trigger).
 - [ ] Sticky charge sticks to an aimed surface and falls if its piece is destroyed; the jackhammer drill loop plays only while held; the paint brush, with a bucket selected, colours placed pieces (and the colour survives the home's persistence); the tool wheel equips by direction.
 
-### 21.2 Mapping to the CDC criteria (`CDC_GTech4_Fil_Rouge`)
-
-| CDC criterion | Where this project answers it |
-|---|---|
-| Functionality | §21.1 checklist. |
-| Architecture | §18: single-responsibility components, interfaces, data-driven rules, no logic in the character. |
-| Technical mastery | Graph-driven collapse, Chaos replacement strategy, deterministic generation; each can be explained in a sentence. |
-| Robustness | Validation and fallbacks (generation, collapse), regression checks. |
-| Performance | §18.6 and the profiling capture. |
-| Readability | Naming conventions, tech doc, debug tools. |
-| Iteration | The decision gates and the documented tuning cycle. |
-| Experience | Pillars P1–P3, §14–15. |
-| Professional practice | This GDD, the plan, risks, gates. |
-| AI | §21.3. |
-
-### 21.3 AI statement of intent (mandatory when AI is used)
+### 21.2 AI statement of intent (mandatory when AI is used)
 
 The submission must state **where, why and how** AI was used, justify its value and name its limitations (minimum one page for a project). Keep a running log from day 1:
 
@@ -899,7 +901,7 @@ The submission must state **where, why and how** AI was used, justify its value 
 
 Add one row per significant use (generated code, debugging help, doc drafts). Anything generated must be understood well enough to explain at the oral.
 
-### 21.4 Language
+### 21.3 Language
 
 The course states that **two projects during the year must be completed entirely in English**. If this capstone is one of them, the technical documentation, AI statement and oral defence must also be in English (§22).
 
@@ -915,7 +917,7 @@ The course states that **two projects during the year must be completed entirely
 | Q4 | Live vs. debrief-only penalty feedback | Warnings live; money effect in the debrief (§14). |
 | Q5 | Is this capstone one of the two "entirely in English" projects? | Assumed possibly; at least the GDD is in English. |
 | Q6 | Mission background | Undecided: city skyline or countryside, a pure backdrop either way. |
-| Q7 | Heavy-tool maintenance cost model | Per-use fee `[TBD]`, decided at economy tuning. |
+| Q7 | Heavy-tool maintenance cost model | A flat fee per mission plus a rate per second of work (D38); the values are for economy tuning. |
 | Q8 | Hardware target for the performance budget | "Author's dev machine, 60 FPS". |
 | Q9 | Working title | Undecided. |
 | Q10 | Charge occlusion (do walls shield?) | No occlusion in v1 (flat, simplest to debug). |
@@ -949,7 +951,7 @@ The course states that **two projects during the year must be completed entirely
 | D16 | Damaged furniture loses half its value quickly, then slowly. |
 | D17 | Reputation cushioned against fast drops. |
 | D18 | Cut line for Nov 13 (§3.2); dialogues, reputation, warehouse, quality visuals are B2/B3. |
-| D19 | The CDC per-week documents are not to be relied upon; follow the fil rouge. |
+| D19 | The weekly briefs are not to be relied upon; the 9-week plan and this document are the reference. |
 | D20 | Exterior walls go back to 300 cm (visual only) to hide the slab edge between storeys; roof `VerticalOffset` revisited. Scheduled Oct 29 (decided 2026-10-27). |
 | D21 | Visual overlap fixes: parity bias at wall corners (Oct 31) and slab/stairs retreat near exterior walls (Nov 5). A material depth offset is only a last resort, to be evaluated in B2 (decided 2026-10-27). |
 | D22 | Bonus tier added to Sprints 2–3 (2026-10-29): console commands, window glass piece, damage log and crush display, extended Kenney props, third archetype, heavy-carry slowdown, *keep standing* and *forbidden tool* conditions, furniture value curve and left-inside check, `Tier` offer filter, game-state flow, tool purchase and jackhammer maintenance, parcel purchase, simple home with persistence, hub access point, navigable hub v1. Cut first, in the order given in each sprint plan. |
@@ -958,21 +960,17 @@ The course states that **two projects during the year must be completed entirely
 | D25 | Tools and the parcel are bought at the PC terminal; the parcel costs 40 000 by default and infinite-money mode makes the demo possible. |
 | D26 | Props come from the Kenney Furniture Kit; "about thirty" is a ballpark. |
 | D27 | Sprint estimates stay in the original conservative units (the author's observed pace is ≈ 0.7×); the bonus tier is cut first if time is short. |
-| D28 | 2026-10-31: five `Ideas_Backlog.md` items promoted, plus one fix the backlog pointed at but did not schedule. The **stairwell wall link** (direct `WallTop`/`WallBottom` match between stacked walls) is core (Sprint 2, Nov 1): it fixes the original bug of walls bordering a stairwell hole, which the sub-anchor cannot. The **sub-anchor slab** is core (Sprint 2, Nov 1): a reinforced slab variant of the same 20 cm height that resets stability to 1.0 if the chain below is valid. **Sticky charge, jackhammer drill-loop sound, paint tool and tool wheel** are bonus tier, cut before every other bonus item in this order: tool wheel, paint tool, jackhammer sound, sticky charge. The author's own priority order is sub-anchor, sticky charge, jackhammer sound, paint, tool wheel. |
+| D28 | 2026-10-31: five ideas noted during implementation promoted, plus one fix they pointed at but nobody had scheduled. The **stairwell wall link** (direct `WallTop`/`WallBottom` match between stacked walls) is core (Sprint 2, Nov 1): it fixes the original bug of walls bordering a stairwell hole, which the sub-anchor cannot. The **sub-anchor slab** is core (Sprint 2, Nov 1): a reinforced slab variant of the same 20 cm height that resets stability to 1.0 if the chain below is valid. **Sticky charge, jackhammer drill-loop sound, paint tool and tool wheel** are bonus tier, cut before every other bonus item in this order: tool wheel, paint tool, jackhammer sound, sticky charge. The author's own priority order is sub-anchor, sticky charge, jackhammer sound, paint, tool wheel. |
 | D29 | 2026-10-31: Compromised means sole support. A Critical load-bearing piece is Compromised only if removing it would make another piece fall below the collapse threshold or lose its anchor chain (dry run of the cascade computation, no destruction), re-evaluated per destruction batch (§7.6). |
 | D30 | 2026-11-05: Each generated house rolls a **standing** (1 to 3) from the seed. It tilts the quality tier of the furniture in every room: a furniture row's weight is multiplied by a falloff for each tier it is away from the standing, so a house is coherently modest or well off instead of random room by room. A group with a single row is furnished at any standing. The standing can later feed the contract's tier. |
 | D31 | 2026-11-05: The **roof shape** (flat, two-sided, four-sided) is a parameter rolled by the seed, from weights on the archetype tilted by the footprint (a square leans towards four sides, a long house towards two). The number of storeys is not rolled: it is a data choice, one archetype per count. |
 | D32 | 2026-11-05: Under every roof there is a **ceiling slab, always a reinforcement slab** (sub-anchor, §8) whatever the storey interval, and a roof tile can rest on a slab edge, so a wide roof on a tall house starts from a stability reset. A roof without a slab (high ceilings) stays a backlog idea. |
 | D33 | 2026-11-08: The standing also applies **per storey** for a plan that repeats its typical storeys (the apartment block): each typical storey has its own standing (1 to 3) that decides how often it is stacked at each height and moves its rooms' furniture one tier from the house's own standing (§9.4). |
 | D34 | 2026-11-08: Two decisions by the author. **Paint rework:** the brush is the last slot of the tool belt, not a build mode function; colours are paint buckets sold in the shop (category Paint), one item per colour of the plot's palette, infinite for now; the brush paints with the bucket selected in the hotbar. A backpack of paints opened from the bucket stays possible if the colours outgrow the hotbar. **What a map allows:** three independent switches per map, the belt lock, building (painting included) and destruction, so a renovation contract can allow building and demolition together; `Lvl_Home` no longer locks the belt and turns destruction off instead (§12). |
-
-### 23.2 Changes to existing documents
-
-| Document | Change |
-|---|---|
-| `CLAUDE.md` | Rewritten around this GDD (delivered alongside). The `APlot` buy/sell valuation, the voxel option and the "mission = build" assumption are retired. Its cut-line section still needs aligning with the bonus tier (D22). |
-| `README.md` | "Next" paragraph to be updated after Phase 2: demolition replaces "first demolition pass"; Push/Pull/Launch becomes the Hands tool. |
-| `Docs/TECHNICAL.md` | Add: durability, tools, collapse queue, debris subsystem, generator, contracts, profiling results; update "Known limitations" (the Anchored-bottom limitation is bypassed by design, not fixed; the stairs-in-wall and visible slab-edge limitations are scheduled for fixes, see `TECHNICAL_limitations.md` for the replacement text). |
+| D35 | 2026-11-09: **Contracts and scoring `[LOCKED]`**, decided by the author. (1) A contract is a request (type, archetype, size, storeys, seed, conditions): the generator builds the closest house its plans allow, so the area of an offer is nominal. (2) **Protected zone:** the pieces of the house that fall into a zone are counted during the mission, at the moment a collapsing piece breaks (fragments are not counted); a piece that touches the zone counts in full, once. The zones are slots placed in the level and the contract activates X of Y. (3) The penalty gains a **zone term**: `Penalty = min(0.8, 1.5·Collateral + 1.5·ZoneDamage + 1.0·FurnitureLoss + Safety + Forbidden)` (§6.5). Zone damage is, per active zone, the tool damage ratio plus the fallen share of the house times 3, clamped to 1. (4) Zero denominators are defined: completion is 1 when there is nothing to destroy, collateral is 0 when nothing must stay. (5) **Client furniture:** only an item inside the client zone at the end is saved, valued by the HP curve (1.0, 0.5 at 80 %, 0.05 at 0); anything else is lost. (6) **Keep standing** names a room type and one room of that type stays. **Forbidden tool** names a tool: the first damage dealt with it costs 15 % of what was earned, once for the whole mission. (7) Offers are filtered by a single tier; the player's tier has no source until reputation (B3). |
+| D36 | 2026-11-10: **Interface screens `[LOCKED]`**, validated by the author on mockups (§14). (1) The PC terminal is one window with three tabs (Contracts, Tools, Parcel). (2) Contracts are three cards; the details of the hovered card show in a strip under the row (up to four conditions fit), and the card does not move on hover. (3) The mission HUD stays sober (demolished percentage ring, belt, message line); the objectives move to a notebook opened with N. (4) Leaving the site with an unfinished job asks for confirmation; a finished job leaves without asking. (5) The debrief shows at the hub on return, as a waterfall from the base payout to the payout. (6) The payment is applied when the player leaves the mission, once. |
+| D37 | 2026-11-11: **The floor slab is the reinforcement slab.** The reinforcement behaviour (§8, D28) moves onto the ordinary floor slab and the separate sub-anchor slab Blueprint and its placement interval are removed: every storey of a generated house, and the ceiling slab under a roof, hands the full stability to what stands on it. A reinforcement slab now falls like a floor when its own support gives out. The player's slabs follow the same rule. |
+| D38 | 2026-11-11: **Scoring after the first runs.** (1) Two terms have a cap of their own below the penalty cap, which still holds the total: the furniture term is limited to 10 % of what was earned for each piece the client asked for, and the collateral of a room kept in a total demolition to 40 %; a partial demolition and a renovation are held by the penalty cap alone, and the pool asks to keep a room only on a total demolition. (2) A room can only be kept on the lowest storey that comes down, since a room higher up would hang in the air. (3) **Tool upkeep** (§11): a flat fee for each mission where the tool worked plus a rate per second of active use, set on the tool's data asset, taken from what is left after the penalty and never below zero. (4) The explosive charge costs 250, in a stock of at most 10 by default. |
 
 ---
 
@@ -997,7 +995,7 @@ The course states that **two projects during the year must be completed entirely
 
 ---
 
-## Appendix A — Data schema sketches (proposals)
+## Appendix A: Data schema sketches (proposals)
 
 ```text
 FDamageInfo
@@ -1022,7 +1020,7 @@ DA_DemolitionRules (DataAsset)
   TMap<FName, FMaterialRow>         ToolMaterialMultiplier   // tool x material
   float   DamagedThreshold         // 0.75
   float   CriticalThreshold        // 0.35
-  UCurveFloat* StabilityTransmission   // c(h)
+  TArray<FVector2D> StabilityTransmission   // c(h), points (HP ratio, fraction transmitted)
   UCurveFloat* FurnitureValue          // value(h)
   float   HopDelay, Jitter, MaxCascadeSpread
   float   CompromisedDelayMin, CompromisedDelayMax
@@ -1050,7 +1048,7 @@ FDebriefResult
   TArray<FDebriefLine> Lines   // for the UI and the debug print
 ```
 
-## Appendix B — Test scenarios for `Lvl_DemoTest`
+## Appendix B: Test scenarios for `Lvl_DemoTest`
 
 | ID | Scenario | Expected |
 |---|---|---|
@@ -1061,10 +1059,10 @@ FDebriefResult
 | T5 | 100 pieces destroyed in one cascade. | One batched graph update, no frame spike beyond budget, fragment cap respected. |
 | T6 | Seed 1234 twice. | Identical house, identical furniture. |
 | T7 | Contract with salvage + protected zone, partially failed. | Debrief itemises each penalty, money matches the formula. |
-| T8 | Single-column tower of 8 storeys, without and with a sub-anchor slab every third slab; then remove a wall under a sub-anchor, and destroy a sub-anchor with the storeys below intact. | Without: the upper storeys fall below the threshold. With: stable. Wall removed: everything above falls in waves. Sub-anchor destroyed: only the part above falls. A sub-anchor with no valid chain below does not reset. |
+| T8 `[OUTDATED: D37]` | Written when the sub-anchor slab was a separate piece placed at an interval; every floor slab is a reinforcement slab now, so the "without" case can no longer be built. Single-column tower of 8 storeys, without and with a sub-anchor slab every third slab; then remove a wall under a sub-anchor, and destroy a sub-anchor with the storeys below intact. | Without: the upper storeys fall below the threshold. With: stable. Wall removed: everything above falls in waves. Sub-anchor destroyed: only the part above falls. A sub-anchor with no valid chain below does not reset. |
 | T9 | Walls around a stairwell hole with no slab at any level. | Before the fix: yellow or falling. After: stable when the stack below is; the stack above falls when its bottom wall is removed; a wall stacked on an unsupported wall does not hold. |
 | T10 | A Critical load-bearing wall that has a second support path, then the same wall with no alternative path. | With the alternative: stays Critical, no Compromised warning. Without: warning, then failure within 0.5–3 s, and the dependants fall in waves. |
 
-## Appendix C — One-paragraph version (for the defence)
+## Appendix C: One-paragraph version (for the defence)
 
-*PlotBuilder is a demolition-contract sandbox built on a structural-support graph. Each piece has materials and hit points; tools damage them according to a tool × material matrix; the graph decides what becomes unstable and when, and Chaos handles the visual consequence with short-lived fragments. A hybrid generator builds the houses with the same placement API as the build mode, so they are valid by construction. The client report turns the player's choices into payment, and everything — tools, materials, scoring, economy — is data-driven and debuggable.*
+*PlotBuilder is a demolition-contract sandbox built on a structural-support graph. Each piece has materials and hit points; tools damage them according to a tool × material matrix; the graph decides what becomes unstable and when, and Chaos handles the visual consequence with short-lived fragments. A hybrid generator builds the houses with the same placement API as the build mode, so they are valid by construction. The client report turns the player's choices into payment, and everything (tools, materials, scoring, economy) is data-driven and debuggable.*
