@@ -15,6 +15,10 @@ This README is the entry point: what is playable, the controls, how to run it. T
 | `Lvl_Home` | The player's own plot: Build Mode and paint, kept between visits |
 | `Lvl_DemoTest` | A test map with everything on: the tools, the portance cascade, Build Mode |
 
+## Interface mockups
+
+The 13 validated screens of the interface (PC terminal, debrief, HUD, notebook, shop, bag, focus card) are in a [gallery](Docs/UI/README.md), with an [interactive version](https://atomium90.github.io/PlotBuilder/Docs/UI/ui-mockups.html) of the whole design canvas.
+
 ## Controls
 
 | Action | Input |
@@ -58,7 +62,7 @@ Where the tool belt is locked (the hub), Left and Right Click are the older Grab
 | `Content/Props/` | Physics props, and the tool meshes under `Props/Tools` |
 | `Content/Audio/` | Impact, explosion and jackhammer sounds |
 | `Content/Debug/` | Debug Blueprints, including `BP_SocketDebugger` |
-| `Docs/` | `GDD.md` (the design), `TECHNICAL.md` (the technical documentation), `PROFILING.md` (the measurements) |
+| `Docs/` | `GDD.md` (the design), `TECHNICAL.md` (the technical documentation), `PROFILING.md` (the measurements), `UI/` (the interface mockups) |
 
 ## Technical overview
 
