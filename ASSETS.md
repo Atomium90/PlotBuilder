@@ -1,6 +1,8 @@
-# PlotBuilder — Asset inventory
+# PlotBuilder: Asset inventory
 
 Technical list of every external or self-generated asset currently imported into the project: what it is, where it came from, and where it lives in `Content/`. For licenses and the formal attribution text, see [`CREDITS.md`](CREDITS.md) - this file is about *where*, that one is about *under what terms*.
+
+The source files and the generation scripts named below (`_AssetSources/`, `_Inbox/`) sit next to the project and are not part of the repository: only the imported assets in `Content/` are.
 
 ## Kenney Furniture Kit
 

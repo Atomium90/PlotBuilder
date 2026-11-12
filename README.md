@@ -4,14 +4,14 @@ Sandbox built with Unreal Engine 5.8. Individual capstone project (9 weeks, MSc 
 
 The player runs a small demolition company: take a contract at the hub, go to an isolated generated house, and tear it down with tools while a structural portance graph (Valheim-style) decides what falls and when. A plot of land can also be bought to build a home with a modular piece kit (House Builder-style), where every placed piece carries its weight through the same graph. Four tools (explosive charge, sledgehammer, crowbar, jackhammer) damage pieces, and a piece's damage feeds back into the graph.
 
-> Provisional README. Will be replaced by the full technical documentation at the end of Block 1.
+This README is the entry point: what is playable, the controls, how to run it. The full technical documentation is in [`Docs/TECHNICAL.md`](Docs/TECHNICAL.md).
 
 ## What is playable
 
 | Map | What it is |
 |---|---|
-| `Lvl_Hub` | The warehouse: the PC terminal, the truck to a mission, the way into the home (it opens once the player owns a parcel; `pb.SetParcel 1` stands in for the purchase) |
-| `Lvl_Mission` | A seeded lot with a generated house. The contract (total, partial or renovation) is bound to the house, and the tools are the only way to act on it. There are no offers and no payment yet |
+| `Lvl_Hub` | The warehouse: the PC terminal (the board of three contracts, the tools and the parcel to buy), the truck to a mission, the way into the home (it opens once the player owns a parcel) |
+| `Lvl_Mission` | A seeded lot with a generated house built from the contract taken at the PC (total, partial or renovation, with its conditions). The tools are the only way to act on it. Leaving by the truck ends the job: the client's report decides the payout, shown at the hub as a debrief |
 | `Lvl_Home` | The player's own plot: Build Mode and paint, kept between visits |
 | `Lvl_DemoTest` | A test map with everything on: the tools, the portance cascade, Build Mode |
 
@@ -29,11 +29,12 @@ The player runs a small demolition company: take a contract at the hub, go to an
 | Change the build level / the roof step | Numpad + and - / O and P |
 | Select in the hotbar | Mouse Wheel |
 | Shop / Bag | B / I |
+| Mission notebook (in a mission) | N |
 | Controls reminder | H (folded at the start, as a small chip in the top right corner) |
 
 In the shop, the plus and minus of a row fill the cart (Shift moves ten at a time) and Confirm buys it all or nothing. In the bag, a left click picks up or places a stack and a right click places a single item.
 
-Where the tool belt is locked (the hub), Left and Right Click are the older Grab and Push instead. What a map allows (building, demolition, the belt itself) is set per map.
+Where the tool belt is locked (the hub), Left and Right Click are the older Grab and Push bindings instead (kept for now, to be removed). What a map allows (building, demolition, the belt itself) is set per map.
 
 ## Setup
 
@@ -46,7 +47,7 @@ Where the tool belt is locked (the hub), Left and Right Click are the older Grab
 
 | Path | Content |
 |---|---|
-| `Source/PlotBuilder/` | C++ by area: `Player`, `Interaction` (inventory, shop cart, tool belt, Build Mode, paint brush), `Buildables` (pieces and sockets), `Environment` (the plot, the structural graph, zones, the mission ground), `Destruction` (durability, tools, rules, fragments), `Generation` (the house generator), `Contracts` (the mission director and the contract binding), `Hub`, `Home`, `Progress` (the saved progress), `Props`, `UI` (widget base classes, the style, the messages), `Debug` (the `pb.*` console commands) |
+| `Source/PlotBuilder/` | C++ by area: `Player`, `Interaction` (inventory, shop cart, tool belt, Build Mode, paint brush), `Buildables` (pieces and sockets), `Environment` (the plot, the structural graph, zones, the mission ground), `Destruction` (durability, tools, rules, fragments), `Generation` (the house generator), `Contracts` (the offers, the mission director, the contract binding and the report), `Flow` (where the player is in the loop), `Hub`, `Home`, `Progress` (the saved progress and the tool shop), `Props`, `UI` (widget base classes, the style, the messages), `Debug` (the `pb.*` console commands) |
 | `Content/Buildable/` | Piece Blueprints, greybox meshes, fracture collections, ghost materials |
 | `Content/Generation/` | House archetypes and plans, the roof kit, the furnishing table |
 | `Content/Destruction/` | The tool Blueprints and their data |
@@ -57,13 +58,13 @@ Where the tool belt is locked (the hub), Left and Right Click are the older Grab
 | `Content/Props/` | Physics props, and the tool meshes under `Props/Tools` |
 | `Content/Audio/` | Impact, explosion and jackhammer sounds |
 | `Content/Debug/` | Debug Blueprints, including `BP_SocketDebugger` |
-| `Docs/` | `GDD.md` (the design), `TECHNICAL.md`, `PROFILING.md`, and the specs in `CDC/` |
+| `Docs/` | `GDD.md` (the design), `TECHNICAL.md` (the technical documentation), `PROFILING.md` (the measurements) |
 
 ## Technical overview
 
-`APlayerCharacter` carries a handful of single-responsibility components rather than one large Blueprint: `UInteractionComponent` detects and relays to whatever implements the generic `IInteractable` interface, `UPhysicsManipulationComponent` handles Push/Pull/Launch on physics bodies (and backs the Hands tool's Grab/Throw), `UHotbarComponent` is a stacking grid inventory that also handles the shop purchase (through the cart in `UShopCartComponent`), acquisition and instant placement for `APhysicsProp`, and `UBuildModeComponent` layers a dedicated preview/snap/confirm flow on top of it for `ABuildablePiece` - either the flush-snap path or a grid-based one (`EBuildAnchor`), depending on the piece. A `APlot` bounds the buildable area and owns `UStructuralSupportComponent`, the portance graph that every placed piece registers into: pieces declare sockets in their Blueprint (not on their mesh), stability propagates from the foundations' anchors and is reduced by a piece's own damage (`c(h)`), and a piece with no stable chain joins a staggered collapse queue instead of vanishing outright. `UToolbeltComponent` and its four demolition tools deal damage through the generic `IDamageable` interface, resolved per hit by each piece's own `UDurabilityComponent` against the tool x material matrix in `DA_DemolitionRules` - tools and the portance graph never reference each other directly. A destroyed piece breaks into one of the authored Chaos Geometry Collections of its mesh when it has any, and into generic shards otherwise.
+`APlayerCharacter` carries a handful of single-responsibility components rather than one large Blueprint: `UInteractionComponent` detects and relays to whatever implements the generic `IInteractable` interface, `UPhysicsManipulationComponent` is the Hands tool (grab and throw on physics bodies), `UHotbarComponent` is a stacking grid inventory that also handles the shop purchase (through the cart in `UShopCartComponent`), acquisition and instant placement for `APhysicsProp`, and `UBuildModeComponent` layers a dedicated preview/snap/confirm flow on top of it for `ABuildablePiece` - either the flush-snap path or a grid-based one (`EBuildAnchor`), depending on the piece. A `APlot` bounds the buildable area and owns `UStructuralSupportComponent`, the portance graph that every placed piece registers into: pieces declare sockets in their Blueprint (not on their mesh), stability propagates from the foundations' anchors and is reduced by a piece's own damage (`c(h)`), and a piece with no stable chain joins a staggered collapse queue instead of vanishing outright. `UToolbeltComponent` and its four demolition tools deal damage through the generic `IDamageable` interface, resolved per hit by each piece's own `UDurabilityComponent` against the tool x material matrix in `DA_DemolitionRules` - tools and the portance graph never reference each other directly. A destroyed piece breaks into one of the authored Chaos Geometry Collections of its mesh when it has any, and into generic shards otherwise.
 
-Around that core, `AHouseGenerator` builds a validated, seeded house through the same placement function Build Mode uses, `AMissionDirector` sets up a mission level and binds the contract to the house, and the hub, the home and the saved progress (`UProgressSubsystem`) tie the levels together. The interface is UMG with its logic in C++ (a base class per widget, one `UUIStyle` Data Asset for the look).
+Around that core, `AHouseGenerator` builds a validated, seeded house through the same placement function Build Mode uses, `AMissionDirector` sets up a mission level and binds the contract to the house, `UContractEvaluator` turns what happened into the client's report and the payout (plain arithmetic, tested without a level), and the hub, the home and the saved progress (`UProgressSubsystem`) tie the levels together. The interface is UMG with its logic in C++ (a base class per widget, one `UUIStyle` Data Asset for the look).
 
 See [`Docs/TECHNICAL.md`](Docs/TECHNICAL.md) for the full technical documentation: every class's role, how each system works, the physics, building, demolition and portance models, generation, missions, the interface, the Chaos setup, the debugging tools, and the key technical choices made.
 

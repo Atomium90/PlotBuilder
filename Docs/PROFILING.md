@@ -78,7 +78,7 @@ On `charge`, about 800 frames were selected: 27.07 s for 1596 frame scopes, so a
 **Open items**
 - Find what makes the 64 ms frame (game frame 1649): list its largest scopes, and capture the GPU channel (`Trace.Start default,gpu`).
 - Repeat `charge` in Standalone and in a packaged build.
-- Cost of the room lights at rest (backlog of 2026-11-04): not measured yet.
+- Cost of the room lights at rest (noted on 2026-11-04): not measured yet.
 
 ## 4. Adding an entry
 
