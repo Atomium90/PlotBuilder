@@ -12,7 +12,7 @@ class UInteractable : public UInterface
 
 /**
  *  Generic contract for anything a UInteractionComponent can focus and interact with.
- *  Push/Pull/Launch are a separate, physics-specific concern handled by UPhysicsManipulationComponent.
+ *  Grabbing and throwing are a separate, physics-specific concern handled by UPhysicsManipulationComponent.
  */
 class IInteractable
 {

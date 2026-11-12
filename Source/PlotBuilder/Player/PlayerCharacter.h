@@ -43,7 +43,7 @@ class APlayerCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UInteractionComponent* InteractionComponent;
 
-	/** Push / Pull / Launch on the current focus */
+	/** Grab and throw on the current focus (the Hands tool) */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UPhysicsManipulationComponent* PhysicsManipulationComponent;
 
@@ -89,11 +89,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* MouseLookAction;
 
-	/** Grab Input Action: hold to Pull, release to Launch - legacy full-featured binding, only acts while the toolbelt is locked (Lvl_Home); see LegacyGrabInput */
+	/** Grab Input Action: single press picks up the focus - legacy binding, only acts while the toolbelt is locked (the hub); see LegacyGrabInput */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* GrabAction;
 
-	/** Push Input Action - legacy full-featured binding (Launch if holding, otherwise pushes the focus), only acts while the toolbelt is locked (Lvl_Home); see LegacyPushInput */
+	/** Push Input Action - legacy binding (Launch if holding, otherwise pushes the focus), only acts while the toolbelt is locked (the hub); see LegacyPushInput. To be removed. */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* PushAction;
 
@@ -196,7 +196,7 @@ protected:
 	/** Cycle Equipped Tool Input Action handler */
 	void CycleToolInput(const FInputActionValue& Value);
 
-	/** Grab Input Action handler - forwards to PhysicsManipulationComponent only while the toolbelt is locked (Lvl_Home); mission levels Grab through the toolbelt's Hands slot instead. */
+	/** Grab Input Action handler - forwards to PhysicsManipulationComponent only while the toolbelt is locked (the hub); the other levels Grab through the toolbelt's Hands slot instead. */
 	void LegacyGrabInput();
 
 	/** Push Input Action handler - same gating as LegacyGrabInput. */

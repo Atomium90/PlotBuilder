@@ -175,7 +175,7 @@ void UBuildModeComponent::RotatePreview(int32 Direction)
 		return;
 	}
 
-	// Legacy: unchanged from week 1.
+	// Legacy: the original behaviour, unchanged.
 	const int32 StepsPerFullTurn = FMath::Max(1, FMath::RoundToInt(360.f / RotationStepDegrees));
 	RotationSteps = (RotationSteps + FMath::Sign(Direction) + StepsPerFullTurn) % StepsPerFullTurn;
 }

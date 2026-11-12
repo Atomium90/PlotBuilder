@@ -43,10 +43,10 @@ struct FWallClearance
 /**
  *  Construction piece (wall, floor, roof, door, window...). Never simulates physics while Stock/
  *  Held/Placed, unlike APhysicsProp: it's acquired via Interact into a UHotbarComponent, then
- *  placed kinematically (fixed transform, no Push/Pull/Launch). The one deliberate exception is
+ *  placed kinematically (fixed transform, never grabbed or thrown). The one deliberate exception is
  *  Collapsing (see BeginCollapse) - a piece that has lost structural support has left that cycle
- *  entirely and become debris, same category as Chaos gravats, which Push/Pull/Launch already
- *  covers. A piece has no price of its own: what it costs is the FShopItemRow::Cost of its row in
+ *  entirely and become debris, same category as Chaos gravats, which the hands can already
+ *  grab and throw. A piece has no price of its own: what it costs is the FShopItemRow::Cost of its row in
  *  UHotbarComponent::ShopCatalog, found by actor class.
  */
 UCLASS(abstract)

@@ -15,7 +15,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBeltChanged);
  *  Owned/equipped demolition tool slot, separate from UHotbarComponent (construction pieces/props)
  *  - see GDD §18.2. Slot 0 (Hands) routes straight to the sibling UPhysicsManipulationComponent:
  *  PrimaryUse Grabs, SecondaryUse Throws (no-op if nothing is held - GDD §14's grab/carry/throw,
- *  deliberately narrower than Lvl_Home's legacy Grab/Push, which also shoves an unheld focus and
+ *  deliberately narrower than the hub's legacy Grab/Push, which also shoves an unheld focus and
  *  stays reachable there through APlayerCharacter's locked-toolbelt gate, not through this class).
  *  Slot 1 (Charge) spawns an AExplosiveCharge: secondary use (RMB) throws it, primary use (LMB)
  *  sticks it to the surface in reach; the next secondary use detonates it, however it got there -

@@ -17,7 +17,7 @@ class APhysicsProp;
  *  Placement flow for ABuildablePiece, separate from the instant placement UHotbarComponent::TryPlace
  *  still does for APhysicsProp. Two placement paths, chosen per piece via ABuildablePiece::BuildAnchor:
  *
- *  - Legacy (the week 1 behaviour, untouched): the ghost snaps flush against whatever placed piece
+ *  - Legacy (the original behaviour, untouched): the ghost snaps flush against whatever placed piece
  *    or surface the view trace hits (TryFindSnapTransform), or falls back to a fixed distance in
  *    front of the view (ComputeFreeTransform). Geometric, not grid-aware - exact for box-shaped
  *    pieces snapping onto a bounds-centered pivot, approximate otherwise.

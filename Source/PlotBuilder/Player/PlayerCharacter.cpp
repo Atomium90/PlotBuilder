@@ -65,7 +65,7 @@ APlayerCharacter::APlayerCharacter()
 	// Generic interaction trace + focus tracking
 	InteractionComponent = CreateDefaultSubobject<UInteractionComponent>(TEXT("InteractionComponent"));
 
-	// Push / Pull / Launch on the current focus
+	// Grab and throw on the current focus (the Hands tool)
 	PhysicsManipulationComponent = CreateDefaultSubobject<UPhysicsManipulationComponent>(TEXT("PhysicsManipulationComponent"));
 
 	// Minimal hotbar: pickup + reuse for ABuildablePiece and APhysicsProp
@@ -101,7 +101,7 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::LookInput);
 		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::LookInput);
 
-		// Legacy Grab/Push: single press, only act while the toolbelt is locked (Lvl_Home) - see LegacyGrabInput/LegacyPushInput
+		// Legacy Grab/Push: single press, only act while the toolbelt is locked (the hub) - see LegacyGrabInput/LegacyPushInput
 		EnhancedInputComponent->BindAction(GrabAction, ETriggerEvent::Started, this, &APlayerCharacter::LegacyGrabInput);
 		EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &APlayerCharacter::LegacyPushInput);
 

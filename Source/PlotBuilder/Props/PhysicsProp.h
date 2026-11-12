@@ -24,8 +24,8 @@ struct FPropPlacement
 /**
  *  Generic physics-simulated prop (crate, barrel, furniture...). Mass and friction are tuned
  *  per Blueprint variant via the mesh's own physics properties, nothing hardcoded in C++.
- *  Implements IInteractable so UInteractionComponent can focus it. Push/Pull/Launch manipulation
- *  goes through UPhysicsManipulationComponent directly on the mesh's physics body, not through
+ *  Implements IInteractable so UInteractionComponent can focus it. Grabbing and throwing
+ *  go through UPhysicsManipulationComponent directly on the mesh's physics body, not through
  *  Interact; Interact is only used to pick the prop up into a UHotbarComponent. Implements
  *  IDamageable (breakable furniture, GDD §10) via the same UDurabilityComponent as
  *  ABuildablePiece, but initialized with a flat per-prop MaxHP instead of the Material x

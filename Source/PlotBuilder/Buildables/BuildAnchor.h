@@ -4,7 +4,7 @@
 #include "BuildAnchor.generated.h"
 
 /**
- *  How a piece is positioned in Build Mode. Legacy keeps the week 1 flush-against-bounds snap
+ *  How a piece is positioned in Build Mode. Legacy keeps the original flush-against-bounds snap
  *  (UBuildModeComponent::TryFindSnapTransform) untouched - existing Props and any piece not yet
  *  migrated to the grid. The other three snap to an integer grid cell instead: Cell for pieces that fill a whole floor
  *  cell (foundation, floor slab), Edge for pieces centered on a cell edge (walls, partitions),

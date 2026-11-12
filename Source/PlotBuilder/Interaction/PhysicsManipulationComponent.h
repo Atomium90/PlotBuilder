@@ -8,11 +8,10 @@ class UInteractionComponent;
 class UPrimitiveComponent;
 
 /**
- *  Push / Pull / Launch: the physical half of the interaction tool. Reads the current focus
- *  from the sibling UInteractionComponent (no separate trace) and acts directly on its physics
- *  body. Grab picks up the current focus (single press, no hold). The force action is a single
- *  contextual button: Launch (strong impulse, releases) if something is held, Push (weaker
- *  impulse, doesn't pick anything up) on the current focus otherwise.
+ *  Grab and throw: the Hands tool. Reads the current focus from the sibling UInteractionComponent
+ *  (no separate trace) and acts directly on its physics body. Grab picks up the current focus
+ *  (single press, no hold); Throw releases it with an impulse. Push is the hub's older single
+ *  contextual button (throw what is held, or else a weaker impulse on the focus), to be removed.
  */
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class UPhysicsManipulationComponent : public UActorComponent
@@ -58,7 +57,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Physics Manipulation")
 	void Grab();
 
-	/** Launches the held object if there is one, otherwise pushes the current focus. */
+	/** Launches the held object if there is one, otherwise pushes the current focus. Leftover of the first interaction tool, to be removed (only the hub's legacy binding calls it). */
 	UFUNCTION(BlueprintCallable, Category = "Physics Manipulation")
 	void Push();
 

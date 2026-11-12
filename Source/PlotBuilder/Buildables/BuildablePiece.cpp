@@ -310,7 +310,7 @@ void ABuildablePiece::Fracture(const FVector& ScatterOrigin, const FVector& Scat
 
 			// No scale-to-zero fade here, unlike the generic path below - Chaos clusters don't have
 			// a clean uniform-scale fade hook, so this is a hard pop at end of life. Accepted as a v1
-			// gap, same "simple over literal" call already made elsewhere this sprint.
+			// gap: a simple solution over a literal one.
 			GeometryCollectionActor->SetLifeSpan(Rules->FragmentLifetime);
 
 			if (UDebrisSubsystem* DebrisSubsystem = World->GetSubsystem<UDebrisSubsystem>())
