@@ -80,6 +80,33 @@ On `charge`, about 800 frames were selected: 27.07 s for 1596 frame scopes, so a
 - Repeat `charge` in Standalone and in a packaged build.
 - Cost of the room lights at rest (noted on 2026-11-04): not measured yet.
 
+### 2026-11-13: memory, packaged Development build, `ThreeStorey` seed 1
+
+**Build.** Windows package, Development configuration (Shipping removes the console, `stat` and tracing), same machine as above. `pb.Debug` is off by default in a packaged build and stayed off. Launched with `-trace=default,memory -log`.
+
+**Method.** One warm-up pass (hub, mission, charge, back to the hub), then four `memreport -full` in the same session, with the game left alone for a few seconds before each: hub at rest, mission once the house was generated, mission after a `charge` and once the cascade had finished, hub after coming back. The reports are plain text in `Saved/Profiling/MemReports/` of the build.
+
+| | Hub at rest | Mission, house built | Mission, after the cascade | Hub, back |
+|---|---|---|---|---|
+| Process physical memory | 2004 MB | 2023 MB | 2036 MB | 2019 MB |
+| Process virtual memory | 4291 MB | 5174 MB | 5187 MB | 4307 MB |
+| Allocated from the OS | 584 MB | 599 MB | 606 MB | 586 MB |
+| Actors in the level | 147 | 497 | 490 | 147 |
+| Render target pool | 876 MB | 1536 MB | 1536 MB | 876 MB |
+| Streaming pool, required | 16 MB | 48 MB | 48 MB | 16 MB |
+
+**Reading.**
+- **Cost of a mission:** about 20 MB of physical memory and 880 MB of virtual memory, for 350 more actors (the house). The largest line is the render target pool (+660 MB, GPU side), not the assets: the streaming pool needs 48 MB of its 1000 MB budget.
+- **Coming back to the hub:** the actor count and the render target pool return to their hub values exactly. What stays is +15 MB of physical memory, +16 MB of virtual memory and +1.8 MB from the OS allocator, under 1 % of the process.
+- **Peak:** the process peak is 2146 MB of physical memory, reached before the first report (the warm-up). The mission did not raise it.
+- **Fragments:** the report after the cascade is taken once the fragments are gone, so it does not show the fragment peak. The cap (`FragmentGlobalCap`, 300) bounds it by construction.
+
+**Frame times, partial.** The trace was recorded with an explicit file (`-tracefile`): the packaged build has no trace server, and a trace without a file stays in an in-memory cache that `Trace.Stop` discards. Read by hand over the 15 s after the charge, 911 frames (about 60 FPS on average): `Structural.Recompute` 9 calls for 60.8 ms (6.8 ms on average, 94 % of the 65 ms spent in `Structural.Tick`); one frame at 23.3 FPS (about 43 ms) when the charge went off, back to 65.9 FPS on the next one; one frame at 2.3 FPS (about 435 ms) near the end, back to 46.9 then 83.2 FPS. The cause of that last frame is not identified: it is either the fragments leaving (the renderer removing primitives, as on 2026-11-06) or the stall of the `memreport` command, run right after the cascade. The largest single `Structural.Recompute` call was not read.
+
+**Not looked at**
+- One mission cycle only. A residual of 15 MB cannot tell a leak from assets kept loaded: it would take two or three cycles, a leak grows by a similar amount each time.
+- Open items of 2026-11-06 still open: the cause of the 64 ms frame, the GPU channel, the cost of the room lights at rest.
+
 ## 4. Adding an entry
 
 Date and what was measured, the scenario and its house (archetype, seed, piece count), the machine if it changed, then the same tables as above: worst frames and recovery, recompute count and maximum, fragment peak, and the criteria. Say what was not looked at. Keep old entries as they are; a later entry says what changed since.
